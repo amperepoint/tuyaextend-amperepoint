@@ -1,0 +1,109 @@
+title: AmperePoint Q37 Test
+views:
+  - title: HACS
+    path: q37-hacs
+    icon: mdi:ev-station
+    cards:
+      - type: entities
+        title: AmperePoint Q37 - widok HACS
+        show_header_toggle: false
+        entities:
+          - entity: sensor.amperepoint_q_series_auto_status
+            name: Status
+          - entity: binary_sensor.amperepoint_q_series_auto_auto_podlaczone
+            name: Auto
+          - entity: sensor.amperepoint_q_series_auto_moc
+            name: Moc
+          - entity: sensor.amperepoint_q_series_auto_energia_sesji
+            name: Energia sesji
+          - entity: sensor.amperepoint_q_series_auto_koszt_sesji
+            name: Koszt sesji
+          - entity: sensor.amperepoint_q_series_auto_taryfa
+            name: Taryfa
+          - entity: sensor.amperepoint_q_series_auto_liczba_faz
+            name: Liczba faz
+          - entity: sensor.amperepoint_q_series_auto_blad
+            name: Diagnostyka
+          - entity: switch.amperepoint_q_series_auto_ladowanie
+            name: Start / Stop
+          - entity: number.amperepoint_q_series_auto_limit_pradu
+            name: Limit pradu
+
+      - type: history-graph
+        title: Moc z ostatnich 6 h
+        hours_to_show: 6
+        entities:
+          - entity: sensor.amperepoint_q_series_auto_moc
+            name: HACS moc
+          - entity: sensor.q37_vg_moc
+            name: Tuya-local moc
+
+      - type: statistics-graph
+        title: Koszty miesieczne
+        chart_type: bar
+        period: month
+        days_to_show: 180
+        stat_types:
+          - change
+        entities:
+          - sensor.amperepoint_q_series_auto_koszt_sesji
+
+  - title: Tuya Local
+    path: q37-tuya-local
+    icon: mdi:chip
+    cards:
+      - type: entities
+        title: Q37 VG - profil tuya-local
+        show_header_toggle: false
+        entities:
+          - entity: sensor.q37_vg_status
+            name: DP3 Status
+          - entity: sensor.q37_vg_connection
+            name: DP13 Connection
+          - entity: sensor.q37_vg_moc
+            name: DP9 Moc
+          - entity: sensor.q37_vg_energia
+            name: DP1 Energia calkowita
+          - entity: binary_sensor.q37_vg_problem
+            name: DP10 Problem
+          - entity: sensor.q37_vg_temperatura_2
+            name: DP24 Temperatura
+          - entity: switch.q37_vg
+            name: DP18 Start / Stop
+          - entity: number.q37_vg_charging_current_2
+            name: DP4 Limit pradu
+          - entity: number.q37_vg_target_energy
+            name: DP17 Energia docelowa
+          - entity: sensor.q37_vg_last_session_energy
+            name: DP25 Energia ostatniej sesji
+
+      - type: entities
+        title: Porownanie HACS vs tuya-local
+        show_header_toggle: false
+        entities:
+          - entity: sensor.q37_vg_moc
+            name: Tuya-local moc
+          - entity: sensor.amperepoint_q_series_auto_moc
+            name: HACS moc
+          - entity: sensor.q37_vg_energia
+            name: Tuya-local licznik sesji
+          - entity: sensor.amperepoint_q_series_auto_energia_sesji
+            name: HACS energia sesji
+          - entity: sensor.amperepoint_q_series_auto_koszt_sesji
+            name: HACS koszt sesji
+          - entity: sensor.amperepoint_q_series_auto_taryfa
+            name: HACS taryfa
+
+      - type: history-graph
+        title: Moc lokalna z ostatnich 6 h
+        hours_to_show: 6
+        entities:
+          - entity: sensor.q37_vg_moc
+            name: Moc
+
+      - type: history-graph
+        title: Energia calkowita z ostatnich 6 h
+        hours_to_show: 6
+        entities:
+          - entity: sensor.q37_vg_energia
+            name: Energia

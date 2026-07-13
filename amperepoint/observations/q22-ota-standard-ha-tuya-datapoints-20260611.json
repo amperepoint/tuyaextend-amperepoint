@@ -1,0 +1,188 @@
+﻿{
+  "source": "Home Assistant standard Tuya integration / tuya_sharing Manager",
+  "device_id": "<device_id_q22_ota_current>",
+  "ha_tuya_config_entry": {
+    "domain": "tuya",
+    "entry_id": "01KSGEW3H6R9N4GRSPPA3790DW",
+    "title": "<redacted_email>",
+    "endpoint": "https://apigw.tuyaeu.com"
+  },
+  "device": {
+    "id": "<device_id_q22_ota_current>",
+    "name": "Q22 OTA",
+    "category": "qccdz",
+    "product_id": "cu111poj2mtikvls",
+    "product_name": "Q22 OTA",
+    "online": true,
+    "status": {
+      "forward_energy_total": 0,
+      "work_state": "charger_charging",
+      "charge_cur_set": 16,
+      "power_total": 0,
+      "connection_state": "controlpi_6v",
+      "work_mode": "charge_now",
+      "energy_charge": 1,
+      "switch": true,
+      "temp_current": 36,
+      "charge_energy_once": 1
+    },
+    "status_range": {
+      "forward_energy_total": {
+        "type": "Integer",
+        "values": "{\"unit\":\"kW·h\",\"min\":0,\"max\":99999999,\"scale\":2,\"step\":1}"
+      },
+      "work_state": {
+        "type": "Enum",
+        "values": "{\"range\":[\"charger_free\",\"charger_insert\",\"charger_free_fault\",\"charger_wait\",\"charger_charging\",\"charger_pause\",\"charger_end\",\"charger_fault\"]}"
+      },
+      "charge_cur_set": {
+        "type": "Integer",
+        "values": "{\"unit\":\"A\",\"min\":6,\"max\":32,\"scale\":0,\"step\":1}"
+      },
+      "power_total": {
+        "type": "Integer",
+        "values": "{\"unit\":\"kW\",\"min\":0,\"max\":99999999,\"scale\":3,\"step\":1}"
+      },
+      "connection_state": {
+        "type": "Enum",
+        "values": "{\"range\":[\"controlpi_12v\",\"controlpi_12v_pwm\",\"controlpi_9v\",\"controlpi_9v_pwm\",\"controlpi_6v\",\"controlpi_6v_pwm\",\"controlpi_error\"]}"
+      },
+      "work_mode": {
+        "type": "Enum",
+        "values": "{\"range\":[\"charge_now\",\"charge_energy\",\"charge_schedule\"]}"
+      },
+      "energy_charge": {
+        "type": "Integer",
+        "values": "{\"unit\":\"kW·h\",\"min\":1,\"max\":200,\"scale\":0,\"step\":1}"
+      },
+      "switch": {
+        "type": "Boolean",
+        "values": "{}"
+      },
+      "temp_current": {
+        "type": "Integer",
+        "values": "{\"unit\":\"℃\",\"min\":-40,\"max\":200,\"scale\":0,\"step\":1}"
+      },
+      "charge_energy_once": {
+        "type": "Integer",
+        "values": "{\"unit\":\"kW·h\",\"min\":1,\"max\":999999,\"scale\":2,\"step\":1}"
+      }
+    },
+    "function": {
+      "charge_cur_set": {
+        "type": "Integer",
+        "values": "{\"unit\":\"A\",\"min\":6,\"max\":32,\"scale\":0,\"step\":1}"
+      },
+      "work_mode": {
+        "type": "Enum",
+        "values": "{\"range\":[\"charge_now\",\"charge_energy\",\"charge_schedule\"]}"
+      },
+      "energy_charge": {
+        "type": "Integer",
+        "values": "{\"unit\":\"kW·h\",\"min\":1,\"max\":200,\"scale\":0,\"step\":1}"
+      },
+      "switch": {
+        "type": "Boolean",
+        "values": "{}"
+      }
+    },
+    "local_strategy": {
+      "1": "forward_energy_total",
+      "3": "work_state",
+      "4": "charge_cur_set",
+      "9": "power_total",
+      "13": "connection_state",
+      "14": "work_mode",
+      "17": "energy_charge",
+      "18": "switch",
+      "24": "temp_current",
+      "25": "charge_energy_once"
+    }
+  },
+  "ha_standard_tuya_device_registry": [
+    {
+      "id": "2756edefbdd2daa4fa30d2e4ad02f2b5",
+      "name": "Q22 OTA",
+      "manufacturer": "Tuya",
+      "model": "Q22 OTA",
+      "model_id": "cu111poj2mtikvls",
+      "identifiers": [
+        [
+          "xtend_tuya",
+          "<device_id_q22_ota_current>"
+        ],
+        [
+          "tuya",
+          "<device_id_q22_ota_current>"
+        ]
+      ],
+      "config_entries": [
+        "01KSGEW3H6R9N4GRSPPA3790DW",
+        "93a5bc0ca31a5b8f6ec7042af1ec2baa"
+      ]
+    }
+  ],
+  "ha_standard_tuya_entity_registry": [
+    {
+      "entity_id": "switch.q22_ota_switch",
+      "unique_id": "tuya.<device_id_q22_ota_current>switch",
+      "original_name": "Switch",
+      "disabled_by": null,
+      "translation_key": "switch"
+    }
+  ],
+  "ha_standard_tuya_latest_entity_states": [
+    {
+      "entity_id": "switch.q22_ota_switch",
+      "state": "on",
+      "last_updated_ts": 1781178005.720956
+    }
+  ],
+  "summary": {
+    "received_status_codes": [
+      "forward_energy_total",
+      "work_state",
+      "charge_cur_set",
+      "power_total",
+      "connection_state",
+      "work_mode",
+      "energy_charge",
+      "switch",
+      "temp_current",
+      "charge_energy_once"
+    ],
+    "received_local_strategy_dp_ids": [
+      "1",
+      "3",
+      "4",
+      "9",
+      "13",
+      "14",
+      "17",
+      "18",
+      "24",
+      "25"
+    ],
+    "standard_ha_entities_created": [
+      "switch.q22_ota_switch"
+    ],
+    "not_received_in_standard_ha_tuya_payload": [
+      "phase_a",
+      "phase_b",
+      "phase_c",
+      "fault",
+      "local_timer",
+      "system_version",
+      "mode_set"
+    ],
+    "not_received_dp_ids": [
+      "6",
+      "7",
+      "8",
+      "10",
+      "19",
+      "23",
+      "33"
+    ]
+  }
+}

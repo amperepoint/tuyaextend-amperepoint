@@ -1,0 +1,72 @@
+title: AmperePoint
+views:
+  - title: AmperePoint
+    path: amperepoint
+    icon: mdi:ev-station
+    cards:
+      - type: entities
+        title: AmperePoint Q22
+        show_header_toggle: false
+        entities:
+          - entity: sensor.amperepoint_q22_status
+            name: Status
+          - entity: binary_sensor.amperepoint_q22_vehicle_connected
+            name: Auto
+          - entity: sensor.amperepoint_q22_power
+            name: Moc
+          - entity: sensor.amperepoint_q22_session_energy
+            name: Energia sesji
+          - entity: sensor.amperepoint_q22_session_cost
+            name: Koszt sesji
+          - entity: switch.amperepoint_q22_charging
+            name: Start / Stop
+          - entity: number.amperepoint_q22_current_limit
+            name: Limit pradu
+
+      - type: history-graph
+        title: Moc z ostatnich 6 h
+        hours_to_show: 6
+        entities:
+          - entity: sensor.amperepoint_q22_power
+            name: Moc
+
+      - type: statistics-graph
+        title: Energia dzienna
+        chart_type: bar
+        period: day
+        days_to_show: 14
+        stat_types:
+          - change
+        entities:
+          - sensor.amperepoint_q22_session_energy
+
+      - type: statistics-graph
+        title: Koszty miesieczne
+        chart_type: bar
+        period: month
+        days_to_show: 180
+        stat_types:
+          - change
+        entities:
+          - sensor.amperepoint_q22_session_cost
+
+      - type: entities
+        title: Parametry faz
+        show_header_toggle: false
+        entities:
+          - entity: sensor.amperepoint_q22_phase_count
+            name: Liczba faz
+          - entity: sensor.amperepoint_q22_voltage_l1
+            name: Napiecie L1
+          - entity: sensor.amperepoint_q22_voltage_l2
+            name: Napiecie L2
+          - entity: sensor.amperepoint_q22_voltage_l3
+            name: Napiecie L3
+          - entity: sensor.amperepoint_q22_current_l1
+            name: Prad L1
+          - entity: sensor.amperepoint_q22_current_l2
+            name: Prad L2
+          - entity: sensor.amperepoint_q22_current_l3
+            name: Prad L3
+          - entity: sensor.amperepoint_q22_error
+            name: Diagnostyka

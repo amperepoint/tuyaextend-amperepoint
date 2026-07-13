@@ -1,0 +1,150 @@
+title: AmperePoint Q22 OTA Test
+views:
+  - title: HACS
+    path: q22-ota-hacs
+    icon: mdi:ev-station
+    cards:
+      - type: entities
+        title: AmperePoint Q22 OTA - widok HACS
+        show_header_toggle: false
+        entities:
+          - entity: sensor.amperepoint_q22_ota_status
+            name: Status
+          - entity: binary_sensor.amperepoint_q22_ota_auto_podlaczone
+            name: Auto
+          - entity: sensor.amperepoint_q22_ota_moc
+            name: Moc
+          - entity: sensor.amperepoint_q22_ota_energia_calkowita
+            name: Licznik energii
+          - entity: sensor.amperepoint_q22_ota_energia_sesji
+            name: Energia sesji
+          - entity: sensor.amperepoint_q22_ota_koszt_sesji
+            name: Koszt sesji
+          - entity: sensor.amperepoint_q22_ota_taryfa
+            name: Taryfa
+          - entity: sensor.amperepoint_q22_ota_liczba_faz
+            name: Liczba faz
+          - entity: sensor.amperepoint_q22_ota_blad
+            name: Diagnostyka
+          - entity: switch.amperepoint_q22_ota_ladowanie
+            name: Start / Stop
+          - entity: number.amperepoint_q22_ota_limit_pradu
+            name: Limit pradu
+
+      - type: history-graph
+        title: Moc z ostatnich 6 h
+        hours_to_show: 6
+        entities:
+          - entity: sensor.amperepoint_q22_ota_moc
+            name: HACS moc
+          - entity: sensor.q22_ota_total_power
+            name: Tuya moc
+
+      - type: history-graph
+        title: Licznik energii i sesja
+        hours_to_show: 6
+        entities:
+          - entity: sensor.amperepoint_q22_ota_energia_calkowita
+            name: Licznik energii
+          - entity: sensor.amperepoint_q22_ota_energia_sesji
+            name: Energia sesji
+
+  - title: Tuya Cloud
+    path: q22-ota-tuya-cloud
+    icon: mdi:cloud
+    cards:
+      - type: entities
+        title: Q22 OTA - encje Tuya/Xtend
+        show_header_toggle: false
+        entities:
+          - entity: sensor.q22_ota_work_state
+            name: DP3 Work state
+          - entity: sensor.q22_ota_connection_state
+            name: DP13 Connection
+          - entity: sensor.q22_ota_total_power
+            name: DP9 Moc
+          - entity: sensor.q22_ota_total_energy
+            name: DP1 Energia calkowita
+          - entity: sensor.q22_ota_charge_energy_single
+            name: DP25 Energia jednorazowa
+          - entity: sensor.q22_ota_daily_total_energy
+            name: Energia dzienna
+          - entity: sensor.q22_ota_monthly_total_energy
+            name: Energia miesieczna
+          - entity: sensor.q22_ota_yearly_total_energy
+            name: Energia roczna
+          - entity: sensor.q22_ota_temperatura
+            name: Temperatura
+          - entity: number.q22_ota_charging_current
+            name: DP4 Limit pradu
+          - entity: switch.q22_ota_switch
+            name: Start / Stop
+
+      - type: entities
+        title: Porownanie
+        show_header_toggle: false
+        entities:
+          - entity: sensor.q22_ota_total_energy
+            name: Tuya DP1
+          - entity: sensor.amperepoint_q22_ota_energia_calkowita
+            name: HACS licznik
+          - entity: sensor.amperepoint_q22_ota_energia_sesji
+            name: HACS sesja
+          - entity: sensor.q22_ota_charge_energy_single
+            name: Tuya DP25
+          - entity: sensor.amperepoint_q22_ota_koszt_sesji
+            name: HACS koszt
+
+  - title: Tuya Local
+    path: q22-ota-tuya-local
+    icon: mdi:chip
+    cards:
+      - type: entities
+        title: Q22 OTA - profil tuya-local
+        show_header_toggle: false
+        entities:
+          - entity: sensor.q22_ota_status
+            name: DP3 Status
+          - entity: sensor.q22_ota_connection
+            name: DP13 Connection
+          - entity: sensor.q22_ota_moc
+            name: DP9 Moc
+          - entity: sensor.q22_ota_energia
+            name: DP1 Energia
+          - entity: sensor.q22_ota_last_session_energy
+            name: DP25 Energia jednorazowa
+          - entity: binary_sensor.q22_ota_problem
+            name: DP10 Problem
+          - entity: sensor.q22_ota_temperatura_2
+            name: DP24 Temperatura
+          - entity: number.q22_ota_charging_current_2
+            name: DP4 Limit pradu
+          - entity: number.q22_ota_target_energy
+            name: DP17 Energia docelowa
+          - entity: select.q22_ota_tryb_ladowania
+            name: DP14 Tryb
+          - entity: switch.q22_ota
+            name: DP18 Start / Stop
+
+      - type: entities
+        title: Fazy lokalne do walidacji
+        show_header_toggle: false
+        entities:
+          - entity: sensor.q22_ota_napiecie_a
+            name: DP6 Napięcie A
+          - entity: sensor.q22_ota_prad_a
+            name: DP6 Prąd A
+          - entity: sensor.q22_ota_moc_a
+            name: DP6 Moc A
+          - entity: sensor.q22_ota_napiecie_b
+            name: DP7 Napięcie B
+          - entity: sensor.q22_ota_prad_b
+            name: DP7 Prąd B
+          - entity: sensor.q22_ota_moc_b
+            name: DP7 Moc B
+          - entity: sensor.q22_ota_napiecie_c
+            name: DP8 Napięcie C
+          - entity: sensor.q22_ota_prad_c
+            name: DP8 Prąd C
+          - entity: sensor.q22_ota_moc_c
+            name: DP8 Moc C

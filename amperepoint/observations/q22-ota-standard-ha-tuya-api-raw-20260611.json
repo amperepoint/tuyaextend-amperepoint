@@ -1,0 +1,426 @@
+{
+  "source": "Direct calls through Home Assistant standard Tuya tuya_sharing CustomerApi",
+  "note": "Responses are the decrypted Tuya Sharing API envelopes returned by CustomerApi. Credentials, tokens and local keys are redacted if present.",
+  "device_id": "<device_id_q22_ota_current>",
+  "endpoint": "https://apigw.tuyaeu.com",
+  "ha_tuya_entry_id": "01KSGEW3H6R9N4GRSPPA3790DW",
+  "calls": [
+    {
+      "label": "homes",
+      "method": "GET",
+      "path": "/v1.0/m/life/users/homes",
+      "params": {},
+      "success": true,
+      "response": {
+        "t": 1781188289793,
+        "sign": "<redacted>",
+        "tid": "<redacted>",
+        "success": true,
+        "result": [
+          {
+            "background": "",
+            "geoName": "",
+            "gmtCreate": 1674065350,
+            "gmtModified": 1674065350,
+            "groupId": 78962819,
+            "id": 78467813,
+            "lat": "<redacted>",
+            "lon": "<redacted>",
+            "name": "Mój dom ..",
+            "ownerId": "<redacted>",
+            "source": 0,
+            "status": true,
+            "uid": "<redacted>"
+          }
+        ]
+      }
+    },
+    {
+      "label": "home_devices",
+      "method": "GET",
+      "path": "/v1.0/m/life/ha/home/devices",
+      "params": {
+        "homeId": "<redacted>"
+      },
+      "success": false,
+      "error": "Exception: network error:(1106) permission deny"
+    },
+    {
+      "label": "device_detail_by_ids",
+      "method": "GET",
+      "path": "/v1.0/m/life/ha/devices/detail",
+      "params": {
+        "devIds": "<device_id_q22_ota_current>"
+      },
+      "success": true,
+      "response": {
+        "t": 1781188290005,
+        "sign": "<redacted>",
+        "tid": "<redacted>",
+        "success": true,
+        "result": [
+          {
+            "active_time": 1781177094,
+            "biz_type": 0,
+            "category": "qccdz",
+            "create_time": 1781177094,
+            "icon": "smart/icon/bay1761285489450ReFN/cd5c98ad71a48fc9092a4732aa08d058.png",
+            "id": "<device_id_q22_ota_current>",
+            "ip": "<redacted>",
+            "lat": "<redacted>",
+            "local_key": "<redacted>",
+            "lon": "<redacted>",
+            "name": "Q22 OTA",
+            "online": true,
+            "owner_id": "<redacted>",
+            "product_id": "cu111poj2mtikvls",
+            "product_name": "Q22 OTA",
+            "status": [
+              {
+                "code": "forward_energy_total",
+                "value": 0
+              },
+              {
+                "code": "work_state",
+                "value": "charger_charging"
+              },
+              {
+                "code": "charge_cur_set",
+                "value": 16
+              },
+              {
+                "code": "power_total",
+                "value": 0
+              },
+              {
+                "code": "connection_state",
+                "value": "controlpi_6v"
+              },
+              {
+                "code": "work_mode",
+                "value": "charge_now"
+              },
+              {
+                "code": "energy_charge",
+                "value": 1
+              },
+              {
+                "code": "switch",
+                "value": true
+              },
+              {
+                "code": "temp_current",
+                "value": 38
+              },
+              {
+                "code": "charge_energy_once",
+                "value": 1
+              }
+            ],
+            "sub": false,
+            "time_zone": "+02:00",
+            "uid": "<redacted>",
+            "update_time": 1781177094,
+            "uuid": "<redacted>"
+          }
+        ]
+      }
+    },
+    {
+      "label": "device_specifications",
+      "method": "GET",
+      "path": "/v1.1/m/life/<device_id_q22_ota_current>/specifications",
+      "params": {},
+      "success": true,
+      "response": {
+        "t": 1781188290077,
+        "sign": "<redacted>",
+        "tid": "<redacted>",
+        "success": true,
+        "result": {
+          "category": "qccdz",
+          "functions": [
+            {
+              "code": "charge_cur_set",
+              "type": "Integer",
+              "values": "{\"unit\":\"A\",\"min\":6,\"max\":32,\"scale\":0,\"step\":1}"
+            },
+            {
+              "code": "work_mode",
+              "type": "Enum",
+              "values": "{\"range\":[\"charge_now\",\"charge_energy\",\"charge_schedule\"]}"
+            },
+            {
+              "code": "energy_charge",
+              "type": "Integer",
+              "values": "{\"unit\":\"kW·h\",\"min\":1,\"max\":200,\"scale\":0,\"step\":1}"
+            },
+            {
+              "code": "switch",
+              "type": "Boolean",
+              "values": "{}"
+            }
+          ],
+          "status": [
+            {
+              "code": "forward_energy_total",
+              "type": "Integer",
+              "values": "{\"unit\":\"kW·h\",\"min\":0,\"max\":99999999,\"scale\":2,\"step\":1}"
+            },
+            {
+              "code": "work_state",
+              "type": "Enum",
+              "values": "{\"range\":[\"charger_free\",\"charger_insert\",\"charger_free_fault\",\"charger_wait\",\"charger_charging\",\"charger_pause\",\"charger_end\",\"charger_fault\"]}"
+            },
+            {
+              "code": "charge_cur_set",
+              "type": "Integer",
+              "values": "{\"unit\":\"A\",\"min\":6,\"max\":32,\"scale\":0,\"step\":1}"
+            },
+            {
+              "code": "power_total",
+              "type": "Integer",
+              "values": "{\"unit\":\"kW\",\"min\":0,\"max\":99999999,\"scale\":3,\"step\":1}"
+            },
+            {
+              "code": "connection_state",
+              "type": "Enum",
+              "values": "{\"range\":[\"controlpi_12v\",\"controlpi_12v_pwm\",\"controlpi_9v\",\"controlpi_9v_pwm\",\"controlpi_6v\",\"controlpi_6v_pwm\",\"controlpi_error\"]}"
+            },
+            {
+              "code": "work_mode",
+              "type": "Enum",
+              "values": "{\"range\":[\"charge_now\",\"charge_energy\",\"charge_schedule\"]}"
+            },
+            {
+              "code": "energy_charge",
+              "type": "Integer",
+              "values": "{\"unit\":\"kW·h\",\"min\":1,\"max\":200,\"scale\":0,\"step\":1}"
+            },
+            {
+              "code": "switch",
+              "type": "Boolean",
+              "values": "{}"
+            },
+            {
+              "code": "temp_current",
+              "type": "Integer",
+              "values": "{\"unit\":\"℃\",\"min\":-40,\"max\":200,\"scale\":0,\"step\":1}"
+            },
+            {
+              "code": "charge_energy_once",
+              "type": "Integer",
+              "values": "{\"unit\":\"kW·h\",\"min\":1,\"max\":999999,\"scale\":2,\"step\":1}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "label": "device_status_strategy",
+      "method": "GET",
+      "path": "/v1.0/m/life/devices/<device_id_q22_ota_current>/status",
+      "params": {},
+      "success": true,
+      "response": {
+        "t": 1781188290136,
+        "sign": "<redacted>",
+        "tid": "<redacted>",
+        "success": true,
+        "result": {
+          "category": "qccdz",
+          "dpStatusRelationDTOS": [
+            {
+              "dpCode": "forward_energy_total",
+              "dpId": 1,
+              "enumMappingMap": {},
+              "statusCode": "forward_energy_total",
+              "statusFormat": "{\"forward_energy_total\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"unit\":\"kW·h\",\"min\":0,\"max\":99999999,\"scale\":2,\"step\":1}",
+              "valueType": "Integer"
+            },
+            {
+              "dpCode": "work_state",
+              "dpId": 3,
+              "enumMappingMap": {},
+              "statusCode": "work_state",
+              "statusFormat": "{\"work_state\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"range\":[\"charger_free\",\"charger_insert\",\"charger_free_fault\",\"charger_wait\",\"charger_charging\",\"charger_pause\",\"charger_end\",\"charger_fault\"]}",
+              "valueType": "Enum"
+            },
+            {
+              "dpCode": "charge_cur_set",
+              "dpId": 4,
+              "enumMappingMap": {},
+              "statusCode": "charge_cur_set",
+              "statusFormat": "{\"charge_cur_set\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"unit\":\"A\",\"min\":6,\"max\":32,\"scale\":0,\"step\":1}",
+              "valueType": "Integer"
+            },
+            {
+              "dpCode": "power_total",
+              "dpId": 9,
+              "enumMappingMap": {},
+              "statusCode": "power_total",
+              "statusFormat": "{\"power_total\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"unit\":\"kW\",\"min\":0,\"max\":99999999,\"scale\":3,\"step\":1}",
+              "valueType": "Integer"
+            },
+            {
+              "dpCode": "connection_state",
+              "dpId": 13,
+              "enumMappingMap": {},
+              "statusCode": "connection_state",
+              "statusFormat": "{\"connection_state\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"range\":[\"controlpi_12v\",\"controlpi_12v_pwm\",\"controlpi_9v\",\"controlpi_9v_pwm\",\"controlpi_6v\",\"controlpi_6v_pwm\",\"controlpi_error\"]}",
+              "valueType": "Enum"
+            },
+            {
+              "dpCode": "work_mode",
+              "dpId": 14,
+              "enumMappingMap": {},
+              "statusCode": "work_mode",
+              "statusFormat": "{\"work_mode\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"range\":[\"charge_now\",\"charge_energy\",\"charge_schedule\"]}",
+              "valueType": "Enum"
+            },
+            {
+              "dpCode": "energy_charge",
+              "dpId": 17,
+              "enumMappingMap": {},
+              "statusCode": "energy_charge",
+              "statusFormat": "{\"energy_charge\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"unit\":\"kW·h\",\"min\":1,\"max\":200,\"scale\":0,\"step\":1}",
+              "valueType": "Integer"
+            },
+            {
+              "dpCode": "switch",
+              "dpId": 18,
+              "enumMappingMap": {},
+              "statusCode": "switch",
+              "statusFormat": "{\"switch\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{}",
+              "valueType": "Boolean"
+            },
+            {
+              "dpCode": "temp_current",
+              "dpId": 24,
+              "enumMappingMap": {},
+              "statusCode": "temp_current",
+              "statusFormat": "{\"temp_current\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"unit\":\"℃\",\"min\":-40,\"max\":200,\"scale\":0,\"step\":1}",
+              "valueType": "Integer"
+            },
+            {
+              "dpCode": "charge_energy_once",
+              "dpId": 25,
+              "enumMappingMap": {},
+              "statusCode": "charge_energy_once",
+              "statusFormat": "{\"charge_energy_once\":\"$\"}",
+              "supportLocal": true,
+              "valueConvert": "default",
+              "valueDesc": "{\"unit\":\"kW·h\",\"min\":1,\"max\":999999,\"scale\":2,\"step\":1}",
+              "valueType": "Integer"
+            }
+          ],
+          "productKey": "cu111poj2mtikvls"
+        }
+      }
+    },
+    {
+      "label": "device_dp_report_types",
+      "method": "GET",
+      "path": "/v1.0/m/life/ha/<device_id_q22_ota_current>/dp-report-types",
+      "params": {},
+      "success": true,
+      "response": {
+        "t": 1781188290298,
+        "sign": "<redacted>",
+        "tid": "<redacted>",
+        "success": true,
+        "result": [
+          {
+            "dp_code": "forward_energy_total",
+            "report_type": "minux"
+          },
+          {
+            "dp_code": "charge_energy_once",
+            "report_type": "sum"
+          }
+        ]
+      }
+    }
+  ],
+  "summary": {
+    "device_id": "<device_id_q22_ota_current>",
+    "home_ids_count": 1,
+    "endpoints_called": [
+      "GET /v1.0/m/life/users/homes",
+      "GET /v1.0/m/life/ha/home/devices",
+      "GET /v1.0/m/life/ha/devices/detail",
+      "GET /v1.1/m/life/<device_id_q22_ota_current>/specifications",
+      "GET /v1.0/m/life/devices/<device_id_q22_ota_current>/status",
+      "GET /v1.0/m/life/ha/<device_id_q22_ota_current>/dp-report-types"
+    ],
+    "status_codes_from_device_detail": [
+      "forward_energy_total",
+      "work_state",
+      "charge_cur_set",
+      "power_total",
+      "connection_state",
+      "work_mode",
+      "energy_charge",
+      "switch",
+      "temp_current",
+      "charge_energy_once"
+    ],
+    "specification_status_codes": [
+      "forward_energy_total",
+      "work_state",
+      "charge_cur_set",
+      "power_total",
+      "connection_state",
+      "work_mode",
+      "energy_charge",
+      "switch",
+      "temp_current",
+      "charge_energy_once"
+    ],
+    "specification_function_codes": [
+      "charge_cur_set",
+      "work_mode",
+      "energy_charge",
+      "switch"
+    ],
+    "strategy_dp_ids": [
+      "1",
+      "3",
+      "4",
+      "9",
+      "13",
+      "14",
+      "17",
+      "18",
+      "24",
+      "25"
+    ]
+  }
+}

@@ -1,0 +1,128 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TuyaExtend AmperePoint",
+        "description": "Choose a detected AmperePoint charger. TuyaExtend will map supported Tuya datapoints automatically and hide unavailable sections in the dashboard card.",
+        "data": {
+          "source_device_id": "Detected Tuya charger",
+          "model": "AmperePoint model",
+          "name": "Display name",
+          "source_raw_dp": "Raw DP entity",
+          "source_status": "Tuya status entity",
+          "source_connected": "Vehicle connected entity",
+          "source_power": "Power entity",
+          "source_session_energy": "Session energy entity",
+          "source_total_energy": "Total energy entity",
+          "source_last_session_energy": "Last session energy entity",
+          "session_energy_mode": "Session energy mode",
+          "source_current_limit": "Current limit entity",
+          "source_charge_switch": "Start/stop switch entity",
+          "source_error": "Error entity",
+          "source_temperature": "Temperature entity",
+          "tariff_value": "Energy tariff",
+          "tariff_entity": "Dynamic tariff entity",
+          "currency": "Currency",
+          "complete_power_threshold_kw": "Complete detection threshold",
+          "complete_idle_minutes": "Complete detection idle minutes",
+          "source_voltage_l1": "Voltage L1 entity",
+          "source_voltage_l2": "Voltage L2 entity",
+          "source_voltage_l3": "Voltage L3 entity",
+          "source_current_l1": "Current L1 entity",
+          "source_current_l2": "Current L2 entity",
+          "source_current_l3": "Current L3 entity",
+          "source_power_l1": "Power L1 entity",
+          "source_power_l2": "Power L2 entity",
+          "source_power_l3": "Power L3 entity",
+          "source_phase_a": "Raw phase A entity",
+          "source_phase_b": "Raw phase B entity",
+          "source_phase_c": "Raw phase C entity"
+        }
+      }
+    },
+    "error": {
+      "device_not_found": "The selected Tuya charger was not found. Reload Home Assistant and try again."
+    },
+    "abort": {
+      "already_configured": "This AmperePoint source is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "TuyaExtend AmperePoint options",
+        "description": "Update model, source entity mapping and tariff settings.",
+        "data": {
+          "source_device_id": "Detected Tuya charger",
+          "model": "AmperePoint model",
+          "name": "Display name",
+          "source_raw_dp": "Raw DP entity",
+          "source_status": "Tuya status entity",
+          "source_connected": "Vehicle connected entity",
+          "source_power": "Power entity",
+          "source_session_energy": "Session energy entity",
+          "source_total_energy": "Total energy entity",
+          "source_last_session_energy": "Last session energy entity",
+          "session_energy_mode": "Session energy mode",
+          "source_current_limit": "Current limit entity",
+          "source_charge_switch": "Start/stop switch entity",
+          "source_error": "Error entity",
+          "source_temperature": "Temperature entity",
+          "tariff_value": "Energy tariff",
+          "tariff_entity": "Dynamic tariff entity",
+          "currency": "Currency",
+          "complete_power_threshold_kw": "Complete detection threshold",
+          "complete_idle_minutes": "Complete detection idle minutes",
+          "source_voltage_l1": "Voltage L1 entity",
+          "source_voltage_l2": "Voltage L2 entity",
+          "source_voltage_l3": "Voltage L3 entity",
+          "source_current_l1": "Current L1 entity",
+          "source_current_l2": "Current L2 entity",
+          "source_current_l3": "Current L3 entity",
+          "source_power_l1": "Power L1 entity",
+          "source_power_l2": "Power L2 entity",
+          "source_power_l3": "Power L3 entity",
+          "source_phase_a": "Raw phase A entity",
+          "source_phase_b": "Raw phase B entity",
+          "source_phase_c": "Raw phase C entity"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": { "name": "Status" },
+      "power": { "name": "Power" },
+      "session_energy": { "name": "Session energy" },
+      "total_energy": { "name": "Total energy" },
+      "last_session_energy": { "name": "Last session energy" },
+      "temperature": { "name": "Temperature" },
+      "session_cost": { "name": "Session cost" },
+      "tariff": { "name": "Tariff" },
+      "phase_count": { "name": "Phase count" },
+      "error": { "name": "Error" },
+      "voltage_l1": { "name": "Voltage L1" },
+      "voltage_l2": { "name": "Voltage L2" },
+      "voltage_l3": { "name": "Voltage L3" },
+      "current_l1": { "name": "Current L1" },
+      "current_l2": { "name": "Current L2" },
+      "current_l3": { "name": "Current L3" },
+      "power_l1": { "name": "Power L1" },
+      "power_l2": { "name": "Power L2" },
+      "power_l3": { "name": "Power L3" }
+    },
+    "binary_sensor": {
+      "vehicle_connected": { "name": "Vehicle connected" },
+      "charging_complete": { "name": "Charging complete" }
+    },
+    "number": {
+      "current_limit": { "name": "Current limit" }
+    },
+    "select": {
+      "model": { "name": "Model" }
+    },
+    "switch": {
+      "charging": { "name": "Charging" }
+    }
+  }
+}

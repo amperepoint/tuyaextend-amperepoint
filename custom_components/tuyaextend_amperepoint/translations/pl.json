@@ -1,0 +1,128 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "TuyaExtend AmperePoint",
+        "description": "Wybierz wykryta ladowarke AmperePoint. TuyaExtend automatycznie zmapuje obslugiwane datapointy Tuya i ukryje niedostepne sekcje w karcie dashboardu.",
+        "data": {
+          "source_device_id": "Wykryta ladowarka Tuya",
+          "model": "Model AmperePoint",
+          "name": "Nazwa wyswietlana",
+          "source_raw_dp": "Encja raw DP",
+          "source_status": "Encja statusu Tuya",
+          "source_connected": "Encja podlaczenia auta",
+          "source_power": "Encja mocy",
+          "source_session_energy": "Encja energii sesji",
+          "source_total_energy": "Encja energii calkowitej",
+          "source_last_session_energy": "Encja energii ostatniej sesji",
+          "session_energy_mode": "Tryb liczenia energii sesji",
+          "source_current_limit": "Encja limitu pradu",
+          "source_charge_switch": "Encja start/stop",
+          "source_error": "Encja bledu",
+          "source_temperature": "Encja temperatury",
+          "tariff_value": "Stawka energii",
+          "tariff_entity": "Encja dynamicznej stawki",
+          "currency": "Waluta",
+          "complete_power_threshold_kw": "Prog wykrycia konca ladowania",
+          "complete_idle_minutes": "Minuty bezczynnosci do konca ladowania",
+          "source_voltage_l1": "Encja napiecia L1",
+          "source_voltage_l2": "Encja napiecia L2",
+          "source_voltage_l3": "Encja napiecia L3",
+          "source_current_l1": "Encja pradu L1",
+          "source_current_l2": "Encja pradu L2",
+          "source_current_l3": "Encja pradu L3",
+          "source_power_l1": "Encja mocy L1",
+          "source_power_l2": "Encja mocy L2",
+          "source_power_l3": "Encja mocy L3",
+          "source_phase_a": "Encja raw fazy A",
+          "source_phase_b": "Encja raw fazy B",
+          "source_phase_c": "Encja raw fazy C"
+        }
+      }
+    },
+    "error": {
+      "device_not_found": "Nie znaleziono wybranej ladowarki Tuya. Przeladuj Home Assistant i sproboj ponownie."
+    },
+    "abort": {
+      "already_configured": "To zrodlo AmperePoint jest juz skonfigurowane."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje TuyaExtend AmperePoint",
+        "description": "Zmien model, mapowanie encji zrodlowych i ustawienia taryfy.",
+        "data": {
+          "source_device_id": "Wykryta ladowarka Tuya",
+          "model": "Model AmperePoint",
+          "name": "Nazwa wyswietlana",
+          "source_raw_dp": "Encja raw DP",
+          "source_status": "Encja statusu Tuya",
+          "source_connected": "Encja podlaczenia auta",
+          "source_power": "Encja mocy",
+          "source_session_energy": "Encja energii sesji",
+          "source_total_energy": "Encja energii calkowitej",
+          "source_last_session_energy": "Encja energii ostatniej sesji",
+          "session_energy_mode": "Tryb liczenia energii sesji",
+          "source_current_limit": "Encja limitu pradu",
+          "source_charge_switch": "Encja start/stop",
+          "source_error": "Encja bledu",
+          "source_temperature": "Encja temperatury",
+          "tariff_value": "Stawka energii",
+          "tariff_entity": "Encja dynamicznej stawki",
+          "currency": "Waluta",
+          "complete_power_threshold_kw": "Prog wykrycia konca ladowania",
+          "complete_idle_minutes": "Minuty bezczynnosci do konca ladowania",
+          "source_voltage_l1": "Encja napiecia L1",
+          "source_voltage_l2": "Encja napiecia L2",
+          "source_voltage_l3": "Encja napiecia L3",
+          "source_current_l1": "Encja pradu L1",
+          "source_current_l2": "Encja pradu L2",
+          "source_current_l3": "Encja pradu L3",
+          "source_power_l1": "Encja mocy L1",
+          "source_power_l2": "Encja mocy L2",
+          "source_power_l3": "Encja mocy L3",
+          "source_phase_a": "Encja raw fazy A",
+          "source_phase_b": "Encja raw fazy B",
+          "source_phase_c": "Encja raw fazy C"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "status": { "name": "Status" },
+      "power": { "name": "Moc" },
+      "session_energy": { "name": "Energia sesji" },
+      "total_energy": { "name": "Energia calkowita" },
+      "last_session_energy": { "name": "Energia ostatniej sesji" },
+      "temperature": { "name": "Temperatura" },
+      "session_cost": { "name": "Koszt sesji" },
+      "tariff": { "name": "Taryfa" },
+      "phase_count": { "name": "Liczba faz" },
+      "error": { "name": "Blad" },
+      "voltage_l1": { "name": "Napiecie L1" },
+      "voltage_l2": { "name": "Napiecie L2" },
+      "voltage_l3": { "name": "Napiecie L3" },
+      "current_l1": { "name": "Prad L1" },
+      "current_l2": { "name": "Prad L2" },
+      "current_l3": { "name": "Prad L3" },
+      "power_l1": { "name": "Moc L1" },
+      "power_l2": { "name": "Moc L2" },
+      "power_l3": { "name": "Moc L3" }
+    },
+    "binary_sensor": {
+      "vehicle_connected": { "name": "Auto podlaczone" },
+      "charging_complete": { "name": "Ladowanie zakonczone" }
+    },
+    "number": {
+      "current_limit": { "name": "Limit pradu" }
+    },
+    "select": {
+      "model": { "name": "Model" }
+    },
+    "switch": {
+      "charging": { "name": "Ladowanie" }
+    }
+  }
+}
