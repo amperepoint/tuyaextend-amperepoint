@@ -2,6 +2,17 @@
 
 Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration">
+    <img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open Repository on HACS">
+  </a>
+</p>
+
+## Manuals
+
+- [English installation manual](INSTALL.en.md)
+- [Polska instrukcja instalacji](INSTALL.pl.md)
+
 ## Quick Start
 
 1. Add the charger to the Tuya Smart / Smart Life app.
@@ -14,7 +25,7 @@ Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 type: custom:amperepoint-q22-card
 ```
 
-Full installation manual: [`INSTALL.md`](INSTALL.md).
+Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](INSTALL.pl.md).
 
 This repository contains:
 

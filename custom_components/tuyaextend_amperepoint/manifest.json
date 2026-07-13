@@ -1,13 +1,13 @@
-{
+﻿{
   "domain": "tuyaextend_amperepoint",
   "name": "TuyaExtend AmperePoint",
   "after_dependencies": ["frontend", "lovelace", "tuya"],
   "codeowners": [],
   "config_flow": true,
-  "documentation": "https://github.com/amperepoint/tuya-ap",
+  "documentation": "https://github.com/amperepoint/tuyaextend-amperepoint",
   "integration_type": "helper",
   "iot_class": "calculated",
-  "issue_tracker": "https://github.com/amperepoint/tuya-ap/issues",
+  "issue_tracker": "https://github.com/amperepoint/tuyaextend-amperepoint/issues",
   "requirements": [],
   "version": "0.1.0"
 }

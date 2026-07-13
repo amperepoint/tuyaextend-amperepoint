@@ -1,9 +1,9 @@
-# AmperePoint Q22 OTA DP map
+﻿# AmperePoint Q22 OTA DP map
 
 ## Scope
 
 This map covers the AmperePoint Q22 OTA product currently tracked in the
-`amperepoint/tuya-ap` project.
+`amperepoint/tuyaextend-amperepoint` project.
 
 | Field | Value |
 | --- | --- |

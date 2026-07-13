@@ -1,6 +1,6 @@
-# TODO
+﻿# TODO
 
-This list tracks the near-term product work for `amperepoint/tuya-ap`.
+This list tracks the near-term product work for `amperepoint/tuyaextend-amperepoint`.
 
 ## Dashboard
 
