@@ -2,8 +2,38 @@
   "config": {
     "step": {
       "user": {
+        "title": "Welcome to TuyaExtend AmperePoint",
+        "description": "{count} compatible Tuya charger(s) were detected. Choose automatic setup, or map entities manually.",
+        "menu_options": {
+          "automatic": "Set up a detected charger",
+          "manual": "Configure entity mapping manually"
+        }
+      },
+      "automatic": {
+        "title": "Choose your charger",
+        "description": "Select the Tuya charger that TuyaExtend should normalize for Home Assistant.",
+        "data": {
+          "source_device_id": "Detected Tuya charger",
+          "name": "Display name"
+        }
+      },
+      "settings": {
+        "title": "Finish setup",
+        "description": "Set the charging tariff and choose whether to create a ready-to-use AmperePoint dashboard in the sidebar.",
+        "data": {
+          "tariff_value": "Energy tariff",
+          "currency": "Currency",
+          "complete_power_threshold_kw": "Complete detection threshold",
+          "complete_idle_minutes": "Complete detection idle minutes",
+          "create_dashboard": "Create an AmperePoint dashboard"
+        },
+        "data_description": {
+          "create_dashboard": "Creates a separate dashboard without changing any of your existing dashboards."
+        }
+      },
+      "manual": {
         "title": "TuyaExtend AmperePoint",
-        "description": "Choose a detected AmperePoint charger. TuyaExtend will map supported Tuya datapoints automatically and hide unavailable sections in the dashboard card.",
+        "description": "Select a charger model and map the available source entities. Fields for unavailable datapoints may be left empty.",
         "data": {
           "source_device_id": "Detected Tuya charger",
           "model": "AmperePoint model",
@@ -25,6 +55,7 @@
           "currency": "Currency",
           "complete_power_threshold_kw": "Complete detection threshold",
           "complete_idle_minutes": "Complete detection idle minutes",
+          "create_dashboard": "Create an AmperePoint dashboard",
           "source_voltage_l1": "Voltage L1 entity",
           "source_voltage_l2": "Voltage L2 entity",
           "source_voltage_l3": "Voltage L3 entity",
@@ -73,6 +104,7 @@
           "currency": "Currency",
           "complete_power_threshold_kw": "Complete detection threshold",
           "complete_idle_minutes": "Complete detection idle minutes",
+          "create_dashboard": "Create an AmperePoint dashboard",
           "source_voltage_l1": "Voltage L1 entity",
           "source_voltage_l2": "Voltage L2 entity",
           "source_voltage_l3": "Voltage L3 entity",

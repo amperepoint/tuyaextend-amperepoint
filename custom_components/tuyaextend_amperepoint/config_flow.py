@@ -10,9 +10,9 @@ from homeassistant.const import CONF_NAME
 from homeassistant.helpers import config_validation as cv, selector
 
 from .const import (
-    CONF_AUTO_DISCOVERED,
     CONF_COMPLETE_IDLE_MINUTES,
     CONF_COMPLETE_POWER_THRESHOLD,
+    CONF_CREATE_DASHBOARD,
     CONF_CURRENCY,
     CONF_MODEL,
     CONF_SOURCE_CHARGE_SWITCH,
@@ -43,6 +43,7 @@ from .const import (
     CONF_TARIFF_VALUE,
     DEFAULT_COMPLETE_IDLE_MINUTES,
     DEFAULT_COMPLETE_POWER_THRESHOLD_KW,
+    DEFAULT_CREATE_DASHBOARD,
     DEFAULT_CURRENCY,
     DEFAULT_TARIFF_VALUE,
     DOMAIN,
@@ -70,17 +71,15 @@ def _optional_entity(
     current: Mapping[str, Any] | None = None,
 ) -> tuple[vol.Optional, selector.EntitySelector]:
     current_value = current.get(key) if current else None
-    marker = vol.Optional(key, default=current_value) if current_value else vol.Optional(key)
+    marker = (
+        vol.Optional(key, default=current_value) if current_value else vol.Optional(key)
+    )
     return marker, _entity_selector(domains)
 
 
-def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
+def _settings_fields(current: Mapping[str, Any] | None = None) -> dict[Any, Any]:
     current = current or {}
-    schema: dict[Any, Any] = {
-        vol.Required(CONF_MODEL, default=current.get(CONF_MODEL, DEFAULT_MODEL)): vol.In(
-            _model_options()
-        ),
-        vol.Optional(CONF_NAME, default=current.get(CONF_NAME, NAME)): cv.string,
+    return {
         vol.Required(
             CONF_TARIFF_VALUE,
             default=current.get(CONF_TARIFF_VALUE, DEFAULT_TARIFF_VALUE),
@@ -97,12 +96,33 @@ def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
         ): cv.positive_float,
         vol.Required(
             CONF_COMPLETE_IDLE_MINUTES,
-            default=current.get(CONF_COMPLETE_IDLE_MINUTES, DEFAULT_COMPLETE_IDLE_MINUTES),
+            default=current.get(
+                CONF_COMPLETE_IDLE_MINUTES, DEFAULT_COMPLETE_IDLE_MINUTES
+            ),
         ): cv.positive_int,
+        vol.Required(
+            CONF_CREATE_DASHBOARD,
+            default=current.get(CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD),
+        ): cv.boolean,
+    }
+
+
+def _settings_schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
+    return vol.Schema(_settings_fields(current))
+
+
+def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
+    current = current or {}
+    schema: dict[Any, Any] = {
+        vol.Required(
+            CONF_MODEL, default=current.get(CONF_MODEL, DEFAULT_MODEL)
+        ): vol.In(_model_options()),
+        vol.Optional(CONF_NAME, default=current.get(CONF_NAME, NAME)): cv.string,
         vol.Required(
             CONF_SESSION_ENERGY_MODE,
             default=current.get(CONF_SESSION_ENERGY_MODE, SESSION_ENERGY_MODE_AUTO),
         ): vol.In(SESSION_ENERGY_MODES),
+        **_settings_fields(current),
     }
 
     optional_entities = (
@@ -139,23 +159,16 @@ def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
     return vol.Schema(schema)
 
 
-def _auto_schema(candidates: list[SourceCandidate]) -> vol.Schema:
+def _automatic_schema(candidates: list[SourceCandidate]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(CONF_SOURCE_DEVICE_ID): vol.In(
-                {candidate.device_id: candidate.option_label for candidate in candidates}
+                {
+                    candidate.device_id: candidate.option_label
+                    for candidate in candidates
+                }
             ),
             vol.Optional(CONF_NAME): cv.string,
-            vol.Required(CONF_TARIFF_VALUE, default=DEFAULT_TARIFF_VALUE): cv.positive_float,
-            vol.Required(CONF_CURRENCY, default=DEFAULT_CURRENCY): cv.string,
-            vol.Required(
-                CONF_COMPLETE_POWER_THRESHOLD,
-                default=DEFAULT_COMPLETE_POWER_THRESHOLD_KW,
-            ): cv.positive_float,
-            vol.Required(
-                CONF_COMPLETE_IDLE_MINUTES,
-                default=DEFAULT_COMPLETE_IDLE_MINUTES,
-            ): cv.positive_int,
         }
     )
 
@@ -163,50 +176,75 @@ def _auto_schema(candidates: list[SourceCandidate]) -> vol.Schema:
 class AmperePointConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     _candidates: list[SourceCandidate]
+    _candidate: SourceCandidate
+    _entry_name: str
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
+        self._candidates = discover_sources(self.hass)
+        menu_options = ["automatic", "manual"] if self._candidates else ["manual"]
+        return self.async_show_menu(
+            step_id="user",
+            menu_options=menu_options,
+            description_placeholders={
+                "count": str(len(self._candidates)),
+            },
+        )
+
+    async def async_step_automatic(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         errors: dict[str, str] = {}
-        candidates = discover_sources(self.hass)
+        self._candidates = discover_sources(self.hass)
 
         if user_input is not None:
-            if CONF_SOURCE_DEVICE_ID in user_input:
-                candidate = next(
-                    (
-                        item
-                        for item in candidates
-                        if item.device_id == user_input[CONF_SOURCE_DEVICE_ID]
-                    ),
-                    None,
-                )
-                if candidate is None:
-                    errors["base"] = "device_not_found"
-                else:
-                    data = {
-                        **candidate.as_config_data(),
-                        CONF_NAME: user_input.get(CONF_NAME) or candidate.title,
-                        CONF_TARIFF_VALUE: user_input[CONF_TARIFF_VALUE],
-                        CONF_CURRENCY: user_input[CONF_CURRENCY],
-                        CONF_COMPLETE_POWER_THRESHOLD: user_input[
-                            CONF_COMPLETE_POWER_THRESHOLD
-                        ],
-                        CONF_COMPLETE_IDLE_MINUTES: user_input[CONF_COMPLETE_IDLE_MINUTES],
-                    }
-                    await self.async_set_unique_id(
-                        f"{DOMAIN}_{candidate.device_id}"
-                    )
-                    self._abort_if_unique_id_configured()
-                    title = data[CONF_NAME]
-                    return self.async_create_entry(title=title, data=data)
+            candidate = next(
+                (
+                    item
+                    for item in self._candidates
+                    if item.device_id == user_input[CONF_SOURCE_DEVICE_ID]
+                ),
+                None,
+            )
+            if candidate is None:
+                errors["base"] = "device_not_found"
+            else:
+                self._candidate = candidate
+                self._entry_name = user_input.get(CONF_NAME) or candidate.title
+                return await self.async_step_settings()
 
-            if errors:
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=_auto_schema(candidates),
-                    errors=errors,
-                )
+        if not self._candidates:
+            return await self.async_step_manual()
 
+        return self.async_show_form(
+            step_id="automatic",
+            data_schema=_automatic_schema(self._candidates),
+            errors=errors,
+        )
+
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        if user_input is not None:
+            await self.async_set_unique_id(f"{DOMAIN}_{self._candidate.device_id}")
+            self._abort_if_unique_id_configured()
+            data = {
+                **self._candidate.as_config_data(),
+                **user_input,
+                CONF_NAME: self._entry_name,
+            }
+            return self.async_create_entry(title=self._entry_name, data=data)
+
+        return self.async_show_form(
+            step_id="settings",
+            data_schema=_settings_schema(),
+        )
+
+    async def async_step_manual(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        if user_input is not None:
             source = (
                 user_input.get(CONF_SOURCE_STATUS)
                 or user_input.get(CONF_SOURCE_POWER)
@@ -219,13 +257,8 @@ class AmperePointConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(title=title, data=user_input)
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=_auto_schema(candidates) if candidates else _schema(),
-            errors=errors,
-            description_placeholders={
-                "count": str(len(candidates)),
-                "mode": "auto" if candidates else "manual",
-            },
+            step_id="manual",
+            data_schema=_schema(),
         )
 
     @staticmethod

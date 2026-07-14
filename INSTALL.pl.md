@@ -69,8 +69,12 @@ Ustawienia -> Urządzenia i usługi -> Dodaj integrację
 TuyaExtend AmperePoint
 ```
 
-3. Wybierz wykrytą ładowarkę AmperePoint.
-4. Zapisz wpis integracji.
+3. Na ekranie powitalnym wybierz konfigurację automatyczną albo ręczne
+   przypisanie encji.
+4. Wybierz wykrytą ładowarkę AmperePoint i ustaw taryfę.
+5. Pozostaw włączone `Utwórz panel AmperePoint`, aby otrzymać gotowy panel na
+   pasku bocznym z automatycznie przypisanymi encjami ładowarki.
+6. Zapisz wpis integracji.
 
 Integracja wykrywa modele Q Series na podstawie nazwy urządzenia Tuya, modelu i
 metadanych produktu. Jeśli ładowarka nie zostanie wykryta, zmień nazwę
@@ -86,12 +90,16 @@ AmperePoint Q Series
 Następnie przeładuj integrację Tuya albo zrestartuj Home Assistant i spróbuj
 ponownie.
 
-## 4. Dodaj kartę Lovelace
+## 4. Otwórz panel AmperePoint
 
-W standardowych dashboardach Home Assistant działających w trybie storage
-integracja rejestruje kartę automatycznie.
+Gdy opcja panelu jest włączona, integracja tworzy osobny panel AmperePoint na
+pasku bocznym Home Assistanta. Nie nadpisuje ani nie zmienia istniejących
+dashboardów. Późniejsze zmiany w tym panelu są zachowywane po restartach Home
+Assistanta.
 
-Dodaj kartę ręcznie:
+Zasób karty jest rejestrowany automatycznie w standardowych dashboardach
+Home Assistant działających w trybie storage. Jeśli automatyczne utworzenie
+panelu zostało wyłączone, dodaj kartę ręcznie:
 
 ```yaml
 type: custom:amperepoint-q22-card

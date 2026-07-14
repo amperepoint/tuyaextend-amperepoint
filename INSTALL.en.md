@@ -69,8 +69,11 @@ Settings -> Devices & services -> Add integration
 TuyaExtend AmperePoint
 ```
 
-3. Select the detected AmperePoint charger.
-4. Save the entry.
+3. On the welcome screen, choose automatic setup or manual entity mapping.
+4. Select the detected AmperePoint charger and configure the tariff.
+5. Leave `Create an AmperePoint dashboard` enabled for a ready-to-use sidebar
+   panel with the charger entities mapped automatically.
+6. Save the entry.
 
 The integration detects Q Series models from the Tuya device name, model and
 product metadata. If the charger is not detected, rename the Tuya/Home Assistant
@@ -84,12 +87,16 @@ AmperePoint Q Series
 
 Then reload the Tuya integration or restart Home Assistant and try again.
 
-## 4. Add The Lovelace Card
+## 4. Open The AmperePoint Dashboard
 
-In standard Home Assistant storage-mode dashboards, the integration registers
-the bundled card automatically.
+With the dashboard option enabled, the integration creates a separate
+AmperePoint panel in the Home Assistant sidebar. It does not overwrite or edit
+existing dashboards. Later changes made to that panel are preserved across
+Home Assistant restarts.
 
-Add a manual card with:
+The bundled card resource is registered automatically in standard Home
+Assistant storage-mode dashboards. If automatic dashboard creation was disabled,
+add a manual card with:
 
 ```yaml
 type: custom:amperepoint-q22-card

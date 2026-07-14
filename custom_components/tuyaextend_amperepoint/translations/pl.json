@@ -2,8 +2,38 @@
   "config": {
     "step": {
       "user": {
+        "title": "Witaj w TuyaExtend AmperePoint",
+        "description": "Wykryto zgodne ładowarki Tuya: {count}. Wybierz automatyczną konfigurację albo ręcznie przypisz encje.",
+        "menu_options": {
+          "automatic": "Skonfiguruj wykrytą ładowarkę",
+          "manual": "Przypisz encje ręcznie"
+        }
+      },
+      "automatic": {
+        "title": "Wybierz ładowarkę",
+        "description": "Wybierz ładowarkę Tuya, którą TuyaExtend ma przygotować dla Home Assistanta.",
+        "data": {
+          "source_device_id": "Wykryta ładowarka Tuya",
+          "name": "Nazwa wyświetlana"
+        }
+      },
+      "settings": {
+        "title": "Dokończ konfigurację",
+        "description": "Ustaw taryfę ładowania i zdecyduj, czy utworzyć gotowy panel AmperePoint na pasku bocznym.",
+        "data": {
+          "tariff_value": "Stawka energii",
+          "currency": "Waluta",
+          "complete_power_threshold_kw": "Próg wykrycia końca ładowania",
+          "complete_idle_minutes": "Minuty bezczynności do końca ładowania",
+          "create_dashboard": "Utwórz panel AmperePoint"
+        },
+        "data_description": {
+          "create_dashboard": "Tworzy osobny panel i nie zmienia żadnego z istniejących dashboardów."
+        }
+      },
+      "manual": {
         "title": "TuyaExtend AmperePoint",
-        "description": "Wybierz wykryta ladowarke AmperePoint. TuyaExtend automatycznie zmapuje obslugiwane datapointy Tuya i ukryje niedostepne sekcje w karcie dashboardu.",
+        "description": "Wybierz model ładowarki i przypisz dostępne encje źródłowe. Pola dla niedostępnych datapointów możesz pozostawić puste.",
         "data": {
           "source_device_id": "Wykryta ladowarka Tuya",
           "model": "Model AmperePoint",
@@ -25,6 +55,7 @@
           "currency": "Waluta",
           "complete_power_threshold_kw": "Prog wykrycia konca ladowania",
           "complete_idle_minutes": "Minuty bezczynnosci do konca ladowania",
+          "create_dashboard": "Utwórz panel AmperePoint",
           "source_voltage_l1": "Encja napiecia L1",
           "source_voltage_l2": "Encja napiecia L2",
           "source_voltage_l3": "Encja napiecia L3",
@@ -73,6 +104,7 @@
           "currency": "Waluta",
           "complete_power_threshold_kw": "Prog wykrycia konca ladowania",
           "complete_idle_minutes": "Minuty bezczynnosci do konca ladowania",
+          "create_dashboard": "Utwórz panel AmperePoint",
           "source_voltage_l1": "Encja napiecia L1",
           "source_voltage_l2": "Encja napiecia L2",
           "source_voltage_l3": "Encja napiecia L3",
