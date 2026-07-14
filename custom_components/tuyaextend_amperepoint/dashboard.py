@@ -77,6 +77,7 @@ def _dashboard_config(entry: ConfigEntry, entities: dict[str, str]) -> dict[str,
                 "title": entry.title,
                 "path": "charger",
                 "icon": "mdi:ev-station",
+                "panel": True,
                 "cards": [
                     {
                         "type": "custom:amperepoint-q22-card",
@@ -91,7 +92,7 @@ def _dashboard_config(entry: ConfigEntry, entities: dict[str, str]) -> dict[str,
 async def _async_merge_card_entities(
     storage: LovelaceStorage, entities: dict[str, str]
 ) -> None:
-    """Add newly available generated entities without replacing user choices."""
+    """Migrate generated views and add entities without replacing user choices."""
     try:
         config = await storage.async_load(False)
     except ConfigNotFound:
@@ -99,9 +100,15 @@ async def _async_merge_card_entities(
 
     changed = False
     for view in config.get("views", []):
-        for card in view.get("cards", []):
-            if card.get("type") != "custom:amperepoint-q22-card":
-                continue
+        cards = view.get("cards", [])
+        amperepoint_cards = [
+            card for card in cards if card.get("type") == "custom:amperepoint-q22-card"
+        ]
+        if len(cards) == 1 and amperepoint_cards and view.get("panel") is not True:
+            view["panel"] = True
+            changed = True
+
+        for card in amperepoint_cards:
             card_entities = card.setdefault("entities", {})
             for key, entity_id in entities.items():
                 if key not in card_entities:
