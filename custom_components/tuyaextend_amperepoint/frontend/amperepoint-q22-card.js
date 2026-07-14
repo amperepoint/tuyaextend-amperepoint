@@ -11,6 +11,9 @@ const AP_Q22_I18N = {
     current: "Current",
     currentLimit: "Current limit",
     chargingMode: "Charging mode",
+    modeChargeNow: "Charge now",
+    modeChargeEnergy: "Charge to energy target",
+    modeChargeSchedule: "Scheduled charging",
     daily: "Today",
     dataNote: "Control changes are sent through Home Assistant to the charger. Session energy is calculated from the total energy delta.",
     deviceState: "Device state",
@@ -42,6 +45,9 @@ const AP_Q22_I18N = {
     status: "Status",
     stop: "Stop",
     targetEnergy: "Target energy",
+    scheduleTime: "Scheduled start time",
+    scheduleTitle: "Charger schedule",
+    scheduleFallback: "This charger reports a device-specific raw schedule. Configure it in Tuya Smart or Smart Life until its format is recognized.",
     temperature: "Temperature",
     voltage: "Voltage",
   },
@@ -57,6 +63,9 @@ const AP_Q22_I18N = {
     current: "Prąd",
     currentLimit: "Limit prądu",
     chargingMode: "Tryb ładowania",
+    modeChargeNow: "Ładuj teraz",
+    modeChargeEnergy: "Do zadanej energii",
+    modeChargeSchedule: "Według harmonogramu",
     daily: "Dzisiaj",
     dataNote: "Zmiany sterowania są wysyłane przez HA do ładowarki. Energia sesji jest liczona z delty licznika całkowitego.",
     deviceState: "Stan urządzenia",
@@ -88,6 +97,9 @@ const AP_Q22_I18N = {
     status: "Status",
     stop: "Stop",
     targetEnergy: "Energia docelowa",
+    scheduleTime: "Godzina rozpoczęcia",
+    scheduleTitle: "Harmonogram ładowarki",
+    scheduleFallback: "Ta ładowarka raportuje harmonogram w nierozpoznanym formacie. Ustaw go w Tuya Smart lub Smart Life.",
     temperature: "Temperatura",
     voltage: "Napięcie",
   },
@@ -364,6 +376,7 @@ class AmperePointQ22Card extends HTMLElement {
       currentLimit: { domains: ["number", "input_number"], any: ["current limit", "current_limit", "charging current", "charging_current", "charge cur set", "charge_cur_set", "limit pradu"], not: ["current_l1", "current_l2", "current_l3"] },
       targetEnergy: { domains: ["number", "input_number"], any: ["target energy", "target_energy", "energy charge", "energy_charge", "energia docelowa"], not: [] },
       chargingMode: { domains: ["select"], any: ["charging mode", "charging_mode", "work mode", "work_mode", "tryb ladowania"], not: [] },
+      scheduleTime: { domains: ["time"], any: ["scheduled start time", "schedule_time", "zaplanowana godzina startu", "harmonogram"], not: [] },
       status: { domains: ["sensor"], any: [" status", "_status", "work state", "work_state", "status czytelny"], not: ["connection", "cp"] },
       cp: { domains: ["binary_sensor", "sensor"], any: ["vehicle connected", "vehicle_connected", "connection state", "connection_state", "controlpi", "control pilot", " cp", "_cp"], not: [] },
       faults: { domains: ["sensor", "binary_sensor"], any: [" error", "_error", " fault", "_fault", " bled", "_bled"], not: [] },
@@ -594,6 +607,26 @@ class AmperePointQ22Card extends HTMLElement {
     await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
   }
 
+  async setScheduleTime(value) {
+    const entityId = this.config.entities.scheduleTime;
+    if (!this.hasEntity(entityId) || !value) return;
+    await this._hass.callService("time", "set_value", { entity_id: entityId, time: `${value}:00` });
+  }
+
+  chargingModeKind(value) {
+    const normalized = this.normalize(value);
+    if (["charge energy", "fixed charge", "fixed_charge"].includes(normalized)) return "energy";
+    if (["charge schedule", "scheduled charge", "scheduled_charge"].includes(normalized)) return "schedule";
+    return "now";
+  }
+
+  chargingModeLabel(value) {
+    const kind = this.chargingModeKind(value);
+    if (kind === "energy") return this.t("modeChargeEnergy");
+    if (kind === "schedule") return this.t("modeChargeSchedule");
+    return this.t("modeChargeNow");
+  }
+
   icon(name) {
     return `<ha-icon icon="${name}"></ha-icon>`;
   }
@@ -780,8 +813,14 @@ class AmperePointQ22Card extends HTMLElement {
     const chargingModeEntity = this.stateObj(e.chargingMode);
     const hasChargingMode = this.hasEntity(e.chargingMode);
     const chargingModes = chargingModeEntity?.attributes?.options || [];
+    const chargingMode = this.state(e.chargingMode, "charge_now");
+    const chargingModeKind = this.chargingModeKind(chargingMode);
     const targetEnergyEntity = this.stateObj(e.targetEnergy);
     const hasTargetEnergy = this.hasEntity(e.targetEnergy);
+    const showTargetEnergy = hasTargetEnergy && chargingModeKind === "energy";
+    const hasScheduleTime = this.hasEntity(e.scheduleTime);
+    const showSchedule = hasChargingMode && chargingModeKind === "schedule";
+    const scheduleTime = hasScheduleTime ? String(this.state(e.scheduleTime)).slice(0, 5) : "";
     const current = this.num(e.currentLimit, 6);
     const minCurrent = Number(currentEntity?.attributes?.min ?? 6);
     const maxCurrent = Number(currentEntity?.attributes?.max ?? 32);
@@ -816,7 +855,7 @@ class AmperePointQ22Card extends HTMLElement {
       : "";
 
     const controlCard =
-      hasSwitch || hasCurrentLimit || hasChargingMode || hasTargetEnergy
+      hasSwitch || hasCurrentLimit || hasChargingMode || showTargetEnergy || showSchedule
         ? `
         <div class="control-card">
           <div class="card-title">
@@ -845,22 +884,37 @@ class AmperePointQ22Card extends HTMLElement {
               `
               : ""
           }
-          <div class="control-fields">
+          <div class="control-fields ${showTargetEnergy ? "" : "single"}">
             ${
               hasChargingMode
                 ? `<label><span>${this.t("chargingMode")}</span><select class="charging-mode">${chargingModes
-                    .map((option) => `<option value="${this.escape(option)}" ${option === this.state(e.chargingMode) ? "selected" : ""}>${this.escape(option)}</option>`)
+                    .map((option) => `<option value="${this.escape(option)}" ${option === chargingMode ? "selected" : ""}>${this.escape(this.chargingModeLabel(option))}</option>`)
                     .join("")}</select></label>`
                 : ""
             }
             ${
-              hasTargetEnergy
+              showTargetEnergy
                 ? `<label><span>${this.t("targetEnergy")}</span><div class="number-field"><input class="target-energy" type="number" min="${targetEnergyEntity?.attributes?.min ?? 0}" max="${targetEnergyEntity?.attributes?.max ?? 200}" step="${targetEnergyEntity?.attributes?.step ?? 1}" value="${this.escape(this.state(e.targetEnergy))}" /><b>kWh</b></div></label>`
                 : ""
             }
           </div>
           ${
-            hasCurrentLimit || hasChargingMode || hasTargetEnergy
+            showSchedule
+              ? `<div class="schedule-card">
+                  ${this.icon("mdi:calendar-clock")}
+                  <div>
+                    <strong>${this.t("scheduleTitle")}</strong>
+                    ${
+                      hasScheduleTime
+                        ? `<label><span>${this.t("scheduleTime")}</span><input class="schedule-time" type="time" value="${this.escape(scheduleTime)}" /></label>`
+                        : `<span>${this.t("scheduleFallback")}</span>`
+                    }
+                  </div>
+                </div>`
+              : ""
+          }
+          ${
+            hasCurrentLimit || hasChargingMode || showTargetEnergy || showSchedule
               ? `<div class="control-note">
                   ${this.icon("mdi:shield-check")}
                   <span>${this.t("dataNote")}</span>
@@ -985,6 +1039,9 @@ class AmperePointQ22Card extends HTMLElement {
     });
     this.querySelector(".target-energy")?.addEventListener("change", (event) => {
       this.setTargetEnergy(event.target.value);
+    });
+    this.querySelector(".schedule-time")?.addEventListener("change", (event) => {
+      this.setScheduleTime(event.target.value);
     });
   }
 
@@ -1264,6 +1321,47 @@ class AmperePointQ22Card extends HTMLElement {
           display: flex;
           align-items: center;
           gap: 7px;
+        }
+        .control-fields.single {
+          grid-template-columns: 1fr;
+        }
+        .schedule-card {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+          align-items: start;
+          gap: 12px;
+          padding: 14px;
+          border: 1px solid rgba(56,163,255,.2);
+          border-radius: 14px;
+          background: rgba(56,163,255,.09);
+        }
+        .schedule-card > ha-icon {
+          color: var(--ap-blue);
+        }
+        .schedule-card strong, .schedule-card span {
+          display: block;
+        }
+        .schedule-card span {
+          margin-top: 5px;
+          color: var(--ap-muted);
+          font-size: 12px;
+          line-height: 1.45;
+        }
+        .schedule-card label {
+          display: grid;
+          gap: 7px;
+          margin-top: 10px;
+        }
+        .schedule-card input {
+          box-sizing: border-box;
+          width: min(220px, 100%);
+          min-height: 42px;
+          padding: 9px 11px;
+          color: var(--ap-text);
+          color-scheme: dark;
+          background: rgba(255,255,255,.06);
+          border: 1px solid var(--ap-border);
+          border-radius: 10px;
         }
         .metrics-grid {
           grid-column: 1 / -1;

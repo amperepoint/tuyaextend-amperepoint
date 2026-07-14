@@ -25,6 +25,23 @@ Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 
 Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](INSTALL.pl.md).
 
+## Dashboard previews
+
+The values below are simulated, but the images are rendered from the bundled
+Home Assistant card itself.
+
+### Charge now
+
+![AmperePoint dashboard in charge-now mode](amperepoint/screenshots/amperepoint-charge-now.png)
+
+### Charge to an energy target
+
+![AmperePoint dashboard in target-energy mode](amperepoint/screenshots/amperepoint-charge-energy.png)
+
+### Scheduled charging
+
+![AmperePoint dashboard in schedule mode](amperepoint/screenshots/amperepoint-charge-schedule.png)
+
 This repository contains:
 
 - the HACS integration in [`custom_components/tuyaextend_amperepoint`](custom_components/tuyaextend_amperepoint),
