@@ -46,3 +46,18 @@ a restart, interrupted commands are reconciled with current reported values and
 the desired plan is evaluated again. The planner is disabled with no windows on
 first installation, so installing or upgrading alone cannot start a charger.
 
+## Dashboard state model
+
+The card intentionally separates three concepts:
+
+- **Actual HA state** is the last state confirmed by the planner sensor.
+- **Draft state** is the enabled switch and intervals currently being edited;
+  it takes effect only after saving.
+- **Manual override** is shown as a separate active control source with its own
+  target, end time or delivered-energy progress.
+
+Unsaved changes expose Save and Discard actions. Invalid intervals are explained
+inline and cannot be saved. On narrow cards the weekly editor is collapsed by
+default, keeping actual state, the next effective action and manual controls
+visible first.
+

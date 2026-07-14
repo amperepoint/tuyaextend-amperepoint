@@ -63,7 +63,7 @@
           callService: async () => {},
         };
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        const details = card.querySelector("details");
+        const details = card.querySelector(".diagnostics");
         if (details) details.open = false;
         await new Promise((resolve) => setTimeout(resolve, 250));
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));

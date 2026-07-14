@@ -149,7 +149,13 @@ function buildStates(scenario) {
     [entities.lastSessionDp25]: state("16.84", { unit_of_measurement: "kWh" }),
     [entities.temperature]: state(scenario.temperature, { unit_of_measurement: "°C" }),
     [entities.rawDp]: state("17", { raw_dp: rawDp, dp_metadata: dpMetadata }),
-    [entities.planner]: state(scenario.power === "0.00" ? "waiting" : "scheduled_charging", {
+    [entities.planner]: state(
+      scenario.mode === "charge_now"
+        ? "override_charging"
+        : scenario.mode === "charge_energy"
+          ? "override_charging"
+          : "waiting",
+      {
       config_entry_id: "demo-entry",
       enabled: true,
       windows: [
@@ -176,15 +182,38 @@ function buildStates(scenario) {
         at: scenario.power === "0.00" ? "2026-07-15T22:15:00+02:00" : "2026-07-15T06:45:00+02:00",
         window_id: "weekday-night",
       },
-      override: null,
-      command_status: "confirmed",
-      pending: null,
+      override:
+        scenario.mode === "charge_now"
+          ? {
+              mode: "charge",
+              until: "2026-07-14T23:15:00+02:00",
+              duration_minutes: 30,
+              current_a: 16,
+            }
+          : scenario.mode === "charge_energy"
+            ? {
+                mode: "energy",
+                target_kwh: 10,
+                delivered_kwh: 3.42,
+                current_a: 16,
+              }
+            : null,
+      command_status: scenario.mode === "charge_schedule" ? "pending" : "confirmed",
+      pending:
+        scenario.mode === "charge_schedule"
+          ? {
+              action: "set_current",
+              expected: { current_limit_a: 12 },
+              requested_at: "2026-07-14T21:42:00+02:00",
+            }
+          : null,
       last_confirmation: {
         action: "set_current",
         confirmed_at: "2026-07-14T21:42:00+02:00",
       },
       retry_after: null,
-    }),
+      }
+    ),
     [entities.phaseCount]: state("3"),
     [entities.l1Voltage]: state("230", { unit_of_measurement: "V" }),
     [entities.l2Voltage]: state("229", { unit_of_measurement: "V" }),
@@ -297,6 +326,43 @@ try {
       clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: 1 },
     });
     await writeFile(path.join(outputDir, scenario.file), screenshot.data, "base64");
+  }
+
+  const auditPayload = JSON.stringify({ entities, states: buildStates(scenarios[0]) });
+  await cdp("Runtime.evaluate", {
+    expression: `window.renderAmperepointPreview(${auditPayload})`,
+    awaitPromise: true,
+  });
+  const uiAudit = await cdp("Runtime.evaluate", {
+    expression: `(() => {
+      const card = document.querySelector("amperepoint-q22-card");
+      const initialActual = card.querySelector(".planner-state")?.textContent.trim();
+      card.querySelector(".planner-enabled")?.click();
+      const result = {
+        actualStateStayedVisible: card.querySelector(".planner-state")?.textContent.trim() === initialActual,
+        draftChanged: card.querySelector(".switch-copy strong")?.textContent.includes("wyłączony"),
+        dirtyFeedbackVisible: Boolean(card.querySelector(".planner-savebar.dirty")),
+        saveEnabled: card.querySelector(".planner-save")?.disabled === false,
+        selectedDayIsPressed: card.querySelector(".day-chip.selected")?.getAttribute("aria-pressed") === "true",
+        activeOverrideIsPressed: card.querySelector("[data-planner-override].active")?.getAttribute("aria-pressed") === "true",
+      };
+      card.querySelector(".planner-discard")?.click();
+      result.discardRestoredDraft = card.querySelector(".planner-enabled")?.checked === true;
+      for (let index = 0; index < 7; index += 1) {
+        const selected = card.querySelector('.planner-window[data-window="0"] .day-chip.selected');
+        if (!selected) break;
+        selected.click();
+      }
+      result.invalidDaysExplained = Boolean(card.querySelector('.planner-window[data-window="0"] .planner-row-error'));
+      result.invalidDraftCannotSave = card.querySelector(".planner-save")?.disabled === true;
+      card.querySelector(".planner-discard")?.click();
+      return result;
+    })()`,
+    returnByValue: true,
+  });
+  const failedAudit = Object.entries(uiAudit.result.value).filter(([, passed]) => !passed);
+  if (failedAudit.length) {
+    throw new Error(`Planner UI audit failed: ${failedAudit.map(([name]) => name).join(", ")}`);
   }
 
   await cdp("Emulation.setDeviceMetricsOverride", {

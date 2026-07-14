@@ -77,6 +77,38 @@ const AP_Q22_I18N = {
     plannerEnergyPlaceholder: "kWh",
     plannerDirty: "Unsaved changes",
     plannerSaved: "Plan saved",
+    plannerActual: "Actual HA state",
+    plannerDraftOn: "Planner will be enabled",
+    plannerDraftOff: "Planner will be disabled",
+    plannerChangeAfterSave: "This change takes effect after saving.",
+    plannerDiscard: "Discard changes",
+    plannerEdit: "Edit weekly plan",
+    plannerWeeklyActive: "Weekly plan is active",
+    plannerControlSource: "Control source",
+    plannerOverrideActive: "Manual override is active",
+    plannerOverrideChargeUntil: "Charging manually until",
+    plannerOverrideEnergy: "Adding {target} kWh",
+    plannerOverridePauseUntil: "Paused until",
+    plannerOverridePauseIndefinite: "Paused until manually resumed",
+    plannerDelivered: "Delivered {value} kWh",
+    plannerEffectiveNext: "Effective next action",
+    plannerWeeklyNext: "Next weekly-plan action",
+    plannerResumePlan: "Resume weekly plan",
+    plannerStopEnergy: "Stop after delivering {value} kWh",
+    plannerCommandSetMode: "Set charge-now mode",
+    plannerCommandSetCurrent: "Set current limit",
+    plannerCommandStart: "Start charging",
+    plannerCommandStop: "Stop charging",
+    plannerCommandTime: "at {time}",
+    plannerNoWindowsError: "An enabled planner needs at least one interval.",
+    plannerNoDaysError: "Select at least one weekday.",
+    plannerSameTimeError: "Start and end time must be different.",
+    plannerCurrentError: "Current must be between {min} and {max} A.",
+    plannerSaveFailed: "The plan could not be saved: {error}",
+    plannerOverrideFailed: "The manual action failed: {error}",
+    plannerDeleted: "Interval removed from the draft.",
+    plannerUndo: "Undo",
+    plannerSaving: "Saving…",
     plannerIdle: "ready",
     plannerPending: "awaiting confirmation",
     plannerConfirmed: "confirmed",
@@ -175,6 +207,38 @@ const AP_Q22_I18N = {
     plannerEnergyPlaceholder: "kWh",
     plannerDirty: "Niezapisane zmiany",
     plannerSaved: "Plan zapisany",
+    plannerActual: "Rzeczywisty stan HA",
+    plannerDraftOn: "Planer będzie włączony",
+    plannerDraftOff: "Planer będzie wyłączony",
+    plannerChangeAfterSave: "Zmiana zacznie działać po zapisaniu.",
+    plannerDiscard: "Odrzuć zmiany",
+    plannerEdit: "Edytuj plan tygodniowy",
+    plannerWeeklyActive: "Aktywny jest plan tygodniowy",
+    plannerControlSource: "Źródło sterowania",
+    plannerOverrideActive: "Aktywne sterowanie ręczne",
+    plannerOverrideChargeUntil: "Ładowanie ręczne do",
+    plannerOverrideEnergy: "Doładowanie {target} kWh",
+    plannerOverridePauseUntil: "Wstrzymanie do",
+    plannerOverridePauseIndefinite: "Wstrzymane do ręcznego wznowienia",
+    plannerDelivered: "Dostarczono {value} kWh",
+    plannerEffectiveNext: "Najbliższa obowiązująca akcja",
+    plannerWeeklyNext: "Następna akcja planu tygodniowego",
+    plannerResumePlan: "Wznów plan tygodniowy",
+    plannerStopEnergy: "Zatrzymaj po dostarczeniu {value} kWh",
+    plannerCommandSetMode: "Ustaw tryb Ładuj teraz",
+    plannerCommandSetCurrent: "Ustaw limit prądu",
+    plannerCommandStart: "Rozpocznij ładowanie",
+    plannerCommandStop: "Zatrzymaj ładowanie",
+    plannerCommandTime: "o {time}",
+    plannerNoWindowsError: "Włączony planer wymaga co najmniej jednego przedziału.",
+    plannerNoDaysError: "Wybierz co najmniej jeden dzień tygodnia.",
+    plannerSameTimeError: "Godzina początku i końca musi być różna.",
+    plannerCurrentError: "Prąd musi mieścić się w zakresie {min}–{max} A.",
+    plannerSaveFailed: "Nie udało się zapisać planu: {error}",
+    plannerOverrideFailed: "Nie udało się wykonać akcji ręcznej: {error}",
+    plannerDeleted: "Przedział usunięto ze szkicu.",
+    plannerUndo: "Cofnij",
+    plannerSaving: "Zapisywanie…",
     plannerIdle: "gotowe",
     plannerPending: "oczekuje na potwierdzenie",
     plannerConfirmed: "potwierdzona",
@@ -585,6 +649,13 @@ class AmperePointQ22Card extends HTMLElement {
     return AP_Q22_I18N[language]?.[key] || AP_Q22_I18N.en[key] || key;
   }
 
+  tt(key, values = {}) {
+    return Object.entries(values).reduce(
+      (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+      this.t(key)
+    );
+  }
+
   locale() {
     return AP_Q22_LOCALES[this.lang()] || AP_Q22_LOCALES.en;
   }
@@ -748,6 +819,9 @@ class AmperePointQ22Card extends HTMLElement {
       enabled: Boolean(attributes.enabled),
       windows: JSON.parse(JSON.stringify(attributes.windows || [])),
     };
+    this._plannerValidation = null;
+    this._plannerError = null;
+    this._plannerUndo = null;
   }
 
   plannerEntryId() {
@@ -757,24 +831,110 @@ class AmperePointQ22Card extends HTMLElement {
   async savePlanner() {
     const configEntryId = this.plannerEntryId();
     if (!configEntryId || !this._plannerDraft) return;
-    await this._hass.callService("tuyaextend_amperepoint", "set_planner", {
-      config_entry_id: configEntryId,
-      enabled: Boolean(this._plannerDraft.enabled),
-      windows: this._plannerDraft.windows,
-    });
-    this._plannerDirty = false;
-    this._plannerSaved = true;
+    const { min, max } = this.plannerCurrentBounds();
+    this._plannerValidation = this.validatePlannerDraft(this._plannerDraft, min, max);
+    if (this._plannerValidation.hasErrors) {
+      this.render();
+      return;
+    }
+    this._plannerSaving = true;
+    this._plannerError = null;
     this.render();
+    try {
+      await this._hass.callService("tuyaextend_amperepoint", "set_planner", {
+        config_entry_id: configEntryId,
+        enabled: Boolean(this._plannerDraft.enabled),
+        windows: this._plannerDraft.windows,
+      });
+      this._plannerDirty = false;
+      this._plannerSaved = true;
+      this._plannerUndo = null;
+    } catch (error) {
+      this._plannerError = this.tt("plannerSaveFailed", { error: error?.message || error });
+    } finally {
+      this._plannerSaving = false;
+      this.render();
+    }
   }
 
   async setPlannerOverride(mode, values = {}) {
     const configEntryId = this.plannerEntryId();
     if (!configEntryId) return;
-    await this._hass.callService("tuyaextend_amperepoint", "set_planner_override", {
-      config_entry_id: configEntryId,
-      mode,
-      ...values,
+    this._plannerActionPending = mode;
+    this._plannerError = null;
+    this.render();
+    try {
+      await this._hass.callService("tuyaextend_amperepoint", "set_planner_override", {
+        config_entry_id: configEntryId,
+        mode,
+        ...values,
+      });
+    } catch (error) {
+      this._plannerError = this.tt("plannerOverrideFailed", { error: error?.message || error });
+    } finally {
+      this._plannerActionPending = null;
+      this.render();
+    }
+  }
+
+  plannerCurrentBounds() {
+    const entity = this.stateObj(this.config.entities.currentLimit);
+    return {
+      min: Number(entity?.attributes?.min ?? 6),
+      max: Number(entity?.attributes?.max ?? 32),
+    };
+  }
+
+  validatePlannerDraft(draft, minCurrent, maxCurrent) {
+    const rowErrors = {};
+    const globalErrors = [];
+    if (draft.enabled && !draft.windows.length) {
+      globalErrors.push(this.t("plannerNoWindowsError"));
+    }
+    draft.windows.forEach((window, index) => {
+      const errors = [];
+      if (!window.days?.length) errors.push(this.t("plannerNoDaysError"));
+      if (!window.start || !window.end || window.start === window.end) {
+        errors.push(this.t("plannerSameTimeError"));
+      }
+      const current = Number(window.current_a);
+      if (!Number.isFinite(current) || current < minCurrent || current > maxCurrent) {
+        errors.push(this.tt("plannerCurrentError", { min: minCurrent, max: maxCurrent }));
+      }
+      if (errors.length) rowErrors[index] = errors;
     });
+    return {
+      globalErrors,
+      rowErrors,
+      hasErrors: globalErrors.length > 0 || Object.keys(rowErrors).length > 0,
+    };
+  }
+
+  markPlannerDirty() {
+    const { min, max } = this.plannerCurrentBounds();
+    this._plannerDirty = true;
+    this._plannerSaved = false;
+    this._plannerError = null;
+    this._plannerValidation = this.validatePlannerDraft(this._plannerDraft, min, max);
+  }
+
+  discardPlannerChanges() {
+    this._plannerDirty = false;
+    this._plannerSaved = false;
+    this._plannerSource = null;
+    this._plannerUndo = null;
+    this._plannerValidation = null;
+    this._plannerError = null;
+    this.syncPlannerDraft(this.stateObj(this.config.entities.planner)?.attributes || {});
+    this.render();
+  }
+
+  undoPlannerRemove() {
+    if (!this._plannerUndo || !this._plannerDraft) return;
+    this._plannerDraft.windows.splice(this._plannerUndo.index, 0, this._plannerUndo.window);
+    this._plannerUndo = null;
+    this.markPlannerDirty();
+    this.render();
   }
 
   addPlannerWindow() {
@@ -787,8 +947,8 @@ class AmperePointQ22Card extends HTMLElement {
       current_a: 16,
       priority: 0,
     });
-    this._plannerDirty = true;
-    this._plannerSaved = false;
+    this.markPlannerDirty();
+    this._plannerEditorOpen = true;
     this.render();
   }
 
@@ -817,6 +977,29 @@ class AmperePointQ22Card extends HTMLElement {
     );
   }
 
+  plannerCommandAction(action) {
+    return this.t(
+      {
+        set_mode: "plannerCommandSetMode",
+        set_current: "plannerCommandSetCurrent",
+        start: "plannerCommandStart",
+        stop: "plannerCommandStop",
+      }[action] || "plannerCommand"
+    );
+  }
+
+  plannerCommandDetail(attributes) {
+    const pending = attributes.pending;
+    const last = attributes.last_confirmation;
+    const command = pending || last;
+    if (!command?.action) return "";
+    const timestamp = pending?.requested_at || last?.confirmed_at || last?.failed_at;
+    const time = timestamp
+      ? new Date(timestamp).toLocaleTimeString(this.locale(), { hour: "2-digit", minute: "2-digit" })
+      : null;
+    return `${this.plannerCommandAction(command.action)}${time ? ` · ${this.tt("plannerCommandTime", { time })}` : ""}`;
+  }
+
   formatPlannerDate(value) {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return this.escape(value || "-");
@@ -827,33 +1010,90 @@ class AmperePointQ22Card extends HTMLElement {
     });
   }
 
+  plannerEffectiveNext(attributes) {
+    const override = attributes.override;
+    if (override?.mode === "charge") {
+      return {
+        label: this.t("plannerEffectiveNext"),
+        text: `${this.t("plannerStopAction")} · ${this.formatPlannerDate(override.until)}`,
+      };
+    }
+    if (override?.mode === "energy") {
+      return {
+        label: this.t("plannerEffectiveNext"),
+        text: this.tt("plannerStopEnergy", { value: override.target_kwh }),
+      };
+    }
+    if (override?.mode === "pause") {
+      return {
+        label: this.t("plannerEffectiveNext"),
+        text: override.until
+          ? `${this.t("plannerResumePlan")} · ${this.formatPlannerDate(override.until)}`
+          : this.t("plannerOverridePauseIndefinite"),
+      };
+    }
+    const next = attributes.next_action;
+    return {
+      label: this.t("plannerWeeklyNext"),
+      text: next
+        ? `${this.t(next.action === "start" ? "plannerStartAction" : "plannerStopAction")} · ${this.formatPlannerDate(next.at)}`
+        : this.t("plannerNoNext"),
+    };
+  }
+
+  plannerOverrideBanner(override) {
+    if (!override) {
+      return `<div class="override-banner weekly">${this.icon("mdi:calendar-check")}<div><small>${this.t("plannerControlSource")}</small><strong>${this.t("plannerWeeklyActive")}</strong></div></div>`;
+    }
+    let title = this.t("plannerOverrideActive");
+    let detail = "";
+    if (override.mode === "charge") {
+      title = Number(override.duration_minutes) === 30 ? this.t("plannerCharge30") : this.t("plannerCharge60");
+      detail = `${this.t("plannerOverrideChargeUntil")} ${this.formatPlannerDate(override.until)}`;
+    } else if (override.mode === "energy") {
+      title = this.tt("plannerOverrideEnergy", { target: override.target_kwh });
+      detail = this.tt("plannerDelivered", { value: Number(override.delivered_kwh || 0).toFixed(2) });
+    } else if (override.mode === "pause") {
+      detail = override.until
+        ? `${this.t("plannerOverridePauseUntil")} ${this.formatPlannerDate(override.until)}`
+        : this.t("plannerOverridePauseIndefinite");
+    }
+    return `<div class="override-banner active">${this.icon("mdi:gesture-tap-button")}<div><small>${this.t("plannerControlSource")}</small><strong>${title}</strong>${detail ? `<span>${detail}</span>` : ""}</div></div>`;
+  }
+
   renderPlannerCard(attributes, minCurrent, maxCurrent) {
     this.syncPlannerDraft(attributes);
     const draft = this._plannerDraft || { enabled: false, windows: [] };
     const dayKeys = ["dayMon", "dayTue", "dayWed", "dayThu", "dayFri", "daySat", "daySun"];
-    const next = attributes.next_action;
-    const nextText = next
-      ? `${this.t(next.action === "start" ? "plannerStartAction" : "plannerStopAction")} · ${this.formatPlannerDate(next.at)}`
-      : this.t("plannerNoNext");
     const state = this.state(this.config.entities.planner, "disabled");
+    const actualEnabled = Boolean(attributes.enabled);
+    const validation = this._plannerValidation || this.validatePlannerDraft(draft, minCurrent, maxCurrent);
+    const effectiveNext = this.plannerEffectiveNext(attributes);
+    const override = attributes.override;
+    const overrideMode = override?.mode || null;
+    const commandDetail = this.plannerCommandDetail(attributes);
+    if (this._plannerEditorOpen === undefined) {
+      const width = this.getBoundingClientRect().width;
+      this._plannerEditorOpen = !width || width > 680;
+    }
     const rows = draft.windows
       .map(
         (window, index) => `
-          <div class="planner-window" data-window="${index}">
+          <div class="planner-window ${validation.rowErrors[index] ? "invalid" : ""}" data-window="${index}">
             <div class="planner-days" aria-label="${this.t("plannerDays")}">
               ${dayKeys
                 .map(
-                  (key, day) => `<label class="day-chip ${window.days?.includes(day) ? "selected" : ""}">
-                    <input type="checkbox" data-planner-day="${day}" ${window.days?.includes(day) ? "checked" : ""} />
-                    <span>${this.t(key)}</span>
-                  </label>`
+                  (key, day) => `<button class="day-chip ${window.days?.includes(day) ? "selected" : ""}" type="button" data-planner-day="${day}" aria-pressed="${window.days?.includes(day) ? "true" : "false"}">
+                    <span class="day-check">${window.days?.includes(day) ? "✓" : ""}</span>${this.t(key)}
+                  </button>`
                 )
                 .join("")}
             </div>
             <label class="planner-field"><span>${this.t("plannerStart")}</span><input data-planner-field="start" type="time" step="60" value="${this.escape(window.start)}" /></label>
             <label class="planner-field"><span>${this.t("plannerEnd")}</span><input data-planner-field="end" type="time" step="60" value="${this.escape(window.end)}" /></label>
             <label class="planner-field"><span>${this.t("plannerCurrent")}</span><div class="planner-number"><input data-planner-field="current_a" type="number" min="${minCurrent}" max="${maxCurrent}" step="1" value="${this.escape(window.current_a)}" /><b>A</b></div></label>
-            <button class="planner-remove" type="button" title="${this.t("plannerRemove")}">${this.icon("mdi:trash-can-outline")}</button>
+            <button class="planner-remove" type="button" aria-label="${this.t("plannerRemove")}">${this.icon("mdi:trash-can-outline")}<span>${this.t("plannerRemove")}</span></button>
+            ${validation.rowErrors[index] ? `<div class="planner-row-error" role="alert">${validation.rowErrors[index].map((error) => `<span>${this.icon("mdi:alert-circle-outline")} ${this.escape(error)}</span>`).join("")}</div>` : ""}
           </div>`
       )
       .join("");
@@ -865,27 +1105,46 @@ class AmperePointQ22Card extends HTMLElement {
             <span>${this.t("plannerSubtitle")}</span>
             <strong>${this.t("plannerTitle")}</strong>
           </div>
-          <span class="planner-state ${this.escape(state)}">${this.plannerStateLabel(state)}</span>
+          <div class="planner-actual"><small>${this.t("plannerActual")}</small><span class="planner-state ${this.escape(state)}">${this.plannerStateLabel(state)}</span></div>
         </div>
         <div class="planner-summary">
-          <div>${this.icon("mdi:calendar-arrow-right")}<span><small>${this.t("plannerNext")}</small><b>${nextText}</b></span></div>
-          <div>${this.icon("mdi:cloud-check-outline")}<span><small>${this.t("plannerCommand")}</small><b>${this.plannerCommandLabel(attributes.command_status)}</b></span></div>
+          <div>${this.icon("mdi:calendar-arrow-right")}<span><small>${effectiveNext.label}</small><b>${effectiveNext.text}</b></span></div>
+          <div>${this.icon(attributes.command_status === "pending" ? "mdi:cloud-sync-outline" : "mdi:cloud-check-outline")}<span><small>${this.t("plannerCommand")}</small><b>${this.plannerCommandLabel(attributes.command_status)}</b>${commandDetail ? `<em>${commandDetail}</em>` : ""}</span></div>
         </div>
-        <label class="planner-toggle"><input class="planner-enabled" type="checkbox" ${draft.enabled ? "checked" : ""} /><span>${this.t("plannerEnabled")}</span></label>
-        <div class="planner-windows">${rows || `<div class="planner-empty">${this.t("plannerNoWindows")}</div>`}</div>
-        <div class="planner-actions">
-          <button class="planner-add" type="button">${this.icon("mdi:plus")} ${this.t("plannerAddWindow")}</button>
-          <span class="planner-save-state">${this._plannerDirty ? this.t("plannerDirty") : this._plannerSaved ? this.t("plannerSaved") : ""}</span>
-          <button class="planner-save" type="button">${this.icon("mdi:content-save-outline")} ${this.t("plannerSave")}</button>
-        </div>
+        <label class="planner-master">
+          <input class="planner-enabled" type="checkbox" role="switch" ${draft.enabled ? "checked" : ""} aria-label="${draft.enabled ? this.t("plannerDraftOn") : this.t("plannerDraftOff")}" />
+          <span class="switch-track"><span></span></span>
+          <span class="switch-copy"><strong>${draft.enabled ? this.t("plannerDraftOn") : this.t("plannerDraftOff")}</strong>${draft.enabled !== actualEnabled ? `<small>${this.t("plannerChangeAfterSave")}</small>` : ""}</span>
+        </label>
+        ${this._plannerError ? `<div class="planner-feedback error" role="alert">${this.icon("mdi:alert-circle-outline")}<span>${this.escape(this._plannerError)}</span></div>` : ""}
+        ${validation.globalErrors.map((error) => `<div class="planner-feedback error" role="alert">${this.icon("mdi:alert-circle-outline")}<span>${this.escape(error)}</span></div>`).join("")}
+        ${this._plannerUndo ? `<div class="planner-feedback undo" role="status"><span>${this.t("plannerDeleted")}</span><button class="planner-undo" type="button">${this.t("plannerUndo")}</button></div>` : ""}
+        ${
+          this._plannerDirty || this._plannerSaved || this._plannerSaving
+            ? `<div class="planner-savebar ${this._plannerDirty ? "dirty" : ""}">
+                <span>${this._plannerSaving ? this.t("plannerSaving") : this._plannerDirty ? this.t("plannerDirty") : this._plannerSaved ? this.t("plannerSaved") : ""}</span>
+                <button class="planner-discard" type="button" ${this._plannerDirty && !this._plannerSaving ? "" : "disabled"}>${this.t("plannerDiscard")}</button>
+                <button class="planner-save" type="button" ${this._plannerDirty && !validation.hasErrors && !this._plannerSaving ? "" : "disabled"}>${this.icon(this._plannerSaving ? "mdi:loading" : "mdi:content-save-outline")} ${this._plannerSaving ? this.t("plannerSaving") : this.t("plannerSave")}</button>
+              </div>`
+            : ""
+        }
         <div class="planner-override">
-          <div><span>${this.t("plannerManual")}</span></div>
-          <button type="button" data-planner-override="charge" data-duration="30">${this.t("plannerCharge30")}</button>
-          <button type="button" data-planner-override="charge" data-duration="60">${this.t("plannerCharge60")}</button>
-          <div class="planner-energy"><input class="planner-energy-value" type="number" min="0.1" max="200" step="0.1" value="10" aria-label="${this.t("plannerEnergyPlaceholder")}" /><b>kWh</b><button type="button" data-planner-override="energy">${this.t("plannerAddEnergy")}</button></div>
-          <button type="button" data-planner-override="pause">${this.t("plannerPause")}</button>
-          <button type="button" data-planner-override="clear">${this.t("plannerClear")}</button>
+          ${this.plannerOverrideBanner(override)}
+          <div class="override-actions">
+            <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 30 ? "active" : ""}" type="button" data-planner-override="charge" data-duration="30" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 30}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge30")}</button>
+            <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 60 ? "active" : ""}" type="button" data-planner-override="charge" data-duration="60" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 60}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge60")}</button>
+            <div class="planner-energy"><input class="planner-energy-value" type="number" min="0.1" max="200" step="0.1" value="${this.escape(this._plannerEnergyValue || override?.target_kwh || 10)}" aria-label="${this.t("plannerEnergyPlaceholder")}" /><b>kWh</b><button class="${overrideMode === "energy" ? "active" : ""}" type="button" data-planner-override="energy" aria-pressed="${overrideMode === "energy"}">${this._plannerActionPending === "energy" ? this.icon("mdi:loading") : ""}${this.t("plannerAddEnergy")}</button></div>
+            <button class="${overrideMode === "pause" ? "active" : ""}" type="button" data-planner-override="pause" aria-pressed="${overrideMode === "pause"}">${this._plannerActionPending === "pause" ? this.icon("mdi:loading") : ""}${this.t("plannerPause")}</button>
+            <button type="button" data-planner-override="clear" ${override ? "" : "disabled"}>${this._plannerActionPending === "clear" ? this.icon("mdi:loading") : ""}${this.t("plannerClear")}</button>
+          </div>
         </div>
+        <details class="planner-editor" ${this._plannerEditorOpen ? "open" : ""}>
+          <summary>${this.icon("mdi:calendar-edit")}<span><strong>${this.t("plannerEdit")}</strong><small>${draft.windows.length} · ${this.t("plannerAddWindow")}</small></span>${this.icon("mdi:chevron-down")}</summary>
+          <div class="planner-editor-body">
+            <div class="planner-windows">${rows || `<div class="planner-empty">${this.t("plannerNoWindows")}</div>`}</div>
+            <div class="planner-actions"><button class="planner-add" type="button">${this.icon("mdi:plus")} ${this.t("plannerAddWindow")}</button></div>
+          </div>
+        </details>
       </section>`;
   }
 
@@ -1342,28 +1601,31 @@ class AmperePointQ22Card extends HTMLElement {
     });
     this.querySelector(".planner-enabled")?.addEventListener("change", (event) => {
       this._plannerDraft.enabled = event.target.checked;
-      this._plannerDirty = true;
-      this._plannerSaved = false;
+      this.markPlannerDirty();
       this.render();
     });
     this.querySelector(".planner-add")?.addEventListener("click", () => this.addPlannerWindow());
     this.querySelector(".planner-save")?.addEventListener("click", () => this.savePlanner());
+    this.querySelector(".planner-discard")?.addEventListener("click", () => this.discardPlannerChanges());
+    this.querySelector(".planner-undo")?.addEventListener("click", () => this.undoPlannerRemove());
+    this.querySelector(".planner-editor")?.addEventListener("toggle", (event) => {
+      this._plannerEditorOpen = event.target.open;
+    });
     this.querySelectorAll(".planner-window").forEach((row) => {
       const index = Number(row.dataset.window);
       row.querySelector(".planner-remove")?.addEventListener("click", () => {
-        this._plannerDraft.windows.splice(index, 1);
-        this._plannerDirty = true;
-        this._plannerSaved = false;
+        const [window] = this._plannerDraft.windows.splice(index, 1);
+        this._plannerUndo = { window, index };
+        this.markPlannerDirty();
         this.render();
       });
-      row.querySelectorAll("[data-planner-day]").forEach((input) => {
-        input.addEventListener("change", () => {
-          const day = Number(input.dataset.plannerDay);
+      row.querySelectorAll("[data-planner-day]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const day = Number(button.dataset.plannerDay);
           const days = new Set(this._plannerDraft.windows[index].days || []);
-          input.checked ? days.add(day) : days.delete(day);
+          days.has(day) ? days.delete(day) : days.add(day);
           this._plannerDraft.windows[index].days = [...days].sort();
-          this._plannerDirty = true;
-          this._plannerSaved = false;
+          this.markPlannerDirty();
           this.render();
         });
       });
@@ -1371,11 +1633,13 @@ class AmperePointQ22Card extends HTMLElement {
         input.addEventListener("change", () => {
           const field = input.dataset.plannerField;
           this._plannerDraft.windows[index][field] = field === "current_a" ? Number(input.value) : input.value;
-          this._plannerDirty = true;
-          this._plannerSaved = false;
+          this.markPlannerDirty();
           this.render();
         });
       });
+    });
+    this.querySelector(".planner-energy-value")?.addEventListener("input", (event) => {
+      this._plannerEnergyValue = event.target.value;
     });
     this.querySelectorAll("[data-planner-override]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1753,14 +2017,14 @@ class AmperePointQ22Card extends HTMLElement {
           margin-top: 16px;
           padding: 20px;
         }
-        .planner-head, .planner-actions {
+        .planner-head, .planner-actions, .planner-savebar {
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 12px;
           flex-wrap: wrap;
         }
-        .planner-head > div > span, .planner-summary small, .planner-field > span, .planner-override > div:first-child span {
+        .planner-head > div > span, .planner-summary small, .planner-field > span, .planner-actual small, .override-banner small {
           display: block;
           color: var(--ap-muted);
           font-size: 12px;
@@ -1770,6 +2034,11 @@ class AmperePointQ22Card extends HTMLElement {
           display: block;
           margin-top: 4px;
           font-size: 22px;
+        }
+        .planner-actual {
+          display: grid;
+          justify-items: end;
+          gap: 5px;
         }
         .planner-state {
           padding: 7px 11px;
@@ -1811,17 +2080,104 @@ class AmperePointQ22Card extends HTMLElement {
           margin-top: 3px;
           overflow-wrap: anywhere;
         }
-        .planner-toggle {
-          display: inline-flex;
+        .planner-summary em {
+          display: block;
+          margin-top: 3px;
+          color: var(--ap-muted);
+          font-size: 11px;
+          font-style: normal;
+        }
+        .planner-master {
+          display: flex;
           align-items: center;
-          gap: 9px;
-          margin: 16px 0 12px;
+          gap: 12px;
+          margin-top: 14px;
+          padding: 13px 14px;
+          border: 1px solid var(--ap-border);
+          border-radius: 13px;
+          background: rgba(255,255,255,.025);
           color: var(--ap-text);
-          font-weight: 800;
           cursor: pointer;
         }
-        .planner-toggle input, .day-chip input {
-          accent-color: var(--ap-orange);
+        .planner-master input {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          opacity: 0;
+        }
+        .switch-track {
+          width: 48px;
+          height: 28px;
+          padding: 3px;
+          box-sizing: border-box;
+          flex: 0 0 auto;
+          border: 1px solid var(--ap-border);
+          border-radius: 999px;
+          background: #34383d;
+          transition: .18s ease;
+        }
+        .switch-track span {
+          display: block;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          background: #d7d9db;
+          transition: .18s ease;
+        }
+        .planner-master input:checked + .switch-track {
+          border-color: var(--ap-orange);
+          background: var(--ap-orange);
+        }
+        .planner-master input:checked + .switch-track span {
+          transform: translateX(20px);
+          background: #15100a;
+        }
+        .switch-copy {
+          display: grid;
+          gap: 3px;
+        }
+        .switch-copy small {
+          color: var(--ap-orange);
+        }
+        .planner-feedback {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          margin-top: 10px;
+          padding: 10px 12px;
+          border-radius: 11px;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .planner-feedback.error {
+          color: #ffd0d0;
+          border: 1px solid rgba(255,92,92,.25);
+          background: rgba(255,92,92,.09);
+        }
+        .planner-feedback.error ha-icon {
+          color: var(--ap-red);
+        }
+        .planner-feedback.undo {
+          justify-content: space-between;
+          color: #c7e7ff;
+          border: 1px solid rgba(56,163,255,.22);
+          background: rgba(56,163,255,.08);
+        }
+        .planner-savebar {
+          min-height: 46px;
+          margin-top: 10px;
+          padding: 8px 10px 8px 13px;
+          border: 1px solid transparent;
+          border-radius: 12px;
+          color: var(--ap-muted);
+          background: rgba(255,255,255,.02);
+          font-size: 12px;
+          font-weight: 800;
+        }
+        .planner-savebar.dirty {
+          color: #ffd08c;
+          border-color: rgba(255,151,15,.25);
+          background: var(--ap-orange-soft);
         }
         .planner-windows {
           display: grid;
@@ -1829,13 +2185,16 @@ class AmperePointQ22Card extends HTMLElement {
         }
         .planner-window {
           display: grid;
-          grid-template-columns: minmax(300px, 1fr) minmax(110px, .34fr) minmax(110px, .34fr) minmax(110px, .3fr) 42px;
+          grid-template-columns: minmax(300px, 1fr) minmax(110px, .34fr) minmax(110px, .34fr) minmax(110px, .3fr) minmax(96px, auto);
           align-items: end;
           gap: 10px;
           padding: 12px;
           border: 1px solid var(--ap-border);
           border-radius: 14px;
           background: rgba(0,0,0,.14);
+        }
+        .planner-window.invalid {
+          border-color: rgba(255,92,92,.32);
         }
         .planner-days {
           display: flex;
@@ -1845,9 +2204,10 @@ class AmperePointQ22Card extends HTMLElement {
           min-height: 42px;
         }
         .day-chip {
-          position: relative;
-          display: grid;
-          place-items: center;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 3px;
           min-width: 36px;
           height: 34px;
           padding: 0 5px;
@@ -1860,14 +2220,14 @@ class AmperePointQ22Card extends HTMLElement {
           cursor: pointer;
         }
         .day-chip.selected {
-          color: #15100a;
-          background: #ffb13b;
+          color: #ffd08c;
+          background: var(--ap-orange-soft);
           border-color: var(--ap-orange);
         }
-        .day-chip input {
-          position: absolute;
-          opacity: 0;
-          pointer-events: none;
+        .day-check {
+          width: 10px;
+          color: var(--ap-orange);
+          font-size: 10px;
         }
         .planner-field {
           display: grid;
@@ -1890,10 +2250,13 @@ class AmperePointQ22Card extends HTMLElement {
           gap: 7px;
         }
         .planner-remove {
-          width: 42px;
+          width: auto;
           height: 42px;
-          display: grid;
-          place-items: center;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 0 10px;
           border: 1px solid rgba(255,92,92,.24);
           border-radius: 10px;
           color: var(--ap-red);
@@ -1910,10 +2273,28 @@ class AmperePointQ22Card extends HTMLElement {
           color: var(--ap-muted);
           text-align: center;
         }
+        .planner-row-error {
+          grid-column: 1 / -1;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px 14px;
+          color: #ffbaba;
+          font-size: 11px;
+        }
+        .planner-row-error span {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+        }
+        .planner-row-error ha-icon {
+          width: 14px;
+          height: 14px;
+          color: var(--ap-red);
+        }
         .planner-actions {
           margin-top: 12px;
         }
-        .planner-actions button, .planner-override button {
+        .planner-actions button, .planner-savebar button, .override-actions button, .planner-undo {
           min-height: 40px;
           padding: 8px 13px;
           border: 1px solid var(--ap-border);
@@ -1923,39 +2304,116 @@ class AmperePointQ22Card extends HTMLElement {
           font-weight: 800;
           cursor: pointer;
         }
-        .planner-actions button {
+        .planner-actions button, .planner-savebar button, .override-actions button {
           display: inline-flex;
           align-items: center;
+          justify-content: center;
           gap: 7px;
         }
-        .planner-actions .planner-save {
-          margin-left: auto;
+        .planner-savebar > span {
+          margin-right: auto;
+        }
+        .planner-save {
           color: #15100a;
           background: var(--ap-orange);
           border-color: var(--ap-orange);
         }
-        .planner-actions .planner-save ha-icon {
+        .planner-save ha-icon {
           color: currentColor;
         }
-        .planner-save-state {
-          color: var(--ap-orange);
-          font-size: 12px;
-          font-weight: 800;
+        .planner-card button:disabled {
+          cursor: not-allowed;
+          opacity: .42;
         }
         .planner-override {
+          display: grid;
+          grid-template-columns: minmax(230px, .7fr) minmax(0, 1.3fr);
+          align-items: stretch;
+          gap: 10px;
+          margin-top: 14px;
+        }
+        .override-banner {
           display: flex;
           align-items: center;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 18px;
-          padding-top: 16px;
-          border-top: 1px solid var(--ap-border);
+          gap: 10px;
+          min-width: 0;
+          padding: 12px;
+          border: 1px solid rgba(56,163,255,.18);
+          border-radius: 12px;
+          background: rgba(56,163,255,.07);
         }
-        .planner-override > div:first-child {
-          margin-right: 4px;
+        .override-banner.active {
+          border-color: rgba(255,151,15,.3);
+          background: var(--ap-orange-soft);
+        }
+        .override-banner strong, .override-banner span {
+          display: block;
+          margin-top: 2px;
+          overflow-wrap: anywhere;
+        }
+        .override-banner span {
+          color: var(--ap-muted);
+          font-size: 11px;
+        }
+        .override-actions {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          flex-wrap: wrap;
+          gap: 7px;
+        }
+        .override-actions button.active {
+          color: #ffd08c;
+          border-color: var(--ap-orange);
+          background: var(--ap-orange-soft);
         }
         .planner-energy input {
           width: 76px;
+        }
+        .planner-editor {
+          margin-top: 14px;
+          border: 1px solid var(--ap-border);
+          border-radius: 13px;
+          background: rgba(0,0,0,.1);
+        }
+        .planner-editor summary {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 14px;
+          cursor: pointer;
+          list-style: none;
+        }
+        .planner-editor summary::-webkit-details-marker {
+          display: none;
+        }
+        .planner-editor summary span {
+          display: grid;
+          gap: 2px;
+        }
+        .planner-editor summary small {
+          color: var(--ap-muted);
+        }
+        .planner-editor summary > ha-icon:last-child {
+          color: var(--ap-muted);
+          transition: transform .18s ease;
+        }
+        .planner-editor[open] summary > ha-icon:last-child {
+          transform: rotate(180deg);
+        }
+        .planner-editor-body {
+          padding: 0 12px 12px;
+        }
+        .planner-card button:focus-visible, .planner-card input:focus-visible, .planner-editor summary:focus-visible, .planner-master:has(input:focus-visible) {
+          outline: 2px solid var(--ap-orange);
+          outline-offset: 2px;
+        }
+        ha-icon[icon="mdi:loading"] {
+          animation: planner-spin 1s linear infinite;
+        }
+        @keyframes planner-spin {
+          to { transform: rotate(360deg); }
         }
         .metric {
           padding: 16px;
@@ -2143,7 +2601,7 @@ class AmperePointQ22Card extends HTMLElement {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
           .planner-window {
-            grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(100px, .35fr)) 42px;
+            grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(100px, .35fr)) minmax(96px, auto);
           }
         }
         @media (max-width: 680px) {
@@ -2187,20 +2645,39 @@ class AmperePointQ22Card extends HTMLElement {
             grid-column: 2;
             text-align: left;
           }
-          .planner-summary, .planner-window {
+          .planner-summary, .planner-window, .planner-override {
             grid-template-columns: 1fr;
+          }
+          .planner-actual {
+            justify-items: start;
           }
           .planner-remove {
             width: 100%;
           }
-          .planner-actions .planner-save {
-            margin-left: 0;
-          }
           .planner-actions > * {
             flex: 1 1 100%;
           }
-          .planner-override > button, .planner-energy {
+          .planner-savebar.dirty {
+            position: sticky;
+            bottom: 8px;
+            z-index: 3;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background: #1b1d20;
+            box-shadow: 0 10px 24px rgba(0,0,0,.35);
+          }
+          .planner-savebar > span {
+            grid-column: 1 / -1;
+          }
+          .override-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .override-actions > button, .planner-energy {
             width: 100%;
+          }
+          .planner-energy {
+            grid-column: 1 / -1;
           }
           .planner-energy button {
             flex: 1;
@@ -2214,7 +2691,7 @@ class AmperePointQ22Card extends HTMLElement {
             grid-template-columns: repeat(2, minmax(0, 1fr));
           }
           .planner-window {
-            grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(100px, .35fr)) 42px;
+            grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(100px, .35fr)) minmax(96px, auto);
           }
         }
         @container amperepoint-card (max-width: 680px) {
@@ -2252,20 +2729,39 @@ class AmperePointQ22Card extends HTMLElement {
             grid-column: 2;
             text-align: left;
           }
-          .planner-summary, .planner-window {
+          .planner-summary, .planner-window, .planner-override {
             grid-template-columns: 1fr;
+          }
+          .planner-actual {
+            justify-items: start;
           }
           .planner-remove {
             width: 100%;
           }
-          .planner-actions .planner-save {
-            margin-left: 0;
-          }
           .planner-actions > * {
             flex: 1 1 100%;
           }
-          .planner-override > button, .planner-energy {
+          .planner-savebar.dirty {
+            position: sticky;
+            bottom: 8px;
+            z-index: 3;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background: #1b1d20;
+            box-shadow: 0 10px 24px rgba(0,0,0,.35);
+          }
+          .planner-savebar > span {
+            grid-column: 1 / -1;
+          }
+          .override-actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+          .override-actions > button, .planner-energy {
             width: 100%;
+          }
+          .planner-energy {
+            grid-column: 1 / -1;
           }
           .planner-energy button {
             flex: 1;

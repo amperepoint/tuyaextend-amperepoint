@@ -46,6 +46,7 @@ class AmperePointPlanner:
         self.command_status = "idle"
         self.last_confirmation: dict[str, Any] | None = None
         self.retry_after: datetime | None = None
+        self.managed_charging = False
         self._state = "disabled"
         self._listeners: set[Callable[[], None]] = set()
         self._unsub_minute: Callable[[], None] | None = None
@@ -74,6 +75,7 @@ class AmperePointPlanner:
             "windows": windows,
         }
         self.override = stored.get("override")
+        self.managed_charging = bool(stored.get("managed_charging", False))
         stored_pending = stored.get("pending")
         self.last_confirmation = stored.get("last_confirmation")
         if isinstance(stored_pending, dict) and matches_expected(
@@ -142,6 +144,9 @@ class AmperePointPlanner:
             max_current=self.coordinator.model_limits.max_current_a,
         )
         self.config = {"enabled": bool(enabled), "windows": normalized}
+        self.pending = None
+        if self.command_status == "pending":
+            self.command_status = "idle"
         self.retry_after = None
         await self._async_save()
         self._notify()
@@ -163,6 +168,7 @@ class AmperePointPlanner:
             self.override = {
                 "mode": "charge",
                 "until": (now + timedelta(minutes=duration)).isoformat(),
+                "duration_minutes": duration,
                 "current_a": self._validated_override_current(current_a),
             }
         elif mode == "energy":
@@ -188,6 +194,9 @@ class AmperePointPlanner:
         else:
             raise PlannerConfigError(f"Unsupported override: {mode}")
 
+        self.pending = None
+        if self.command_status == "pending":
+            self.command_status = "idle"
         self.retry_after = None
         await self._async_save()
         self._notify()
@@ -271,6 +280,10 @@ class AmperePointPlanner:
                 )
                 return
 
+            if not desired["charging"] and self.managed_charging:
+                self.managed_charging = False
+                await self._async_save()
+
             if self.command_status == "pending":
                 self.command_status = "confirmed"
             elif self.command_status != "confirmed":
@@ -334,6 +347,8 @@ class AmperePointPlanner:
                     return {"charging": False, "state": "override_paused"}
 
         if not self.config.get("enabled"):
+            if self.managed_charging:
+                return {"charging": False, "state": "override_paused"}
             return None
         active = active_window(self.config["windows"], now)
         if active:
@@ -357,6 +372,8 @@ class AmperePointPlanner:
             "expected": expected,
             "requested_at": now.isoformat(),
         }
+        if action == "start":
+            self.managed_charging = True
         self.command_status = "pending"
         self._state = "pending"
         await self._async_save()
@@ -391,11 +408,44 @@ class AmperePointPlanner:
             "windows": self.config.get("windows", []),
             "active_window": _serialize_window(active),
             "next_action": _serialize_event(upcoming),
+            "effective_next_action": self._effective_next_action(upcoming),
             "override": self.override,
             "command_status": self.command_status,
             "pending": self.pending,
             "last_confirmation": self.last_confirmation,
             "retry_after": self.retry_after.isoformat() if self.retry_after else None,
+            "managed_charging": self.managed_charging,
+        }
+
+    def _effective_next_action(
+        self, upcoming: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        if self.override:
+            mode = self.override.get("mode")
+            if mode == "charge":
+                return {
+                    "source": "override",
+                    "action": "stop",
+                    "at": self.override.get("until"),
+                }
+            if mode == "energy":
+                return {
+                    "source": "override",
+                    "action": "energy_target",
+                    "target_kwh": self.override.get("target_kwh"),
+                    "delivered_kwh": self.override.get("delivered_kwh", 0),
+                }
+            if mode == "pause":
+                return {
+                    "source": "override",
+                    "action": "resume_plan",
+                    "at": self.override.get("until"),
+                }
+        if not upcoming:
+            return None
+        return {
+            **_serialize_event(upcoming),
+            "source": "weekly_plan",
         }
 
     async def _async_save(self) -> None:
@@ -409,6 +459,7 @@ class AmperePointPlanner:
                 "retry_after": self.retry_after.isoformat()
                 if self.retry_after
                 else None,
+                "managed_charging": self.managed_charging,
             }
         )
 
