@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tuyaextend_amperepoint"
 NAME = "TuyaExtend AmperePoint"
-VERSION = "0.3.2"
+VERSION = "0.4.0"
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -14,6 +14,7 @@ PLATFORMS = [
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SWITCH,
+    Platform.TIME,
 ]
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=15)

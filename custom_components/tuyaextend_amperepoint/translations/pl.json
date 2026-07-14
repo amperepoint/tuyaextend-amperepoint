@@ -163,6 +163,9 @@
     },
     "switch": {
       "charging": { "name": "Ladowanie wlaczone" }
+    },
+    "time": {
+      "schedule_time": { "name": "Zaplanowana godzina startu" }
     }
   }
 }

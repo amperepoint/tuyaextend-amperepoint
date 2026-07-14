@@ -28,6 +28,7 @@ _CARD_ENTITY_KEYS = {
     "current_limit": "currentLimit",
     "target_energy": "targetEnergy",
     "charging_mode": "chargingMode",
+    "schedule_time": "scheduleTime",
     "status": "status",
     "vehicle_connected": "cp",
     "error": "faults",

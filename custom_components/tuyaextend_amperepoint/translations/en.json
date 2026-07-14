@@ -37,6 +37,9 @@
     },
     "switch": {
       "charging": { "name": "Charging enabled" }
+    },
+    "time": {
+      "schedule_time": { "name": "Scheduled start time" }
     }
   }
 }
