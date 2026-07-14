@@ -57,8 +57,12 @@ custom_components/tuyaextend_amperepoint/
 
 ## HACS Integration Direction
 
-`TuyaExtend AmperePoint` is designed as a helper layer for Home Assistant. It
-does not replace the official Tuya integration. The expected flow is:
+`TuyaExtend AmperePoint` is a charger-specific extension layer. It can use either
+the official Tuya integration directly or entities supplied by Xtend Tuya,
+`tuya-local` or LocalTuya. Xtend Tuya is optional; it is not required for the
+AmperePoint dashboard or the additional charger DPS.
+
+The recommended flow is:
 
 1. Install and configure the official Home Assistant Tuya integration.
 2. Install this repository as a HACS custom integration.
@@ -73,11 +77,18 @@ model and product identifiers. The model key is encoded in the product/device
 metadata, so current-limit ranges and phase assumptions are selected
 automatically.
 
-The integration creates normalized HA entities for readable status, charging
-state, power, session energy, total energy, last session energy, current limit,
-temperature, diagnostics and phase measurements when the source DPS are
-available. Missing datapoints do not break the dashboard; the frontend card hides
-unavailable sections.
+With the official Tuya source, the integration reads the charger's complete
+runtime DP status and definitions instead of relying only on the small subset of
+entities created by Home Assistant. It creates normalized HA entities for status,
+charging state, power, energy, current limit, charging mode, target energy,
+temperature, diagnostics and phase measurements when valid payloads are
+available. The raw-DP view lists every DP received from the charger and marks
+writable values. Start/stop, current limit, charging mode and target energy are
+sent through the official Tuya runtime when their DPS are writable.
+
+When an Xtend Tuya or local source is selected, existing entity mapping remains
+available as a compatibility adapter. Missing datapoints do not break the
+dashboard; the frontend card hides unavailable sections.
 
 The bundled card is exposed from the integration directory and registered as a
 Lovelace module resource automatically in storage-mode dashboards. If Lovelace is
@@ -109,7 +120,7 @@ Local protocol: 3.5
 Product ID: cu111poj2mtikvls
 ```
 
-The standard Home Assistant Tuya integration / Tuya Sharing API currently exposes:
+An earlier 2026-06-11 Tuya Sharing API capture exposed:
 
 ```text
 DP1  forward_energy_total
@@ -124,8 +135,8 @@ DP24 temp_current
 DP25 charge_energy_once
 ```
 
-The following DPS are defined in the Tuya product but were not returned by the
-standard HA/Tuya Sharing API path in the latest test:
+The following DPS were defined in the product but were absent from that earlier
+capture:
 
 ```text
 DP6  phase_a
@@ -140,6 +151,13 @@ DP33 mode_set
 Switching the Tuya Developer project from Standard Instruction to DP Instruction
 did not make those missing report-only DPS appear in the HA/Tuya Sharing API
 response.
+
+On 2026-07-14, Home Assistant 2026.7.2 held all 17 Q11 runtime DPS in the
+official Tuya device manager, even though its device page exposed only the
+charging switch. TuyaExtend AmperePoint 0.3 reads that supported runtime data
+directly. The tested device provided DP1, 3, 4, 6, 7, 8, 9, 10, 13, 14, 17, 18,
+19, 23, 24, 25 and 33. All-zero phase payloads remain hidden until physically
+plausible phase data is reported.
 
 ### Q37 / EV Charger VE / `fdfjiphjxtc9qyhd`
 
@@ -169,13 +187,14 @@ API dumps under `amperepoint/observations/` are sanitized.
 
 ## Installation Notes
 
-This repository is not a replacement for Home Assistant's built-in Tuya
-integration. It adds an AmperePoint normalization layer on top of entities that
-already exist in Home Assistant.
+This repository does not replace Tuya account pairing. It adds an AmperePoint
+normalization and DP-extension layer on top of an existing official Tuya, Xtend
+Tuya, `tuya-local` or LocalTuya source.
 
 Recommended direction:
 
-1. Keep the official Tuya integration or Xtend Tuya for cloud entities.
+1. Use the official Tuya integration for the simplest cloud setup; Xtend Tuya is
+   optional and remains supported as an entity source.
 2. Use `tuya-local` with profiles from `amperepoint/profiles/tuya_local/` for LAN
    testing.
 3. Use the AmperePoint extension integration from:
@@ -184,6 +203,6 @@ Recommended direction:
 custom_components/tuyaextend_amperepoint/
 ```
 
-That extension normalizes existing HA entities into EVSE-oriented entities such
-as readable status, charging power, session energy, session cost, current limit
-and diagnostics.
+That extension normalizes charger data into EVSE-oriented entities and, with the
+official Tuya adapter, exposes additional runtime DPS that the core Tuya UI may
+not create as entities.

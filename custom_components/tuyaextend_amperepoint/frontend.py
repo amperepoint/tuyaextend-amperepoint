@@ -44,7 +44,19 @@ async def _async_ensure_lovelace_resource(hass: HomeAssistant) -> None:
         return
 
     await resource_collection.async_get_info()
-    if any(_same_resource(item) for item in resource_collection.async_items()):
+    for item in resource_collection.async_items():
+        if not _same_resource(item):
+            continue
+        if item.get("url") != FRONTEND_MODULE and hasattr(
+            resource_collection, "async_update_item"
+        ):
+            await resource_collection.async_update_item(
+                item["id"],
+                {
+                    "url": FRONTEND_MODULE,
+                    CONF_RESOURCE_TYPE_WS: "module",
+                },
+            )
         hass.data[_RESOURCE_REGISTERED] = True
         return
 

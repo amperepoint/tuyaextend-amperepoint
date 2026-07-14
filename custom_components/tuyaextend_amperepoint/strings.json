@@ -48,6 +48,8 @@
           "session_energy_mode": "Session energy mode",
           "source_current_limit": "Current limit entity",
           "source_charge_switch": "Start/stop switch entity",
+          "source_work_mode": "Charging mode entity",
+          "source_target_energy": "Target energy entity",
           "source_error": "Error entity",
           "source_temperature": "Temperature entity",
           "tariff_value": "Energy tariff",
@@ -97,6 +99,8 @@
           "session_energy_mode": "Session energy mode",
           "source_current_limit": "Current limit entity",
           "source_charge_switch": "Start/stop switch entity",
+          "source_work_mode": "Charging mode entity",
+          "source_target_energy": "Target energy entity",
           "source_error": "Error entity",
           "source_temperature": "Temperature entity",
           "tariff_value": "Energy tariff",
@@ -141,20 +145,24 @@
       "current_l3": { "name": "Current L3" },
       "power_l1": { "name": "Power L1" },
       "power_l2": { "name": "Power L2" },
-      "power_l3": { "name": "Power L3" }
+      "power_l3": { "name": "Power L3" },
+      "system_version": { "name": "System version" },
+      "raw_dp": { "name": "Raw datapoints" }
     },
     "binary_sensor": {
       "vehicle_connected": { "name": "Vehicle connected" },
       "charging_complete": { "name": "Charging complete" }
     },
     "number": {
-      "current_limit": { "name": "Current limit" }
+      "current_limit": { "name": "Current limit" },
+      "target_energy": { "name": "Target energy" }
     },
     "select": {
-      "model": { "name": "Model" }
+      "model": { "name": "Model" },
+      "charging_mode": { "name": "Charging mode" }
     },
     "switch": {
-      "charging": { "name": "Charging" }
+      "charging": { "name": "Charging enabled" }
     }
   }
 }

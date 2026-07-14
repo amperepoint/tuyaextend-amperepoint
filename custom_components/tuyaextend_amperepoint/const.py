@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tuyaextend_amperepoint"
 NAME = "TuyaExtend AmperePoint"
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -38,6 +38,8 @@ CONF_SOURCE_LAST_SESSION_ENERGY = "source_last_session_energy"
 CONF_SESSION_ENERGY_MODE = "session_energy_mode"
 CONF_SOURCE_CURRENT_LIMIT = "source_current_limit"
 CONF_SOURCE_CHARGE_SWITCH = "source_charge_switch"
+CONF_SOURCE_WORK_MODE = "source_work_mode"
+CONF_SOURCE_TARGET_ENERGY = "source_target_energy"
 CONF_SOURCE_ERROR = "source_error"
 CONF_SOURCE_TEMPERATURE = "source_temperature"
 CONF_TARIFF_VALUE = "tariff_value"
@@ -94,4 +96,4 @@ PHASE_RAW_KEYS = (
 )
 
 FRONTEND_URL = "/tuyaextend_amperepoint/frontend"
-FRONTEND_MODULE = f"{FRONTEND_URL}/amperepoint-q22-card.js"
+FRONTEND_MODULE = f"{FRONTEND_URL}/amperepoint-q22-card.js?v={VERSION}"

@@ -1,7 +1,8 @@
 # Instalacja
 
-TuyaExtend AmperePoint to pomocnicza integracja Home Assistant dla ładowarek
-AmperePoint EV, które są już widoczne w Home Assistant przez Tuya.
+TuyaExtend AmperePoint to integracja Home Assistant dla ładowarek AmperePoint EV.
+Może korzystać bezpośrednio z oficjalnej integracji Tuya albo z encji Xtend Tuya,
+`tuya-local` i LocalTuya. Xtend Tuya jest opcjonalny.
 
 Ta integracja nie zastępuje parowania Tuya. Najpierw zainicjalizuj Tuya, potem
 dodaj integrację przez HACS.
@@ -17,7 +18,9 @@ Ustawienia -> Urządzenia i usługi -> Dodaj integrację -> Tuya
 
 3. Przejdź oficjalny proces logowania Tuya / autoryzacji QR.
 4. Upewnij się, że ładowarka jest widoczna w Home Assistant.
-5. Upewnij się, że dostępne są przynajmniej podstawowe encje Tuya, na przykład:
+5. Wystarczy, że ładowarka i przynajmniej jedna jej encja są widoczne w Tuya.
+   TuyaExtend odczyta pozostałe obsługiwane DP z runtime oficjalnej integracji,
+   nawet jeżeli Home Assistant nie utworzył dla nich osobnych encji.
 
 ```text
 switch
@@ -28,8 +31,7 @@ work state / connection state
 temperature
 ```
 
-Dokładna lista encji zależy od generacji produktu Tuya oraz od tego, które DPS
-Tuya udostępnia przez oficjalne API.
+Dokładna lista DP zależy od generacji produktu i firmware ładowarki.
 
 Jeśli ładowarka nie jest widoczna w oficjalnej integracji Tuya, najpierw
 skonfiguruj Tuya. TuyaExtend AmperePoint nie wykryje ładowarki chmurowej, której
@@ -145,10 +147,17 @@ energia bieżącej sesji
 energia całkowita
 energia ostatniej sesji
 suwak limitu prądu
+wybór trybu ładowania
+energia docelowa
 temperatura
 diagnostyka błędów
+wersja systemu i pełna lista surowych DP
 napięcie/prąd/moc faz, gdy odpowiednie DPS są dostępne
 ```
+
+W trybie oficjalnego Tuya sterowanie DP18 `switch`, DP4 `charge_cur_set`, DP14
+`work_mode` i DP17 `energy_charge` działa bez instalowania Xtend Tuya, o ile
+produkt oznacza te DP jako zapisywalne.
 
 Energia bieżącej sesji może być liczona na podstawie:
 
@@ -161,7 +170,11 @@ awaryjnej integracji mocy w czasie
 Dla nowszych urządzeń w stylu Q22 OTA domyślnym kierunkiem jest delta energii
 całkowitej, jeśli dostępny jest stabilny licznik całkowity.
 
-## 6. Opcjonalny tryb lokalny
+## 6. Opcjonalne źródła Xtend i lokalne
+
+Jeżeli Xtend Tuya jest już zainstalowany, można wybrać jego urządzenie podczas
+automatycznej konfiguracji albo przypisać encje ręcznie. Ten tryb pozostaje
+zgodny z wcześniejszymi konfiguracjami, ale nie jest wymagany.
 
 Repozytorium zawiera też kandydackie profile `tuya-local`:
 
@@ -200,10 +213,10 @@ wartości nie są dostępne.
 
 ### Start/stop albo limit prądu nie działa
 
-Tuya musi udostępniać zapisywalne encje dla DP18 `switch` oraz DP4
-`charge_cur_set`. Jeśli oficjalna integracja Tuya wystawia je tylko do odczytu
-albo nie wystawia ich wcale, TuyaExtend może pokazać wartości, ale nie będzie
-mógł nimi sterować.
+W trybie oficjalnego Tuya nie jest wymagana osobna encja źródłowa. TuyaExtend
+korzysta z definicji zapisu urządzenia. Sprawdź, czy ładowarka jest online i czy
+w widoku surowych DP dana pozycja ma oznaczenie `↔`. Dla źródeł Xtend/lokalnych
+sterowanie wymaga poprawnego przypisania encji źródłowej.
 
 ## Bezpieczeństwo
 

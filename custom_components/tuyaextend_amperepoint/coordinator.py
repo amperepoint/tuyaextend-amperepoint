@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.tuya.const import TUYA_HA_SIGNAL_UPDATE_ENTITY
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     PERCENTAGE,
@@ -15,9 +16,10 @@ from homeassistant.const import (
     UnitOfEnergy,
     UnitOfPower,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -34,6 +36,7 @@ from .const import (
     CONF_SOURCE_CURRENT_L3,
     CONF_SOURCE_CURRENT_LIMIT,
     CONF_SOURCE_ERROR,
+    CONF_SOURCE_INTEGRATION,
     CONF_SOURCE_LAST_SESSION_ENERGY,
     CONF_SOURCE_PHASE_A,
     CONF_SOURCE_PHASE_B,
@@ -46,10 +49,12 @@ from .const import (
     CONF_SOURCE_SESSION_ENERGY,
     CONF_SOURCE_STATUS,
     CONF_SOURCE_TEMPERATURE,
+    CONF_SOURCE_TARGET_ENERGY,
     CONF_SOURCE_TOTAL_ENERGY,
     CONF_SOURCE_VOLTAGE_L1,
     CONF_SOURCE_VOLTAGE_L2,
     CONF_SOURCE_VOLTAGE_L3,
+    CONF_SOURCE_WORK_MODE,
     CONF_TARIFF_ENTITY,
     CONF_TARIFF_VALUE,
     DEFAULT_COMPLETE_IDLE_MINUTES,
@@ -72,6 +77,7 @@ from .models import (
     normalize_error,
     normalize_status,
 )
+from .source import NativeTuyaSource
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -88,6 +94,15 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.config_entry = config_entry
         self.model = get_model(self._config(CONF_MODEL))
+        self.native_source = NativeTuyaSource.resolve(hass, config_entry)
+        if self.native_source is not None:
+            config_entry.async_on_unload(
+                async_dispatcher_connect(
+                    hass,
+                    f"{TUYA_HA_SIGNAL_UPDATE_ENTITY}_{self.native_source.device.id}",
+                    self._handle_native_update,
+                )
+            )
         self._store = Store[dict[str, Any]](
             hass, STORAGE_VERSION, f"{DOMAIN}.{config_entry.entry_id}.session"
         )
@@ -98,6 +113,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._was_charging = False
         self._was_connected = False
         self._complete_candidate_since: datetime | None = None
+
+    @callback
+    def _handle_native_update(self, *_: Any) -> None:
+        """Refresh normalized entities immediately after a Tuya push update."""
+        self.hass.async_create_task(self.async_request_refresh())
 
     def _config(self, key: str, default: Any = None) -> Any:
         return self.config_entry.options.get(
@@ -126,12 +146,14 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         status = normalize_status(
             self._state_value(CONF_SOURCE_STATUS)
             or self._raw_attr("raw_work_state")
+            or self._native_value("work_state")
         )
-        power_kw = (
-            self._numeric_entity(CONF_SOURCE_POWER, "power_kw")
-            or self._numeric_raw_attr("power_total_kw")
-            or 0.0
+        source_power_kw = _first_not_none(
+            self._numeric_entity(CONF_SOURCE_POWER, "power_kw"),
+            self._numeric_raw_attr("power_total_kw"),
+            self._native_numeric("power_total"),
         )
+        power_kw = source_power_kw or 0.0
         source_session_energy = self._numeric_entity(
             CONF_SOURCE_SESSION_ENERGY, "energy_kwh"
         )
@@ -140,23 +162,32 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         if source_total_energy is None:
             source_total_energy = self._numeric_raw_attr("forward_energy_total_kwh")
+        if source_total_energy is None:
+            source_total_energy = self._native_numeric("forward_energy_total")
         last_session_energy = self._numeric_entity(
             CONF_SOURCE_LAST_SESSION_ENERGY, "energy_kwh"
         )
         if last_session_energy is None:
             last_session_energy = self._numeric_raw_attr("charge_energy_once_kwh")
+        if last_session_energy is None:
+            last_session_energy = self._native_numeric("charge_energy_once")
         temperature_c = self._numeric_entity(CONF_SOURCE_TEMPERATURE, "plain")
         if temperature_c is None:
             temperature_c = self._numeric_raw_attr("temp_current_c")
+        if temperature_c is None:
+            temperature_c = self._native_numeric("temp_current")
         threshold_kw = float(
-            self._config(CONF_COMPLETE_POWER_THRESHOLD, DEFAULT_COMPLETE_POWER_THRESHOLD_KW)
+            self._config(
+                CONF_COMPLETE_POWER_THRESHOLD, DEFAULT_COMPLETE_POWER_THRESHOLD_KW
+            )
         )
 
         is_charging = status in CHARGING_STATUSES or power_kw > threshold_kw
         is_complete_from_status = status in COMPLETE_STATUSES
         connected = normalize_connected(
             self._state_value(CONF_SOURCE_CONNECTED)
-            or self._raw_attr("raw_connection_state"),
+            or self._raw_attr("raw_connection_state")
+            or self._native_value("connection_state"),
             fallback=is_charging or power_kw > 0,
         )
 
@@ -212,7 +243,29 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         current_limit = self._numeric_entity(CONF_SOURCE_CURRENT_LIMIT, "current_a")
         if current_limit is None:
-            current_limit = float(self.model.max_current_a)
+            current_limit = self._native_numeric("charge_cur_set")
+
+        fault_value = _first_not_none(
+            self._state_value(CONF_SOURCE_ERROR),
+            self._raw_attr("raw_fault"),
+            self._native_value("fault"),
+        )
+        fault_labels = (
+            self.native_source.bitmap_labels("fault") if self.native_source else []
+        )
+        switch_enabled = _as_bool(self._state_value(CONF_SOURCE_CHARGE_SWITCH))
+        if switch_enabled is None:
+            switch_enabled = _as_bool(self._native_value("switch"))
+        raw_dp = (
+            self.native_source.values()
+            if self.native_source
+            else self._mapped_raw_values()
+        )
+        dp_metadata = (
+            self.native_source.definitions()
+            if self.native_source
+            else self._mapped_raw_metadata()
+        )
 
         self._last_update = now
         self._was_charging = is_charging
@@ -224,11 +277,16 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "status": status,
             "vehicle_connected": connected,
             "charging": is_charging,
+            "switch_enabled": switch_enabled,
             "charging_complete": charging_complete,
-            "power_kw": round(power_kw, 3),
+            "power_kw": (
+                round(source_power_kw, 3) if source_power_kw is not None else None
+            ),
             "session_energy_kwh": round(session_energy_kwh, 3),
             "total_energy_kwh": (
-                round(source_total_energy, 3) if source_total_energy is not None else None
+                round(source_total_energy, 3)
+                if source_total_energy is not None
+                else None
             ),
             "last_session_energy_kwh": (
                 round(last_session_energy, 3)
@@ -239,10 +297,12 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "tariff": round(tariff_value, 4),
             "currency": currency,
             "phase_count": phase_count,
-            "error": normalize_error(
-                self._state_value(CONF_SOURCE_ERROR) or self._raw_attr("raw_fault")
+            "error": ", ".join(fault_labels)
+            if fault_labels
+            else normalize_error(fault_value),
+            "current_limit_a": (
+                round(current_limit, 1) if current_limit is not None else None
             ),
-            "current_limit_a": round(current_limit, 1),
             "temperature_c": (
                 round(temperature_c, 1) if temperature_c is not None else None
             ),
@@ -255,6 +315,24 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "power_l1": phase_powers[0],
             "power_l2": phase_powers[1],
             "power_l3": phase_powers[2],
+            "work_mode": self._state_value(CONF_SOURCE_WORK_MODE)
+            or self._native_value("work_mode"),
+            "target_energy_kwh": _first_not_none(
+                self._numeric_entity(CONF_SOURCE_TARGET_ENERGY, "energy_kwh"),
+                self._native_numeric("energy_charge"),
+            ),
+            "system_version": self._native_value("system_version"),
+            "raw_dp_count": len(raw_dp),
+            "raw_dp": raw_dp,
+            "dp_metadata": dp_metadata,
+            "source_type": (
+                "native_tuya"
+                if self.native_source
+                else self._config(CONF_SOURCE_INTEGRATION, "entity_mapping")
+            ),
+            "source_online": (
+                self.native_source.available if self.native_source else True
+            ),
         }
 
     def _state_value(self, key: str) -> Any:
@@ -282,6 +360,16 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _numeric_raw_attr(self, attr_name: str) -> float | None:
         return _as_float(self._raw_attr(attr_name))
 
+    def _native_value(self, code: str) -> Any:
+        if self.native_source is None:
+            return None
+        return self.native_source.raw(code)
+
+    def _native_numeric(self, code: str) -> float | None:
+        if self.native_source is None:
+            return None
+        return _as_float(self.native_source.scaled(code))
+
     def _raw_attr(self, attr_name: str) -> Any:
         entity_id = self._config(CONF_SOURCE_RAW_DP)
         if not entity_id:
@@ -290,6 +378,27 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if state is None:
             return None
         return state.attributes.get(attr_name)
+
+    def _mapped_raw_values(self) -> dict[str, Any]:
+        entity_id = self._config(CONF_SOURCE_RAW_DP)
+        state = self.hass.states.get(entity_id) if entity_id else None
+        if state is None:
+            return {}
+        embedded = state.attributes.get("raw_dp")
+        if isinstance(embedded, dict):
+            return dict(embedded)
+        excluded_suffixes = ("_voltage_v", "_current_a", "_power_kw")
+        return {
+            key.removeprefix("raw_"): value
+            for key, value in state.attributes.items()
+            if key.startswith("raw_") and not key.endswith(excluded_suffixes)
+        }
+
+    def _mapped_raw_metadata(self) -> dict[str, Any]:
+        entity_id = self._config(CONF_SOURCE_RAW_DP)
+        state = self.hass.states.get(entity_id) if entity_id else None
+        metadata = state.attributes.get("dp_metadata") if state else None
+        return dict(metadata) if isinstance(metadata, dict) else {}
 
     def _phase_values(
         self,
@@ -321,6 +430,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raw_value = self._state_value(raw_key)
         if raw_value is None:
             raw_value = self._raw_attr(f"raw_{raw_attr_prefix}")
+        if raw_value is None:
+            raw_value = self._native_value(raw_attr_prefix)
         return _decode_phase_payload(raw_value)
 
     def _current_tariff(self) -> float:
@@ -353,7 +464,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> float:
         mode = self._config(CONF_SESSION_ENERGY_MODE, SESSION_ENERGY_MODE_AUTO)
 
-        if mode == SESSION_ENERGY_MODE_SESSION_ENTITY and source_session_energy is not None:
+        if (
+            mode == SESSION_ENERGY_MODE_SESSION_ENTITY
+            and source_session_energy is not None
+        ):
             self._session_energy_kwh = max(source_session_energy, 0.0)
             self._update_total_energy_tracking(source_total_energy, connected)
             return self._session_energy_kwh
@@ -363,7 +477,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         if mode == SESSION_ENERGY_MODE_AUTO:
             if source_total_energy is not None:
-                return self._calculate_total_delta_session(source_total_energy, connected)
+                return self._calculate_total_delta_session(
+                    source_total_energy, connected
+                )
             if source_session_energy is not None:
                 self._session_energy_kwh = max(source_session_energy, 0.0)
                 return self._session_energy_kwh
@@ -422,15 +538,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if is_charging and self._last_update is not None:
             elapsed = now - self._last_update
             if timedelta(0) <= elapsed <= timedelta(minutes=10):
-                self._session_energy_kwh += power_kw * (
-                    elapsed.total_seconds() / 3600
-                )
+                self._session_energy_kwh += power_kw * (elapsed.total_seconds() / 3600)
 
         return self._session_energy_kwh
 
-    def _detect_phase_count(
-        self, currents: list[float | None], power_kw: float
-    ) -> int:
+    def _detect_phase_count(self, currents: list[float | None], power_kw: float) -> int:
         measured = [current for current in currents if current is not None]
         if measured:
             active = sum(1 for current in measured if abs(current) > 0.5)
@@ -477,6 +589,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_current_limit(self, value: float) -> None:
         entity_id = self._config(CONF_SOURCE_CURRENT_LIMIT)
         if not entity_id:
+            if self.native_source and self.native_source.writable("charge_cur_set"):
+                await self.native_source.async_send("charge_cur_set", value)
+                return
             raise HomeAssistantError("No source current limit entity configured")
 
         domain = entity_id.split(".", 1)[0]
@@ -489,13 +604,14 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             return
 
-        raise HomeAssistantError(
-            f"Unsupported current limit source domain: {domain}"
-        )
+        raise HomeAssistantError(f"Unsupported current limit source domain: {domain}")
 
     async def async_set_charging(self, enabled: bool) -> None:
         entity_id = self._config(CONF_SOURCE_CHARGE_SWITCH)
         if not entity_id:
+            if self.native_source and self.native_source.writable("switch"):
+                await self.native_source.async_send("switch", enabled)
+                return
             raise HomeAssistantError("No source charging switch configured")
 
         domain = entity_id.split(".", 1)[0]
@@ -515,6 +631,52 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def model_limits(self) -> AmperePointModel:
         return self.model
 
+    def has_dp(self, code: str) -> bool:
+        return bool(self.native_source and self.native_source.has(code))
+
+    def can_write_dp(self, code: str) -> bool:
+        return bool(self.native_source and self.native_source.writable(code))
+
+    def dp_definition(self, code: str) -> dict[str, Any]:
+        if self.native_source is None:
+            return {}
+        return self.native_source.definition(code)
+
+    async def async_set_work_mode(self, value: str) -> None:
+        entity_id = self._config(CONF_SOURCE_WORK_MODE)
+        if entity_id:
+            if entity_id.split(".", 1)[0] != "select":
+                raise HomeAssistantError("Mapped work mode source is read-only")
+            await self.hass.services.async_call(
+                "select",
+                "select_option",
+                {"entity_id": entity_id, "option": value},
+                blocking=True,
+            )
+            return
+        if self.native_source is not None:
+            await self.native_source.async_send("work_mode", value)
+            return
+        raise HomeAssistantError("No writable work mode source configured")
+
+    async def async_set_target_energy(self, value: float) -> None:
+        entity_id = self._config(CONF_SOURCE_TARGET_ENERGY)
+        if entity_id:
+            domain = entity_id.split(".", 1)[0]
+            if domain not in {"number", "input_number"}:
+                raise HomeAssistantError("Mapped target energy source is read-only")
+            await self.hass.services.async_call(
+                domain,
+                "set_value",
+                {"entity_id": entity_id, "value": value},
+                blocking=True,
+            )
+            return
+        if self.native_source is not None:
+            await self.native_source.async_send("energy_charge", value)
+            return
+        raise HomeAssistantError("No writable target energy source configured")
+
 
 def _as_float(value: Any) -> float | None:
     if value in {None, "unknown", "unavailable"}:
@@ -523,6 +685,24 @@ def _as_float(value: Any) -> float | None:
         return float(str(value).replace(",", "."))
     except (TypeError, ValueError):
         return None
+
+
+def _first_not_none(*values: Any) -> Any:
+    return next((value for value in values if value is not None), None)
+
+
+def _as_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"on", "true", "1", "yes"}:
+            return True
+        if normalized in {"off", "false", "0", "no"}:
+            return False
+    return None
 
 
 def _convert_unit(value: float, unit: str | None, kind: str) -> float:
@@ -562,6 +742,8 @@ def _decode_phase_payload(value: Any) -> dict[str, float] | None:
         return None
 
     if len(payload) != 7:
+        return None
+    if not any(payload):
         return None
 
     voltage_raw = int.from_bytes(payload[0:2], "big")

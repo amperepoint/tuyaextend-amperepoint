@@ -33,10 +33,12 @@ from .const import (
     CONF_SOURCE_SESSION_ENERGY,
     CONF_SOURCE_STATUS,
     CONF_SOURCE_TEMPERATURE,
+    CONF_SOURCE_TARGET_ENERGY,
     CONF_SOURCE_TOTAL_ENERGY,
     CONF_SOURCE_VOLTAGE_L1,
     CONF_SOURCE_VOLTAGE_L2,
     CONF_SOURCE_VOLTAGE_L3,
+    CONF_SOURCE_WORK_MODE,
     SESSION_ENERGY_MODE_TOTAL_DELTA,
 )
 from .models import DEFAULT_MODEL, MODELS, detect_model_key
@@ -78,9 +80,7 @@ def discover_sources(hass: HomeAssistant) -> list[SourceCandidate]:
     for entry in entity_registry.entities.values():
         if not entry.device_id:
             continue
-        if entry.platform not in SOURCE_PLATFORMS and not _looks_like_amperepoint(
-            _entity_text(entry)
-        ):
+        if entry.platform not in SOURCE_PLATFORMS:
             continue
         grouped.setdefault(entry.device_id, []).append(entry)
 
@@ -139,15 +139,35 @@ def _match_mapping_keys(text: str, domain: str) -> Iterable[tuple[str, int]]:
         if "connection" not in text:
             yield CONF_SOURCE_STATUS, 80
 
-    if _has_any(text, "connection state", "connection_state", "controlpi", "control pilot", "cp"):
+    if _has_any(
+        text, "connection state", "connection_state", "controlpi", "control pilot", "cp"
+    ):
         yield CONF_SOURCE_CONNECTED, 85
 
-    if _has_any(text, "power total", "power_total", "total power", "moc calkowita", "moc chwilowa"):
+    if _has_any(
+        text,
+        "power total",
+        "power_total",
+        "total power",
+        "moc calkowita",
+        "moc chwilowa",
+    ):
         yield CONF_SOURCE_POWER, 90
-    elif domain == "sensor" and _has_any(text, "power", "moc") and not _has_any(text, "phase", "l1", "l2", "l3"):
+    elif (
+        domain == "sensor"
+        and _has_any(text, "power", "moc")
+        and not _has_any(text, "phase", "l1", "l2", "l3")
+    ):
         yield CONF_SOURCE_POWER, 60
 
-    if _has_any(text, "forward energy total", "forward_energy_total", "total forward energy", "total energy", "energia calkowita"):
+    if _has_any(
+        text,
+        "forward energy total",
+        "forward_energy_total",
+        "total forward energy",
+        "total energy",
+        "energia calkowita",
+    ):
         yield CONF_SOURCE_TOTAL_ENERGY, 90
     elif _has_any(text, "energy total", "licznik"):
         yield CONF_SOURCE_TOTAL_ENERGY, 70
@@ -155,14 +175,40 @@ def _match_mapping_keys(text: str, domain: str) -> Iterable[tuple[str, int]]:
     if _has_any(text, "session energy", "current session", "energia sesji"):
         yield CONF_SOURCE_SESSION_ENERGY, 75
 
-    if _has_any(text, "charge energy once", "charge_energy_once", "last session", "ostatnia sesja"):
+    if _has_any(
+        text,
+        "charge energy once",
+        "charge_energy_once",
+        "last session",
+        "ostatnia sesja",
+    ):
         yield CONF_SOURCE_LAST_SESSION_ENERGY, 90
 
-    if _has_any(text, "charge cur set", "charge_cur_set", "charging current", "current limit", "limit pradu", "limit current"):
+    if _has_any(
+        text,
+        "charge cur set",
+        "charge_cur_set",
+        "charging current",
+        "current limit",
+        "limit pradu",
+        "limit current",
+    ):
         yield CONF_SOURCE_CURRENT_LIMIT, 90
 
-    if domain in {"switch", "input_boolean"} and _has_any(text, "switch", "start", "stop", "charging", "ladowanie"):
+    if domain in {"switch", "input_boolean"} and _has_any(
+        text, "switch", "start", "stop", "charging", "ladowanie"
+    ):
         yield CONF_SOURCE_CHARGE_SWITCH, 90
+
+    if domain in {"select", "sensor"} and _has_any(
+        text, "work mode", "work_mode", "charging mode", "tryb ladowania"
+    ):
+        yield CONF_SOURCE_WORK_MODE, 90
+
+    if domain in {"number", "input_number", "sensor"} and _has_any(
+        text, "energy charge", "energy_charge", "target energy", "energia docelowa"
+    ):
+        yield CONF_SOURCE_TARGET_ENERGY, 90
 
     if _has_any(text, "fault", "error", "alarm", "problem", "blad"):
         yield CONF_SOURCE_ERROR, 85
@@ -171,12 +217,48 @@ def _match_mapping_keys(text: str, domain: str) -> Iterable[tuple[str, int]]:
         yield CONF_SOURCE_TEMPERATURE, 85
 
     for marker, voltage_key, current_key, power_key, raw_key in (
-        ("a", CONF_SOURCE_VOLTAGE_L1, CONF_SOURCE_CURRENT_L1, CONF_SOURCE_POWER_L1, CONF_SOURCE_PHASE_A),
-        ("b", CONF_SOURCE_VOLTAGE_L2, CONF_SOURCE_CURRENT_L2, CONF_SOURCE_POWER_L2, CONF_SOURCE_PHASE_B),
-        ("c", CONF_SOURCE_VOLTAGE_L3, CONF_SOURCE_CURRENT_L3, CONF_SOURCE_POWER_L3, CONF_SOURCE_PHASE_C),
-        ("l1", CONF_SOURCE_VOLTAGE_L1, CONF_SOURCE_CURRENT_L1, CONF_SOURCE_POWER_L1, CONF_SOURCE_PHASE_A),
-        ("l2", CONF_SOURCE_VOLTAGE_L2, CONF_SOURCE_CURRENT_L2, CONF_SOURCE_POWER_L2, CONF_SOURCE_PHASE_B),
-        ("l3", CONF_SOURCE_VOLTAGE_L3, CONF_SOURCE_CURRENT_L3, CONF_SOURCE_POWER_L3, CONF_SOURCE_PHASE_C),
+        (
+            "a",
+            CONF_SOURCE_VOLTAGE_L1,
+            CONF_SOURCE_CURRENT_L1,
+            CONF_SOURCE_POWER_L1,
+            CONF_SOURCE_PHASE_A,
+        ),
+        (
+            "b",
+            CONF_SOURCE_VOLTAGE_L2,
+            CONF_SOURCE_CURRENT_L2,
+            CONF_SOURCE_POWER_L2,
+            CONF_SOURCE_PHASE_B,
+        ),
+        (
+            "c",
+            CONF_SOURCE_VOLTAGE_L3,
+            CONF_SOURCE_CURRENT_L3,
+            CONF_SOURCE_POWER_L3,
+            CONF_SOURCE_PHASE_C,
+        ),
+        (
+            "l1",
+            CONF_SOURCE_VOLTAGE_L1,
+            CONF_SOURCE_CURRENT_L1,
+            CONF_SOURCE_POWER_L1,
+            CONF_SOURCE_PHASE_A,
+        ),
+        (
+            "l2",
+            CONF_SOURCE_VOLTAGE_L2,
+            CONF_SOURCE_CURRENT_L2,
+            CONF_SOURCE_POWER_L2,
+            CONF_SOURCE_PHASE_B,
+        ),
+        (
+            "l3",
+            CONF_SOURCE_VOLTAGE_L3,
+            CONF_SOURCE_CURRENT_L3,
+            CONF_SOURCE_POWER_L3,
+            CONF_SOURCE_PHASE_C,
+        ),
     ):
         if not _phase_marker_matches(text, marker):
             continue
@@ -209,7 +291,9 @@ def _first_source_platform(entries: Iterable[er.RegistryEntry]) -> str | None:
     return None
 
 
-def _first_state_name(hass: HomeAssistant, entries: Iterable[er.RegistryEntry]) -> str | None:
+def _first_state_name(
+    hass: HomeAssistant, entries: Iterable[er.RegistryEntry]
+) -> str | None:
     for entry in entries:
         state = hass.states.get(entry.entity_id)
         if state and (name := state.attributes.get("friendly_name")):

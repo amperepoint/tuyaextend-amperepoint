@@ -26,6 +26,8 @@ _DASHBOARD_LOCK = "dashboard_lock"
 _CARD_ENTITY_KEYS = {
     "charging": "switch",
     "current_limit": "currentLimit",
+    "target_energy": "targetEnergy",
+    "charging_mode": "chargingMode",
     "status": "status",
     "vehicle_connected": "cp",
     "error": "faults",
@@ -34,6 +36,8 @@ _CARD_ENTITY_KEYS = {
     "total_energy": "totalEnergy",
     "last_session_energy": "lastSessionDp25",
     "temperature": "temperature",
+    "system_version": "systemVersion",
+    "raw_dp": "rawDp",
     "phase_count": "phaseCount",
     "voltage_l1": "l1Voltage",
     "voltage_l2": "l2Voltage",
@@ -84,6 +88,30 @@ def _dashboard_config(entry: ConfigEntry, entities: dict[str, str]) -> dict[str,
     }
 
 
+async def _async_merge_card_entities(
+    storage: LovelaceStorage, entities: dict[str, str]
+) -> None:
+    """Add newly available generated entities without replacing user choices."""
+    try:
+        config = await storage.async_load(False)
+    except ConfigNotFound:
+        return
+
+    changed = False
+    for view in config.get("views", []):
+        for card in view.get("cards", []):
+            if card.get("type") != "custom:amperepoint-q22-card":
+                continue
+            card_entities = card.setdefault("entities", {})
+            for key, entity_id in entities.items():
+                if key not in card_entities:
+                    card_entities[key] = entity_id
+                    changed = True
+
+    if changed:
+        await storage.async_save(config)
+
+
 async def async_create_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> str:
     """Create one dedicated, non-destructive dashboard for a config entry."""
     domain_data = hass.data.setdefault(DOMAIN, {})
@@ -93,6 +121,8 @@ async def async_create_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> str
     async with lock:
         existing = hass.data[LOVELACE_DATA].dashboards.get(url_path)
         if existing is not None:
+            if isinstance(existing, LovelaceStorage):
+                await _async_merge_card_entities(existing, _card_entities(hass, entry))
             return url_path
 
         item = {
@@ -120,4 +150,6 @@ async def async_create_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> str
                 _dashboard_config(entry, _card_entities(hass, entry))
             )
             _LOGGER.info("Created AmperePoint dashboard at /%s", url_path)
+        else:
+            await _async_merge_card_entities(storage, _card_entities(hass, entry))
         return url_path
