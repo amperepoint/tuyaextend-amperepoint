@@ -1368,6 +1368,25 @@ class AmperePointQ22Card extends HTMLElement {
           border: 1px solid var(--ap-border);
           border-radius: 10px;
         }
+        .control-fields select {
+          color: #ffd08c;
+          color-scheme: dark;
+          background-color: #25282c;
+          font-weight: 800;
+        }
+        .control-fields select option {
+          color: #151719;
+          background-color: #f5f5f3;
+          font-weight: 700;
+        }
+        .control-fields select:focus-visible {
+          outline: 2px solid var(--ap-orange);
+          outline-offset: 2px;
+        }
+        .control-fields select:disabled {
+          cursor: wait;
+          opacity: .72;
+        }
         .number-field {
           display: flex;
           align-items: center;
