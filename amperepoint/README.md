@@ -108,6 +108,7 @@ docs/q-series-generations.md
 docs/charging-data-model.md
 docs/local-mode-research.md
 docs/tuya-platform-reporting.md
+docs/basic-planner.md
 ```
 
 ## Raw API Dumps

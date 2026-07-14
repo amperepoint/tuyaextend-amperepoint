@@ -30,6 +30,7 @@ _CARD_ENTITY_KEYS = {
     "charging_mode": "chargingMode",
     "schedule_time": "scheduleStartTime",
     "schedule_end_time": "scheduleEndTime",
+    "planner": "planner",
     "status": "status",
     "vehicle_connected": "cp",
     "error": "faults",

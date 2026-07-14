@@ -147,7 +147,8 @@
       "power_l2": { "name": "Moc L2" },
       "power_l3": { "name": "Moc L3" },
       "system_version": { "name": "Wersja systemu" },
-      "raw_dp": { "name": "Surowe datapointy" }
+      "raw_dp": { "name": "Surowe datapointy" },
+      "planner": { "name": "Planer ładowania" }
     },
     "binary_sensor": {
       "vehicle_connected": { "name": "Auto podlaczone" },

@@ -42,6 +42,23 @@ Home Assistant card itself.
 
 ![AmperePoint dashboard in schedule mode](amperepoint/screenshots/amperepoint-charge-schedule.png)
 
+### Basic planner (v0.5)
+
+![AmperePoint planner on a phone](amperepoint/screenshots/amperepoint-planner-mobile.png)
+
+The built-in planner is independent of the charger's single Tuya `local_timer`
+window. It supports multiple weekly intervals with minute precision and a
+separate current limit for every interval. Manual controls can charge for 30 or
+60 minutes, add a selected amount of energy, pause until the next interval or
+return to the weekly plan.
+
+Planner commands are applied in a safe sequence (charge-now mode, current
+limit, start/stop) and remain pending until the reported Tuya state confirms
+them. The plan, manual override and command state are stored by Home Assistant,
+and an enabled plan is evaluated again after every restart. The planner is
+disabled by default and starts controlling the charger only after the user
+saves it as enabled.
+
 This repository contains:
 
 - the HACS integration in [`custom_components/tuyaextend_amperepoint`](custom_components/tuyaextend_amperepoint),

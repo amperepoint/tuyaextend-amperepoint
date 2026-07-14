@@ -28,6 +28,7 @@ const entities = {
   lastSessionDp25: "sensor.demo_last_session",
   temperature: "sensor.demo_temperature",
   rawDp: "sensor.demo_raw_dp",
+  planner: "sensor.demo_planner",
   phaseCount: "sensor.demo_phase_count",
   l1Voltage: "sensor.demo_voltage_l1",
   l2Voltage: "sensor.demo_voltage_l2",
@@ -148,6 +149,42 @@ function buildStates(scenario) {
     [entities.lastSessionDp25]: state("16.84", { unit_of_measurement: "kWh" }),
     [entities.temperature]: state(scenario.temperature, { unit_of_measurement: "°C" }),
     [entities.rawDp]: state("17", { raw_dp: rawDp, dp_metadata: dpMetadata }),
+    [entities.planner]: state(scenario.power === "0.00" ? "waiting" : "scheduled_charging", {
+      config_entry_id: "demo-entry",
+      enabled: true,
+      windows: [
+        {
+          id: "weekday-night",
+          days: [0, 1, 2, 3, 4],
+          start: "22:15",
+          end: "06:45",
+          current_a: 16,
+          priority: 0,
+        },
+        {
+          id: "weekend-day",
+          days: [5, 6],
+          start: "10:30",
+          end: "14:00",
+          current_a: 12,
+          priority: 0,
+        },
+      ],
+      active_window: scenario.power === "0.00" ? null : { id: "weekday-night" },
+      next_action: {
+        action: scenario.power === "0.00" ? "start" : "stop",
+        at: scenario.power === "0.00" ? "2026-07-15T22:15:00+02:00" : "2026-07-15T06:45:00+02:00",
+        window_id: "weekday-night",
+      },
+      override: null,
+      command_status: "confirmed",
+      pending: null,
+      last_confirmation: {
+        action: "set_current",
+        confirmed_at: "2026-07-14T21:42:00+02:00",
+      },
+      retry_after: null,
+    }),
     [entities.phaseCount]: state("3"),
     [entities.l1Voltage]: state("230", { unit_of_measurement: "V" }),
     [entities.l2Voltage]: state("229", { unit_of_measurement: "V" }),
@@ -262,6 +299,30 @@ try {
     await writeFile(path.join(outputDir, scenario.file), screenshot.data, "base64");
   }
 
+  await cdp("Emulation.setDeviceMetricsOverride", {
+    width: 420,
+    height: 1600,
+    deviceScaleFactor: 1,
+    mobile: true,
+  });
+  const mobilePayload = JSON.stringify({ entities, states: buildStates(scenarios[0]) });
+  const mobileRendered = await cdp("Runtime.evaluate", {
+    expression: `window.renderAmperepointPreview(${mobilePayload})`,
+    awaitPromise: true,
+    returnByValue: true,
+  });
+  if (mobileRendered.exceptionDetails) {
+    throw new Error(mobileRendered.exceptionDetails.exception?.description || "Mobile preview render failed");
+  }
+  const mobileRect = mobileRendered.result.value;
+  const mobileScreenshot = await cdp("Page.captureScreenshot", {
+    format: "png",
+    captureBeyondViewport: true,
+    fromSurface: true,
+    clip: { x: mobileRect.x, y: mobileRect.y, width: mobileRect.width, height: mobileRect.height, scale: 1 },
+  });
+  await writeFile(path.join(outputDir, "amperepoint-planner-mobile.png"), mobileScreenshot.data, "base64");
+
   socket.close();
 } finally {
   if (chrome.exitCode === null) {
@@ -271,4 +332,4 @@ try {
   await rm(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
-console.log(`Rendered ${scenarios.length} screenshots to ${outputDir}`);
+console.log(`Rendered ${scenarios.length + 1} screenshots to ${outputDir}`);

@@ -21,7 +21,8 @@
       "power_l2": { "name": "Power L2" },
       "power_l3": { "name": "Power L3" },
       "system_version": { "name": "System version" },
-      "raw_dp": { "name": "Raw datapoints" }
+      "raw_dp": { "name": "Raw datapoints" },
+      "planner": { "name": "Charging planner" }
     },
     "binary_sensor": {
       "vehicle_connected": { "name": "Vehicle connected" },
