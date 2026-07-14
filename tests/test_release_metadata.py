@@ -11,6 +11,12 @@ COMPONENT = ROOT / "custom_components" / "tuyaextend_amperepoint"
 
 
 class ReleaseMetadataTests(unittest.TestCase):
+    def test_local_brand_icons_are_bundled(self) -> None:
+        for filename in ("icon.png", "icon@2x.png"):
+            icon = COMPONENT / "brand" / filename
+            self.assertTrue(icon.is_file())
+            self.assertEqual(icon.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+
     def test_integration_is_listed_as_a_device(self) -> None:
         manifest = json.loads((COMPONENT / "manifest.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["integration_type"], "device")

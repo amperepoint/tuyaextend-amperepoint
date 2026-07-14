@@ -122,6 +122,12 @@ function buildStates(scenario) {
   );
 
   return {
+    "update.tuyaextend_amperepoint_update": state("off", {
+      installed_version: "0.5.2",
+      latest_version: "0.5.2",
+      release_url: "https://github.com/amperepoint/tuyaextend-amperepoint/releases",
+      friendly_name: "TuyaExtend AmperePoint Update",
+    }),
     [entities.switch]: state("on"),
     [entities.currentLimit]: state("16", {
       min: 6,
