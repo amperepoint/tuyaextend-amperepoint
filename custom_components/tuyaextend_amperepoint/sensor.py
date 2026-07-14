@@ -25,6 +25,7 @@ from homeassistant.helpers.entity import EntityCategory
 from .const import CONF_SOURCE_RAW_DP, DOMAIN
 from .coordinator import AmperePointCoordinator
 from .entity import AmperePointEntity
+from .planner import AmperePointPlanner
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -215,9 +216,12 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: AmperePointCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
+    entities: list[SensorEntity] = [
         AmperePointSensor(coordinator, description) for description in SENSORS
-    )
+    ]
+    if planner := getattr(coordinator, "planner", None):
+        entities.append(AmperePointPlannerSensor(coordinator, planner))
+    async_add_entities(entities)
 
 
 class AmperePointSensor(AmperePointEntity, SensorEntity):
@@ -284,3 +288,33 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
                     }
                 )
         return attributes
+
+
+PLANNER_DESCRIPTION = AmperePointSensorDescription(
+    key="planner",
+    translation_key="planner",
+    icon="mdi:calendar-clock",
+    value_fn=lambda data: None,
+)
+
+
+class AmperePointPlannerSensor(AmperePointEntity, SensorEntity):
+    def __init__(
+        self,
+        coordinator: AmperePointCoordinator,
+        planner: AmperePointPlanner,
+    ) -> None:
+        super().__init__(coordinator, PLANNER_DESCRIPTION)
+        self.planner = planner
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(self.planner.async_add_listener(self.async_write_ha_state))
+
+    @property
+    def native_value(self) -> str:
+        return self.planner.state
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return self.planner.snapshot()
