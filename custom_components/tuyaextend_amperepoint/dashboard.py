@@ -28,7 +28,8 @@ _CARD_ENTITY_KEYS = {
     "current_limit": "currentLimit",
     "target_energy": "targetEnergy",
     "charging_mode": "chargingMode",
-    "schedule_time": "scheduleTime",
+    "schedule_time": "scheduleStartTime",
+    "schedule_end_time": "scheduleEndTime",
     "status": "status",
     "vehicle_connected": "cp",
     "error": "faults",
@@ -111,6 +112,11 @@ async def _async_merge_card_entities(
 
         for card in amperepoint_cards:
             card_entities = card.setdefault("entities", {})
+            legacy_schedule = card_entities.pop("scheduleTime", None)
+            if legacy_schedule:
+                changed = True
+                if "scheduleStartTime" not in card_entities:
+                    card_entities["scheduleStartTime"] = legacy_schedule
             for key, entity_id in entities.items():
                 if key not in card_entities:
                     card_entities[key] = entity_id

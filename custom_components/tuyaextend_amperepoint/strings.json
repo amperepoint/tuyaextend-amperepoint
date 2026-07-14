@@ -165,7 +165,8 @@
       "charging": { "name": "Charging enabled" }
     },
     "time": {
-      "schedule_time": { "name": "Scheduled start time" }
+      "schedule_start_time": { "name": "Schedule starts" },
+      "schedule_end_time": { "name": "Schedule ends" }
     }
   }
 }

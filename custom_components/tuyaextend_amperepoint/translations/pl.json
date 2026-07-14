@@ -165,7 +165,8 @@
       "charging": { "name": "Ladowanie wlaczone" }
     },
     "time": {
-      "schedule_time": { "name": "Zaplanowana godzina startu" }
+      "schedule_start_time": { "name": "Początek harmonogramu" },
+      "schedule_end_time": { "name": "Koniec harmonogramu" }
     }
   }
 }

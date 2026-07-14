@@ -266,6 +266,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self.native_source
             else self._mapped_raw_metadata()
         )
+        schedule_window = _decode_schedule_window(self._native_value("local_timer"))
 
         self._last_update = now
         self._was_charging = is_charging
@@ -321,7 +322,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._numeric_entity(CONF_SOURCE_TARGET_ENERGY, "energy_kwh"),
                 self._native_numeric("energy_charge"),
             ),
-            "schedule_time": _decode_schedule_time(self._native_value("local_timer")),
+            "schedule_start_time": schedule_window[0] if schedule_window else None,
+            "schedule_end_time": schedule_window[1] if schedule_window else None,
             "system_version": self._native_value("system_version"),
             "raw_dp_count": len(raw_dp),
             "raw_dp": raw_dp,
@@ -678,10 +680,22 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return
         raise HomeAssistantError("No writable target energy source configured")
 
-    async def async_set_schedule_time(self, value: time) -> None:
+    async def async_set_schedule_boundary(self, boundary: str, value: time) -> None:
         if self.native_source is None or not self.native_source.writable("local_timer"):
             raise HomeAssistantError("No writable schedule source configured")
-        payload = base64.b64encode(bytes((value.hour, value.minute))).decode()
+        if value.minute or value.second or value.microsecond:
+            raise HomeAssistantError("This charger schedule supports whole hours only")
+        window = _decode_schedule_window(self._native_value("local_timer"))
+        if window is None:
+            raise HomeAssistantError("The current charger schedule cannot be decoded")
+        start, end = window
+        if boundary == "start":
+            start = value
+        elif boundary == "end":
+            end = value
+        else:
+            raise HomeAssistantError(f"Unsupported schedule boundary: {boundary}")
+        payload = base64.b64encode(bytes((start.hour, end.hour))).decode()
         await self.native_source.async_send("local_timer", payload)
 
 
@@ -763,13 +777,13 @@ def _decode_phase_payload(value: Any) -> dict[str, float] | None:
     }
 
 
-def _decode_schedule_time(value: Any) -> time | None:
+def _decode_schedule_window(value: Any) -> tuple[time, time] | None:
     if value in {None, "unknown", "unavailable", ""}:
         return None
     try:
         payload = base64.b64decode(str(value), validate=True)
     except (binascii.Error, ValueError):
         return None
-    if len(payload) != 2 or payload[0] > 23 or payload[1] > 59:
+    if len(payload) != 2 or payload[0] > 23 or payload[1] > 23:
         return None
-    return time(hour=payload[0], minute=payload[1])
+    return time(hour=payload[0]), time(hour=payload[1])

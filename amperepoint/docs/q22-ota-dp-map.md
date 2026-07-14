@@ -41,7 +41,7 @@ No local keys or account credentials are stored in this map.
 | `14` | `work_mode` | Send/report | Enum | n/a | Confirmed observed DP | Charging mode. |
 | `17` | `energy_charge` | Send/report | Value | `kWh`, scale `0`, range `1..200` | Confirmed product DP; observed in cloud dump | Target energy for fixed-energy mode. |
 | `18` | `switch` | Send/report | Bool | n/a | Confirmed observed DP | Start/stop charging. |
-| `19` | `local_timer` | Send/report | Raw | raw schedule payload | Candidate DP | Schedule charging payload. Not decoded yet. |
+| `19` | `local_timer` | Send/report | Raw | two whole-hour bytes | Confirmed on current test unit | Start hour followed by end hour; `12 07` means 18:00 to 07:00 the following day. |
 | `23` | `system_version` | Report | String | n/a | Candidate DP | Firmware/system version. Not returned while waiting. |
 | `24` | `temp_current` | Report | Value | `C`, scale `0` | Confirmed observed DP | Charger temperature. |
 | `25` | `charge_energy_once` | Report | Value | `kWh`, scale `2` | Confirmed observed DP | Last completed charging session energy. Do not use as live active-session energy. |

@@ -12,10 +12,18 @@ from .coordinator import AmperePointCoordinator
 from .entity import AmperePointEntity, AmperePointEntityDescription
 
 
-SCHEDULE_TIME_DESCRIPTION = AmperePointEntityDescription(
+SCHEDULE_START_DESCRIPTION = AmperePointEntityDescription(
     key="schedule_time",
-    translation_key="schedule_time",
-    icon="mdi:calendar-clock",
+    translation_key="schedule_start_time",
+    value_key="schedule_start_time",
+    icon="mdi:clock-start",
+)
+
+SCHEDULE_END_DESCRIPTION = AmperePointEntityDescription(
+    key="schedule_end_time",
+    translation_key="schedule_end_time",
+    value_key="schedule_end_time",
+    icon="mdi:clock-end",
 )
 
 
@@ -25,21 +33,37 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: AmperePointCoordinator = hass.data[DOMAIN][entry.entry_id]
+    if not coordinator.can_write_dp("local_timer"):
+        return
     if (
-        coordinator.can_write_dp("local_timer")
-        and coordinator.data.get("schedule_time") is not None
+        coordinator.data.get("schedule_start_time") is None
+        or coordinator.data.get("schedule_end_time") is None
     ):
-        async_add_entities([AmperePointScheduleTime(coordinator)])
+        return
+    async_add_entities(
+        [
+            AmperePointScheduleBoundary(
+                coordinator, SCHEDULE_START_DESCRIPTION, "start"
+            ),
+            AmperePointScheduleBoundary(coordinator, SCHEDULE_END_DESCRIPTION, "end"),
+        ]
+    )
 
 
-class AmperePointScheduleTime(AmperePointEntity, TimeEntity):
-    def __init__(self, coordinator: AmperePointCoordinator) -> None:
-        super().__init__(coordinator, SCHEDULE_TIME_DESCRIPTION)
+class AmperePointScheduleBoundary(AmperePointEntity, TimeEntity):
+    def __init__(
+        self,
+        coordinator: AmperePointCoordinator,
+        description: AmperePointEntityDescription,
+        boundary: str,
+    ) -> None:
+        super().__init__(coordinator, description)
+        self._boundary = boundary
 
     @property
     def native_value(self) -> time | None:
-        return self.coordinator.data.get("schedule_time")
+        return self._data_value
 
     async def async_set_value(self, value: time) -> None:
-        await self.coordinator.async_set_schedule_time(value)
+        await self.coordinator.async_set_schedule_boundary(self._boundary, value)
         await self.coordinator.async_request_refresh()

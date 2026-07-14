@@ -52,7 +52,7 @@ docs/amperepoint-q22-ha-reference-map.md
 | `14` | Work Mode | `work_mode` | Send and report | Enum | `charge_now`, `charge_energy`, `charge_schedule` |
 | `17` | Energy Charge | `energy_charge` | Send and report | Value | `1..200 kWh`, scale `0` |
 | `18` | Switch | `switch` | Send and report | Bool | Start/stop |
-| `19` | Schedule charging | `local_timer` | Send and report | Raw | Protocol parsing spec available in Tuya UI |
+| `19` | Schedule charging | `local_timer` | Send and report | Raw | Two whole-hour bytes: start hour, end hour; an earlier end crosses midnight |
 | `23` | System version | `system_version` | Report only | String | Firmware/system version |
 | `24` | Current temp | `temp_current` | Report only | Value | `-40..200 C`, scale `0` |
 | `25` | Once Charge Energy | `charge_energy_once` | Report only | Value | `1..999999 kWh`, scale `2` |

@@ -74,7 +74,7 @@ Xtend nadal nie tworzy z niego gotowych encji fazowych.
 | `14` | `work_mode` | enum | send/report | n/a | potwierdzone | Tryb pracy |
 | `17` | `energy_charge` | value | send/report | `kWh`, scale `0` | zdefiniowane, widoczne w cloud dump | Docelowa energia ladowania |
 | `18` | `switch` | bool | send/report | n/a | potwierdzone | Start / stop ladowania |
-| `19` | `local_timer` | raw | send/report | raw | zdefiniowane, niepotwierdzone w HA | Harmonogram ladowania |
+| `19` | `local_timer` | raw | send/report | 2 bajty godzin | potwierdzone na aktualnym urzadzeniu | Pierwszy bajt: godzina startu; drugi: godzina konca; wczesniejszy koniec oznacza nastepny dzien |
 | `23` | `system_version` | string | report | n/a | zdefiniowane, niepotwierdzone w HA | Wersja systemu / firmware |
 | `24` | `temp_current` | value | report | `C`, scale `0` | potwierdzone | Temperatura ladowarki |
 | `25` | `charge_energy_once` | value | report | `kWh`, scale `2` | potwierdzone | Energia ostatniej zakonczonej sesji ladowania |
@@ -198,7 +198,7 @@ walidacji.
 | Napiecie/prad/moc L1 | `6` | `phase_a` | parser potwierdzony w raw API, brak gotowej encji HA |
 | Napiecie/prad/moc L2 | `7` | `phase_b` | parser potwierdzony w raw API, brak gotowej encji HA |
 | Napiecie/prad/moc L3 | `8` | `phase_c` | parser potwierdzony w raw API, brak gotowej encji HA |
-| Harmonogram | `19` | `local_timer` | docelowe, niepotwierdzone w HA |
+| Harmonogram | `19` | `local_timer` | potwierdzone: okno pelnych godzin start/koniec |
 | Wersja firmware | `23` | `system_version` | docelowe, niepotwierdzone w HA |
 | Ustawienia trybu | `33` | `mode_set` | docelowe, niepotwierdzone w HA |
 
