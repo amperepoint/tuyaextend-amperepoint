@@ -1,0 +1,42 @@
+{
+  "entity": {
+    "sensor": {
+      "status": { "name": "Status" },
+      "power": { "name": "Power" },
+      "session_energy": { "name": "Session energy" },
+      "total_energy": { "name": "Total energy" },
+      "last_session_energy": { "name": "Last session energy" },
+      "temperature": { "name": "Temperature" },
+      "session_cost": { "name": "Session cost" },
+      "tariff": { "name": "Tariff" },
+      "phase_count": { "name": "Phase count" },
+      "error": { "name": "Error" },
+      "voltage_l1": { "name": "Voltage L1" },
+      "voltage_l2": { "name": "Voltage L2" },
+      "voltage_l3": { "name": "Voltage L3" },
+      "current_l1": { "name": "Current L1" },
+      "current_l2": { "name": "Current L2" },
+      "current_l3": { "name": "Current L3" },
+      "power_l1": { "name": "Power L1" },
+      "power_l2": { "name": "Power L2" },
+      "power_l3": { "name": "Power L3" },
+      "system_version": { "name": "System version" },
+      "raw_dp": { "name": "Raw datapoints" }
+    },
+    "binary_sensor": {
+      "vehicle_connected": { "name": "Vehicle connected" },
+      "charging_complete": { "name": "Charging complete" }
+    },
+    "number": {
+      "current_limit": { "name": "Current limit" },
+      "target_energy": { "name": "Target energy" }
+    },
+    "select": {
+      "model": { "name": "Model" },
+      "charging_mode": { "name": "Charging mode" }
+    },
+    "switch": {
+      "charging": { "name": "Charging enabled" }
+    }
+  }
+}

@@ -10,8 +10,9 @@ const AP_Q22_I18N = {
     control: "Control",
     current: "Current",
     currentLimit: "Current limit",
+    chargingMode: "Charging mode",
     daily: "Today",
-    dataNote: "Limit changes are sent to Home Assistant. Session energy is calculated from the total energy delta.",
+    dataNote: "Control changes are sent through Home Assistant to the charger. Session energy is calculated from the total energy delta.",
     deviceState: "Device state",
     diagnostics: "Diagnostics",
     dp: "DP",
@@ -40,6 +41,7 @@ const AP_Q22_I18N = {
     sessionTime: "Time",
     status: "Status",
     stop: "Stop",
+    targetEnergy: "Target energy",
     temperature: "Temperature",
     voltage: "Voltage",
   },
@@ -54,8 +56,9 @@ const AP_Q22_I18N = {
     control: "Sterowanie",
     current: "Prąd",
     currentLimit: "Limit prądu",
+    chargingMode: "Tryb ładowania",
     daily: "Dzisiaj",
-    dataNote: "Zmiana limitu wysyłana do HA. Energia sesji jest liczona z delty licznika całkowitego.",
+    dataNote: "Zmiany sterowania są wysyłane przez HA do ładowarki. Energia sesji jest liczona z delty licznika całkowitego.",
     deviceState: "Stan urządzenia",
     diagnostics: "Diagnostyka",
     dp: "DP",
@@ -84,6 +87,7 @@ const AP_Q22_I18N = {
     sessionTime: "Czas",
     status: "Status",
     stop: "Stop",
+    targetEnergy: "Energia docelowa",
     temperature: "Temperatura",
     voltage: "Napięcie",
   },
@@ -358,6 +362,8 @@ class AmperePointQ22Card extends HTMLElement {
     const specs = {
       switch: { domains: ["switch"], any: [" charging", "_charging", " ladowanie", "_switch", " start stop"], not: [] },
       currentLimit: { domains: ["number", "input_number"], any: ["current limit", "current_limit", "charging current", "charging_current", "charge cur set", "charge_cur_set", "limit pradu"], not: ["current_l1", "current_l2", "current_l3"] },
+      targetEnergy: { domains: ["number", "input_number"], any: ["target energy", "target_energy", "energy charge", "energy_charge", "energia docelowa"], not: [] },
+      chargingMode: { domains: ["select"], any: ["charging mode", "charging_mode", "work mode", "work_mode", "tryb ladowania"], not: [] },
       status: { domains: ["sensor"], any: [" status", "_status", "work state", "work_state", "status czytelny"], not: ["connection", "cp"] },
       cp: { domains: ["binary_sensor", "sensor"], any: ["vehicle connected", "vehicle_connected", "connection state", "connection_state", "controlpi", "control pilot", " cp", "_cp"], not: [] },
       faults: { domains: ["sensor", "binary_sensor"], any: [" error", "_error", " fault", "_fault", " bled", "_bled"], not: [] },
@@ -559,8 +565,8 @@ class AmperePointQ22Card extends HTMLElement {
   isCharging() {
     const status = this.normalize(this.state(this.config.entities.status, ""));
     const power = this.num(this.config.entities.power, 0);
-    const sw = this.state(this.config.entities.switch, "off");
-    return sw === "on" || power > 0.1 || status.includes("ladow") || status.includes("charging");
+    const chargingStates = ["ladowanie", "ladownie", "charging", "charger charging", "charger is charging"];
+    return power > 0.1 || chargingStates.includes(status);
   }
 
   async toggleCharging() {
@@ -572,6 +578,18 @@ class AmperePointQ22Card extends HTMLElement {
 
   async setCurrentLimit(value) {
     const entityId = this.config.entities.currentLimit;
+    if (!this.hasEntity(entityId)) return;
+    await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
+  }
+
+  async setChargingMode(value) {
+    const entityId = this.config.entities.chargingMode;
+    if (!this.hasEntity(entityId)) return;
+    await this._hass.callService("select", "select_option", { entity_id: entityId, option: value });
+  }
+
+  async setTargetEnergy(value) {
+    const entityId = this.config.entities.targetEnergy;
     if (!this.hasEntity(entityId)) return;
     await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
   }
@@ -641,6 +659,70 @@ class AmperePointQ22Card extends HTMLElement {
 
   rawRows() {
     const raw = this.config.entities.rawDp;
+    const snapshot = this.attr(raw, "raw_dp", null);
+    const metadata = this.attr(raw, "dp_metadata", {}) || {};
+    const knownDpIds = {
+      forward_energy_total: 1,
+      work_state: 3,
+      charge_cur_set: 4,
+      phase_a: 6,
+      phase_b: 7,
+      phase_c: 8,
+      power_total: 9,
+      fault: 10,
+      connection_state: 13,
+      work_mode: 14,
+      energy_charge: 17,
+      switch: 18,
+      local_timer: 19,
+      system_version: 23,
+      temp_current: 24,
+      charge_energy_once: 25,
+      mode_set: 33,
+    };
+
+    if (
+      snapshot &&
+      typeof snapshot === "object" &&
+      !Array.isArray(snapshot) &&
+      Object.keys(snapshot).length > 0
+    ) {
+      return Object.entries(snapshot)
+        .map(([code, value]) => {
+          const definition = metadata[code] || {};
+          return {
+            code,
+            value,
+            definition,
+            dp: definition.dp_id ?? knownDpIds[code] ?? "–",
+          };
+        })
+        .sort((a, b) => {
+          const aDp = typeof a.dp === "number" ? a.dp : Number.MAX_SAFE_INTEGER;
+          const bDp = typeof b.dp === "number" ? b.dp : Number.MAX_SAFE_INTEGER;
+          return aDp - bDp || a.code.localeCompare(b.code);
+        })
+        .map(({ code, value, definition, dp }) => {
+          let decoded = value;
+          if (typeof value === "number" && Number(definition.scale || 0) > 0) {
+            decoded = value / 10 ** Number(definition.scale);
+          }
+          if (typeof value === "boolean") decoded = value ? "true" : "false";
+          if (typeof decoded === "object") decoded = JSON.stringify(decoded);
+          const unit = definition.unit ? ` ${this.escape(definition.unit)}` : "";
+          const access = definition.writable ? " ↔" : "";
+          return `
+            <tr>
+              <td>${this.escape(dp)}</td>
+              <td><code>${this.escape(code)}</code>${access}</td>
+              <td><code>${this.escape(typeof value === "object" ? JSON.stringify(value) : value)}</code></td>
+              <td>${this.escape(decoded)}${unit}</td>
+            </tr>
+          `;
+        })
+        .join("");
+    }
+
     const rowDefs = [
       ["1", "forward_energy_total", "raw_forward_energy_total", this.attr(raw, "forward_energy_total_kwh"), "kWh"],
       ["3", "work_state", "raw_work_state", this.human(this.state(this.config.entities.status)), ""],
@@ -694,6 +776,12 @@ class AmperePointQ22Card extends HTMLElement {
     const currentEntity = this.stateObj(e.currentLimit);
     const hasCurrentLimit = this.hasEntity(e.currentLimit);
     const hasSwitch = this.hasEntity(e.switch);
+    const chargingEnabled = hasSwitch && this.state(e.switch) === "on";
+    const chargingModeEntity = this.stateObj(e.chargingMode);
+    const hasChargingMode = this.hasEntity(e.chargingMode);
+    const chargingModes = chargingModeEntity?.attributes?.options || [];
+    const targetEnergyEntity = this.stateObj(e.targetEnergy);
+    const hasTargetEnergy = this.hasEntity(e.targetEnergy);
     const current = this.num(e.currentLimit, 6);
     const minCurrent = Number(currentEntity?.attributes?.min ?? 6);
     const maxCurrent = Number(currentEntity?.attributes?.max ?? 32);
@@ -728,7 +816,7 @@ class AmperePointQ22Card extends HTMLElement {
       : "";
 
     const controlCard =
-      hasSwitch || hasCurrentLimit
+      hasSwitch || hasCurrentLimit || hasChargingMode || hasTargetEnergy
         ? `
         <div class="control-card">
           <div class="card-title">
@@ -738,9 +826,9 @@ class AmperePointQ22Card extends HTMLElement {
             </div>
             ${
               hasSwitch
-                ? `<button class="power-button ${charging ? "on" : ""}" type="button">
-                    ${this.icon(charging ? "mdi:pause" : "mdi:play")}
-                    ${charging ? this.t("stop") : this.t("charging")}
+                ? `<button class="power-button ${chargingEnabled ? "on" : ""}" type="button">
+                    ${this.icon(chargingEnabled ? "mdi:pause" : "mdi:play")}
+                    ${chargingEnabled ? this.t("stop") : this.t("charging")}
                   </button>`
                 : ""
             }
@@ -754,11 +842,29 @@ class AmperePointQ22Card extends HTMLElement {
                 </label>
                 <input class="current-slider" type="range" min="${minCurrent}" max="${maxCurrent}" step="${stepCurrent}" value="${current}" />
                 <div class="slider-scale"><span>${minCurrent} A</span><span>${maxCurrent} A</span></div>
-                <div class="control-note">
+              `
+              : ""
+          }
+          <div class="control-fields">
+            ${
+              hasChargingMode
+                ? `<label><span>${this.t("chargingMode")}</span><select class="charging-mode">${chargingModes
+                    .map((option) => `<option value="${this.escape(option)}" ${option === this.state(e.chargingMode) ? "selected" : ""}>${this.escape(option)}</option>`)
+                    .join("")}</select></label>`
+                : ""
+            }
+            ${
+              hasTargetEnergy
+                ? `<label><span>${this.t("targetEnergy")}</span><div class="number-field"><input class="target-energy" type="number" min="${targetEnergyEntity?.attributes?.min ?? 0}" max="${targetEnergyEntity?.attributes?.max ?? 200}" step="${targetEnergyEntity?.attributes?.step ?? 1}" value="${this.escape(this.state(e.targetEnergy))}" /><b>kWh</b></div></label>`
+                : ""
+            }
+          </div>
+          ${
+            hasCurrentLimit || hasChargingMode || hasTargetEnergy
+              ? `<div class="control-note">
                   ${this.icon("mdi:shield-check")}
                   <span>${this.t("dataNote")}</span>
-                </div>
-              `
+                </div>`
               : ""
           }
         </div>
@@ -843,7 +949,7 @@ class AmperePointQ22Card extends HTMLElement {
                 ${contentPanels.length ? `<section class="content-grid ${contentPanels.length === 1 ? "single" : ""}">${contentPanels.join("")}</section>` : ""}
                 ${
                   hasRaw
-                    ? `<details class="diagnostics">
+                    ? `<details class="diagnostics" open>
                         <summary>
                           <span>${this.icon("mdi:database-search")} ${this.t("rawDp")}</span>
                           <small>${this.t("rawHint")}</small>
@@ -873,6 +979,12 @@ class AmperePointQ22Card extends HTMLElement {
     this.querySelector(".power-button")?.addEventListener("click", () => this.toggleCharging());
     this.querySelector(".current-slider")?.addEventListener("change", (event) => {
       this.setCurrentLimit(event.target.value);
+    });
+    this.querySelector(".charging-mode")?.addEventListener("change", (event) => {
+      this.setChargingMode(event.target.value);
+    });
+    this.querySelector(".target-energy")?.addEventListener("change", (event) => {
+      this.setTargetEnergy(event.target.value);
     });
   }
 
@@ -1122,6 +1234,33 @@ class AmperePointQ22Card extends HTMLElement {
         .control-note ha-icon {
           color: var(--ap-blue);
           flex: 0 0 auto;
+        }
+        .control-fields {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .control-fields label {
+          display: grid;
+          gap: 7px;
+          color: var(--ap-muted);
+          font-size: 12px;
+          font-weight: 750;
+        }
+        .control-fields select, .control-fields input {
+          box-sizing: border-box;
+          width: 100%;
+          min-height: 42px;
+          padding: 9px 11px;
+          color: var(--ap-text);
+          background: rgba(255,255,255,.06);
+          border: 1px solid var(--ap-border);
+          border-radius: 10px;
+        }
+        .number-field {
+          display: flex;
+          align-items: center;
+          gap: 7px;
         }
         .metrics-grid {
           grid-column: 1 / -1;

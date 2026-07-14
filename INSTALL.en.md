@@ -1,7 +1,8 @@
 # Installation
 
-TuyaExtend AmperePoint is a Home Assistant helper integration for AmperePoint EV
-chargers that are already visible through Tuya.
+TuyaExtend AmperePoint is a Home Assistant integration for AmperePoint EV
+chargers. It can use the official Tuya integration directly or consume entities
+from Xtend Tuya, `tuya-local` and LocalTuya. Xtend Tuya is optional.
 
 It does not replace Tuya pairing. Initialize Tuya first, then add this HACS
 integration.
@@ -17,7 +18,10 @@ Settings -> Devices & services -> Add integration -> Tuya
 
 3. Complete the official Tuya login / QR authorization flow.
 4. Confirm that the charger appears in Home Assistant.
-5. Confirm that at least basic Tuya entities are available, for example:
+5. It is enough for the charger and at least one of its entities to appear in
+   Tuya. TuyaExtend reads the remaining supported DPS from the official
+   integration runtime even when Home Assistant did not create entities for
+   them.
 
 ```text
 switch
@@ -28,8 +32,7 @@ work state / connection state
 temperature
 ```
 
-The exact entity list depends on the Tuya product generation and on which DPS
-Tuya exposes through the official API.
+The exact DP list depends on the Tuya product generation and firmware.
 
 If the charger is not visible through the official Tuya integration, install and
 configure Tuya first. TuyaExtend AmperePoint cannot discover a cloud charger that
@@ -142,10 +145,17 @@ current session energy
 total energy
 last session energy
 current limit slider
+charging mode selector
+target energy
 temperature
 fault diagnostics
+system version and a complete raw-DP list
 phase voltage/current/power when DPS are available
 ```
+
+With the official Tuya source, DP18 `switch`, DP4 `charge_cur_set`, DP14
+`work_mode` and DP17 `energy_charge` can be controlled without Xtend Tuya when
+the product marks them writable.
 
 Current session energy can be calculated from:
 
@@ -158,7 +168,11 @@ power integration fallback
 The default for newer Q22 OTA style devices is total-energy delta when a stable
 total counter is available.
 
-## 6. Optional Local Mode
+## 6. Optional Xtend And Local Sources
+
+If Xtend Tuya is already installed, select its device during automatic setup or
+map its entities manually. This remains compatible with earlier configurations,
+but it is not required.
 
 The repository also contains `tuya-local` profile candidates under:
 
@@ -195,9 +209,10 @@ values are not available.
 
 ### Start/stop or current limit does not work
 
-Tuya must expose writable entities for DP18 `switch` and DP4 `charge_cur_set`.
-If the official Tuya integration exposes them as read-only or does not expose
-them at all, TuyaExtend can display values but cannot control them.
+The official Tuya mode does not require a separate source entity. TuyaExtend
+uses the device's writable DP definition. Confirm that the charger is online and
+that the raw-DP view marks the item with `↔`. Xtend/local sources require a
+correctly mapped writable source entity.
 
 ## Security
 

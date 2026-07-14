@@ -20,8 +20,9 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity import EntityCategory
 
-from .const import DOMAIN
+from .const import CONF_SOURCE_RAW_DP, DOMAIN
 from .coordinator import AmperePointCoordinator
 from .entity import AmperePointEntity
 
@@ -109,6 +110,20 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         translation_key="error",
         icon="mdi:alert-circle-outline",
         value_fn=lambda data: data.get("error"),
+    ),
+    AmperePointSensorDescription(
+        key="system_version",
+        translation_key="system_version",
+        icon="mdi:chip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.get("system_version"),
+    ),
+    AmperePointSensorDescription(
+        key="raw_dp",
+        translation_key="raw_dp",
+        icon="mdi:database-search",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.get("raw_dp_count"),
     ),
     AmperePointSensorDescription(
         key="voltage_l1",
@@ -200,7 +215,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: AmperePointCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(AmperePointSensor(coordinator, description) for description in SENSORS)
+    async_add_entities(
+        AmperePointSensor(coordinator, description) for description in SENSORS
+    )
 
 
 class AmperePointSensor(AmperePointEntity, SensorEntity):
@@ -225,3 +242,45 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
         if self.entity_description.key == "tariff":
             return f"{self.coordinator.data.get('currency', '')}/kWh".strip()
         return super().native_unit_of_measurement
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.key != "raw_dp":
+            return None
+
+        raw_dp = self.coordinator.data.get("raw_dp", {})
+        metadata = self.coordinator.data.get("dp_metadata", {})
+        attributes: dict[str, Any] = {
+            "source_type": self.coordinator.data.get("source_type"),
+            "source_online": self.coordinator.data.get("source_online"),
+            "raw_dp": raw_dp,
+            "dp_metadata": metadata,
+        }
+        attributes.update({f"raw_{code}": value for code, value in raw_dp.items()})
+
+        source = self.coordinator.native_source
+        if source is not None:
+            attributes.update(
+                {
+                    "forward_energy_total_kwh": source.scaled("forward_energy_total"),
+                    "power_total_kw": source.scaled("power_total"),
+                    "charge_current_a": source.scaled("charge_cur_set"),
+                    "energy_charge_kwh": source.scaled("energy_charge"),
+                    "temp_current_c": source.scaled("temp_current"),
+                    "charge_energy_once_kwh": source.scaled("charge_energy_once"),
+                }
+            )
+        else:
+            source_entity = self.coordinator._config(CONF_SOURCE_RAW_DP)
+            source_state = (
+                self.hass.states.get(source_entity) if source_entity else None
+            )
+            if source_state is not None:
+                attributes.update(
+                    {
+                        key: value
+                        for key, value in source_state.attributes.items()
+                        if key not in {"friendly_name", "icon"}
+                    }
+                )
+        return attributes

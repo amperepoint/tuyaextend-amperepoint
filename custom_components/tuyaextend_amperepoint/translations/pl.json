@@ -48,6 +48,8 @@
           "session_energy_mode": "Tryb liczenia energii sesji",
           "source_current_limit": "Encja limitu pradu",
           "source_charge_switch": "Encja start/stop",
+          "source_work_mode": "Encja trybu ladowania",
+          "source_target_energy": "Encja energii docelowej",
           "source_error": "Encja bledu",
           "source_temperature": "Encja temperatury",
           "tariff_value": "Stawka energii",
@@ -97,6 +99,8 @@
           "session_energy_mode": "Tryb liczenia energii sesji",
           "source_current_limit": "Encja limitu pradu",
           "source_charge_switch": "Encja start/stop",
+          "source_work_mode": "Encja trybu ladowania",
+          "source_target_energy": "Encja energii docelowej",
           "source_error": "Encja bledu",
           "source_temperature": "Encja temperatury",
           "tariff_value": "Stawka energii",
@@ -141,20 +145,24 @@
       "current_l3": { "name": "Prad L3" },
       "power_l1": { "name": "Moc L1" },
       "power_l2": { "name": "Moc L2" },
-      "power_l3": { "name": "Moc L3" }
+      "power_l3": { "name": "Moc L3" },
+      "system_version": { "name": "Wersja systemu" },
+      "raw_dp": { "name": "Surowe datapointy" }
     },
     "binary_sensor": {
       "vehicle_connected": { "name": "Auto podlaczone" },
       "charging_complete": { "name": "Ladowanie zakonczone" }
     },
     "number": {
-      "current_limit": { "name": "Limit pradu" }
+      "current_limit": { "name": "Limit prądu" },
+      "target_energy": { "name": "Energia docelowa" }
     },
     "select": {
-      "model": { "name": "Model" }
+      "model": { "name": "Model" },
+      "charging_mode": { "name": "Tryb ładowania" }
     },
     "switch": {
-      "charging": { "name": "Ladowanie" }
+      "charging": { "name": "Ladowanie wlaczone" }
     }
   }
 }

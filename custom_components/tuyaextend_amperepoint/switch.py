@@ -23,8 +23,10 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: AmperePointCoordinator = hass.data[DOMAIN][entry.entry_id]
-    if entry.options.get(CONF_SOURCE_CHARGE_SWITCH) or entry.data.get(
-        CONF_SOURCE_CHARGE_SWITCH
+    if (
+        entry.options.get(CONF_SOURCE_CHARGE_SWITCH)
+        or entry.data.get(CONF_SOURCE_CHARGE_SWITCH)
+        or coordinator.can_write_dp("switch")
     ):
         async_add_entities([AmperePointChargingSwitch(coordinator)])
 
@@ -34,8 +36,8 @@ class AmperePointChargingSwitch(AmperePointEntity, SwitchEntity):
         super().__init__(coordinator, CHARGING_DESCRIPTION)
 
     @property
-    def is_on(self) -> bool:
-        return bool(self.coordinator.data.get("charging"))
+    def is_on(self) -> bool | None:
+        return self.coordinator.data.get("switch_enabled")
 
     async def async_turn_on(self, **kwargs) -> None:
         await self.coordinator.async_set_charging(True)
