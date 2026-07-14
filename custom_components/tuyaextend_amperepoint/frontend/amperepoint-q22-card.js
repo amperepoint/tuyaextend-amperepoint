@@ -14,6 +14,7 @@ const AP_Q22_I18N = {
     modeChargeNow: "Charge now",
     modeChargeEnergy: "Charge to energy target",
     modeChargeSchedule: "Scheduled charging",
+    modePending: "Waiting for confirmation from Tuya…",
     daily: "Today",
     dataNote: "Control changes are sent through Home Assistant to the charger. Session energy is calculated from the total energy delta.",
     deviceState: "Device state",
@@ -45,7 +46,10 @@ const AP_Q22_I18N = {
     status: "Status",
     stop: "Stop",
     targetEnergy: "Target energy",
-    scheduleTime: "Scheduled start time",
+    scheduleStartTime: "From",
+    scheduleEndTime: "Until",
+    scheduleOvernight: "The window ends the following day.",
+    scheduleWholeHours: "The charger supports full hours only.",
     scheduleTitle: "Charger schedule",
     scheduleFallback: "This charger reports a device-specific raw schedule. Configure it in Tuya Smart or Smart Life until its format is recognized.",
     temperature: "Temperature",
@@ -66,6 +70,7 @@ const AP_Q22_I18N = {
     modeChargeNow: "Ładuj teraz",
     modeChargeEnergy: "Do zadanej energii",
     modeChargeSchedule: "Według harmonogramu",
+    modePending: "Oczekiwanie na potwierdzenie z Tuya…",
     daily: "Dzisiaj",
     dataNote: "Zmiany sterowania są wysyłane przez HA do ładowarki. Energia sesji jest liczona z delty licznika całkowitego.",
     deviceState: "Stan urządzenia",
@@ -97,7 +102,10 @@ const AP_Q22_I18N = {
     status: "Status",
     stop: "Stop",
     targetEnergy: "Energia docelowa",
-    scheduleTime: "Godzina rozpoczęcia",
+    scheduleStartTime: "Od",
+    scheduleEndTime: "Do",
+    scheduleOvernight: "Okno kończy się następnego dnia.",
+    scheduleWholeHours: "Ładowarka obsługuje tylko pełne godziny.",
     scheduleTitle: "Harmonogram ładowarki",
     scheduleFallback: "Ta ładowarka raportuje harmonogram w nierozpoznanym formacie. Ustaw go w Tuya Smart lub Smart Life.",
     temperature: "Temperatura",
@@ -351,6 +359,14 @@ class AmperePointQ22Card extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     this.applyAutoEntities();
+    const modeEntity = this.config?.entities?.chargingMode;
+    if (
+      this._pendingChargingMode &&
+      modeEntity &&
+      hass.states?.[modeEntity]?.state === this._pendingChargingMode
+    ) {
+      this.clearPendingChargingMode();
+    }
     this.render();
   }
 
@@ -376,7 +392,8 @@ class AmperePointQ22Card extends HTMLElement {
       currentLimit: { domains: ["number", "input_number"], any: ["current limit", "current_limit", "charging current", "charging_current", "charge cur set", "charge_cur_set", "limit pradu"], not: ["current_l1", "current_l2", "current_l3"] },
       targetEnergy: { domains: ["number", "input_number"], any: ["target energy", "target_energy", "energy charge", "energy_charge", "energia docelowa"], not: [] },
       chargingMode: { domains: ["select"], any: ["charging mode", "charging_mode", "work mode", "work_mode", "tryb ladowania"], not: [] },
-      scheduleTime: { domains: ["time"], any: ["scheduled start time", "schedule_time", "zaplanowana godzina startu", "harmonogram"], not: [] },
+      scheduleStartTime: { domains: ["time"], any: ["schedule starts", "schedule_start_time", "poczatek harmonogramu", "schedule_time"], not: ["end", "koniec"] },
+      scheduleEndTime: { domains: ["time"], any: ["schedule ends", "schedule_end_time", "koniec harmonogramu"], not: [] },
       status: { domains: ["sensor"], any: [" status", "_status", "work state", "work_state", "status czytelny"], not: ["connection", "cp"] },
       cp: { domains: ["binary_sensor", "sensor"], any: ["vehicle connected", "vehicle_connected", "connection state", "connection_state", "controlpi", "control pilot", " cp", "_cp"], not: [] },
       faults: { domains: ["sensor", "binary_sensor"], any: [" error", "_error", " fault", "_fault", " bled", "_bled"], not: [] },
@@ -598,7 +615,26 @@ class AmperePointQ22Card extends HTMLElement {
   async setChargingMode(value) {
     const entityId = this.config.entities.chargingMode;
     if (!this.hasEntity(entityId)) return;
-    await this._hass.callService("select", "select_option", { entity_id: entityId, option: value });
+    this._pendingChargingMode = value;
+    clearTimeout(this._pendingChargingModeTimer);
+    this._pendingChargingModeTimer = setTimeout(() => {
+      this.clearPendingChargingMode();
+      this.render();
+    }, 30_000);
+    this.render();
+    try {
+      await this._hass.callService("select", "select_option", { entity_id: entityId, option: value });
+    } catch (error) {
+      this.clearPendingChargingMode();
+      this.render();
+      throw error;
+    }
+  }
+
+  clearPendingChargingMode() {
+    this._pendingChargingMode = null;
+    clearTimeout(this._pendingChargingModeTimer);
+    this._pendingChargingModeTimer = null;
   }
 
   async setTargetEnergy(value) {
@@ -607,8 +643,7 @@ class AmperePointQ22Card extends HTMLElement {
     await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
   }
 
-  async setScheduleTime(value) {
-    const entityId = this.config.entities.scheduleTime;
+  async setScheduleBoundary(entityId, value) {
     if (!this.hasEntity(entityId) || !value) return;
     await this._hass.callService("time", "set_value", { entity_id: entityId, time: `${value}:00` });
   }
@@ -813,14 +848,21 @@ class AmperePointQ22Card extends HTMLElement {
     const chargingModeEntity = this.stateObj(e.chargingMode);
     const hasChargingMode = this.hasEntity(e.chargingMode);
     const chargingModes = chargingModeEntity?.attributes?.options || [];
-    const chargingMode = this.state(e.chargingMode, "charge_now");
+    const chargingMode = this._pendingChargingMode || this.state(e.chargingMode, "charge_now");
     const chargingModeKind = this.chargingModeKind(chargingMode);
     const targetEnergyEntity = this.stateObj(e.targetEnergy);
     const hasTargetEnergy = this.hasEntity(e.targetEnergy);
     const showTargetEnergy = hasTargetEnergy && chargingModeKind === "energy";
-    const hasScheduleTime = this.hasEntity(e.scheduleTime);
+    const scheduleStartEntity = e.scheduleStartTime || e.scheduleTime;
+    const scheduleEndEntity = e.scheduleEndTime;
+    const hasScheduleStart = this.hasEntity(scheduleStartEntity);
+    const hasScheduleEnd = this.hasEntity(scheduleEndEntity);
+    const hasScheduleWindow = hasScheduleStart && hasScheduleEnd;
     const showSchedule = hasChargingMode && chargingModeKind === "schedule";
-    const scheduleTime = hasScheduleTime ? String(this.state(e.scheduleTime)).slice(0, 5) : "";
+    const scheduleStartTime = hasScheduleStart ? String(this.state(scheduleStartEntity)).slice(0, 5) : "";
+    const scheduleEndTime = hasScheduleEnd ? String(this.state(scheduleEndEntity)).slice(0, 5) : "";
+    const scheduleCrossesMidnight =
+      hasScheduleWindow && Number(scheduleEndTime.slice(0, 2)) < Number(scheduleStartTime.slice(0, 2));
     const current = this.num(e.currentLimit, 6);
     const minCurrent = Number(currentEntity?.attributes?.min ?? 6);
     const maxCurrent = Number(currentEntity?.attributes?.max ?? 32);
@@ -887,7 +929,7 @@ class AmperePointQ22Card extends HTMLElement {
           <div class="control-fields ${showTargetEnergy ? "" : "single"}">
             ${
               hasChargingMode
-                ? `<label><span>${this.t("chargingMode")}</span><select class="charging-mode">${chargingModes
+                ? `<label><span>${this.t("chargingMode")}</span><select class="charging-mode" ${this._pendingChargingMode ? "disabled" : ""}>${chargingModes
                     .map((option) => `<option value="${this.escape(option)}" ${option === chargingMode ? "selected" : ""}>${this.escape(this.chargingModeLabel(option))}</option>`)
                     .join("")}</select></label>`
                 : ""
@@ -898,6 +940,7 @@ class AmperePointQ22Card extends HTMLElement {
                 : ""
             }
           </div>
+          ${this._pendingChargingMode ? `<div class="mode-pending">${this.icon("mdi:cloud-sync")} ${this.t("modePending")}</div>` : ""}
           ${
             showSchedule
               ? `<div class="schedule-card">
@@ -905,8 +948,13 @@ class AmperePointQ22Card extends HTMLElement {
                   <div>
                     <strong>${this.t("scheduleTitle")}</strong>
                     ${
-                      hasScheduleTime
-                        ? `<label><span>${this.t("scheduleTime")}</span><input class="schedule-time" type="time" value="${this.escape(scheduleTime)}" /></label>`
+                      hasScheduleWindow
+                        ? `<div class="schedule-window">
+                            <label><span>${this.t("scheduleStartTime")}</span><input class="schedule-start-time" type="time" step="3600" value="${this.escape(scheduleStartTime)}" /></label>
+                            <label><span>${this.t("scheduleEndTime")}</span><input class="schedule-end-time" type="time" step="3600" value="${this.escape(scheduleEndTime)}" /></label>
+                          </div>
+                          <span>${this.t("scheduleWholeHours")}</span>
+                          ${scheduleCrossesMidnight ? `<span class="schedule-overnight">${this.t("scheduleOvernight")}</span>` : ""}`
                         : `<span>${this.t("scheduleFallback")}</span>`
                     }
                   </div>
@@ -1040,8 +1088,11 @@ class AmperePointQ22Card extends HTMLElement {
     this.querySelector(".target-energy")?.addEventListener("change", (event) => {
       this.setTargetEnergy(event.target.value);
     });
-    this.querySelector(".schedule-time")?.addEventListener("change", (event) => {
-      this.setScheduleTime(event.target.value);
+    this.querySelector(".schedule-start-time")?.addEventListener("change", (event) => {
+      this.setScheduleBoundary(this.config.entities.scheduleStartTime || this.config.entities.scheduleTime, event.target.value);
+    });
+    this.querySelector(".schedule-end-time")?.addEventListener("change", (event) => {
+      this.setScheduleBoundary(this.config.entities.scheduleEndTime, event.target.value);
     });
   }
 
@@ -1325,6 +1376,13 @@ class AmperePointQ22Card extends HTMLElement {
         .control-fields.single {
           grid-template-columns: 1fr;
         }
+        .mode-pending {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--ap-blue);
+          font-size: 12px;
+        }
         .schedule-card {
           display: grid;
           grid-template-columns: auto minmax(0, 1fr);
@@ -1351,6 +1409,15 @@ class AmperePointQ22Card extends HTMLElement {
           display: grid;
           gap: 7px;
           margin-top: 10px;
+        }
+        .schedule-window {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 220px));
+          gap: 10px;
+        }
+        .schedule-card .schedule-overnight {
+          color: var(--ap-orange);
+          font-weight: 700;
         }
         .schedule-card input {
           box-sizing: border-box;
@@ -1571,6 +1638,9 @@ class AmperePointQ22Card extends HTMLElement {
           .control-fields {
             grid-template-columns: 1fr;
           }
+          .schedule-window {
+            grid-template-columns: 1fr;
+          }
           .control-card .card-title {
             align-items: stretch;
             flex-direction: column;
@@ -1612,7 +1682,7 @@ class AmperePointQ22Card extends HTMLElement {
           .hero-status {
             align-items: flex-start;
           }
-          .metrics-grid, .control-fields {
+          .metrics-grid, .control-fields, .schedule-window {
             grid-template-columns: 1fr;
           }
           .control-card .card-title {
