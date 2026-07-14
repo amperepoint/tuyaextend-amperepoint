@@ -994,6 +994,8 @@ class AmperePointQ22Card extends HTMLElement {
       this._style.textContent = `
         amperepoint-q22-card {
           display: block;
+          container-type: inline-size;
+          container-name: amperepoint-card;
         }
         .app {
           --ap-bg: #101214;
@@ -1114,7 +1116,8 @@ class AmperePointQ22Card extends HTMLElement {
         }
         .gauge {
           position: relative;
-          width: min(260px, 70vw);
+          width: min(260px, 100%);
+          justify-self: center;
           aspect-ratio: 1;
           display: grid;
           place-items: center;
@@ -1467,8 +1470,67 @@ class AmperePointQ22Card extends HTMLElement {
           .metrics-grid {
             grid-template-columns: 1fr;
           }
-          .gauge {
-            margin: 0 auto;
+          .control-fields {
+            grid-template-columns: 1fr;
+          }
+          .control-card .card-title {
+            align-items: stretch;
+            flex-direction: column;
+          }
+          .power-button {
+            width: 100%;
+          }
+          .diagnostics summary {
+            align-items: flex-start;
+            flex-wrap: wrap;
+          }
+          .diagnostics summary small {
+            flex: 1 0 100%;
+            overflow-wrap: anywhere;
+          }
+          .status-row {
+            grid-template-columns: 36px minmax(0, 1fr);
+          }
+          .status-row strong {
+            grid-column: 2;
+            text-align: left;
+          }
+        }
+        @container amperepoint-card (max-width: 1100px) {
+          .dashboard, .content-grid, .power-card {
+            grid-template-columns: 1fr;
+          }
+          .metrics-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+        @container amperepoint-card (max-width: 680px) {
+          .app {
+            padding: 14px;
+          }
+          .hero {
+            grid-template-columns: 1fr;
+          }
+          .hero-status {
+            align-items: flex-start;
+          }
+          .metrics-grid, .control-fields {
+            grid-template-columns: 1fr;
+          }
+          .control-card .card-title {
+            align-items: stretch;
+            flex-direction: column;
+          }
+          .power-button {
+            width: 100%;
+          }
+          .diagnostics summary {
+            align-items: flex-start;
+            flex-wrap: wrap;
+          }
+          .diagnostics summary small {
+            flex: 1 0 100%;
+            overflow-wrap: anywhere;
           }
           .status-row {
             grid-template-columns: 36px minmax(0, 1fr);
