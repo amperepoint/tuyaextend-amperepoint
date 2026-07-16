@@ -176,6 +176,55 @@ def planner_events(
     return sorted(events, key=lambda event: event["at"])
 
 
+def planner_transitions(
+    windows: list[dict[str, Any]], now: datetime, *, days_ahead: int = 8
+) -> list[dict[str, Any]]:
+    """Derive the effective plan actions from all interval boundaries.
+
+    Merged blocks describe start/stop continuity, but inside a block the
+    winning interval can change the current limit (for example an outer
+    10:00-12:00 at 10 A with a higher-priority 10:30-11:00 at 16 A). The
+    transitions therefore include ``set_current`` actions whenever the
+    winning interval changes the current, in addition to block ``start``
+    and ``stop``.
+    """
+    boundaries = sorted(
+        {
+            boundary
+            for start, end, _window in _occurrences(
+                windows, now, days_ahead=days_ahead
+            )
+            for boundary in (start, end)
+        }
+    )
+    transitions: list[dict[str, Any]] = []
+    previous_current: float | None = None
+    for boundary in boundaries:
+        winner = active_window(windows, boundary)
+        current = float(winner["current_a"]) if winner else None
+        if current == previous_current:
+            continue
+        if previous_current is None:
+            transitions.append(
+                {"action": "start", "at": boundary, "current_a": current}
+            )
+        elif current is None:
+            transitions.append({"action": "stop", "at": boundary})
+        else:
+            transitions.append(
+                {"action": "set_current", "at": boundary, "current_a": current}
+            )
+        previous_current = current
+    return [transition for transition in transitions if transition["at"] > now]
+
+
+def next_transition(
+    windows: list[dict[str, Any]], now: datetime
+) -> dict[str, Any] | None:
+    transitions = planner_transitions(windows, now)
+    return transitions[0] if transitions else None
+
+
 def next_event(windows: list[dict[str, Any]], now: datetime) -> dict[str, Any] | None:
     events = planner_events(windows, now)
     return events[0] if events else None

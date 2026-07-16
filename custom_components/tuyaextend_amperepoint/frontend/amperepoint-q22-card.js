@@ -1039,10 +1039,17 @@ class AmperePointQ22Card extends HTMLElement {
     const next = attributes.next_action;
     return {
       label: this.t("plannerWeeklyNext"),
-      text: next
-        ? `${this.t(next.action === "start" ? "plannerStartAction" : "plannerStopAction")} · ${this.formatPlannerDate(next.at)}`
-        : this.t("plannerNoNext"),
+      text: next ? `${this.plannerNextActionText(next)} · ${this.formatPlannerDate(next.at)}` : this.t("plannerNoNext"),
     };
+  }
+
+  plannerNextActionText(next) {
+    if (next.action === "start") return this.t("plannerStartAction");
+    if (next.action === "set_current") {
+      const current = Number(next.current_a);
+      return `${this.t("plannerCommandSetCurrent")}${Number.isFinite(current) ? ` ${current} A` : ""}`;
+    }
+    return this.t("plannerStopAction");
   }
 
   plannerOverrideBanner(override) {
