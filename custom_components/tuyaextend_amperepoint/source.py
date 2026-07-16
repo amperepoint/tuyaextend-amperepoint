@@ -149,10 +149,19 @@ class NativeTuyaSource:
         if not self.writable(code):
             raise HomeAssistantError(f"Tuya DP code is not writable: {code}")
         definition = self.definition(code)
-        scale = definition.get("scale") or 0
         encoded = value
-        if isinstance(value, int | float) and not isinstance(value, bool) and scale:
-            encoded = round(value * (10**scale))
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            scale = definition.get("scale") or 0
+            scaled = float(value) * (10**scale)
+            minimum = definition.get("min")
+            maximum = definition.get("max")
+            if isinstance(minimum, int | float):
+                scaled = max(scaled, float(minimum))
+            if isinstance(maximum, int | float):
+                scaled = min(scaled, float(maximum))
+            # Tuya numeric DPS are integers; fractional JSON values are
+            # rejected by the cloud with "network error" (2008).
+            encoded = int(round(scaled))
         await self.hass.async_add_executor_job(
             self.manager.send_commands,
             self.device.id,
