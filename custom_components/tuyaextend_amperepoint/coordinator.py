@@ -227,6 +227,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "phase_c",
             ),
         ]
+        phases = _filter_loaded_phases(phases)
         phase_voltages = [phase.get("voltage") for phase in phases]
         phase_currents = [phase.get("current") for phase in phases]
         phase_powers = [phase.get("power") for phase in phases]
@@ -751,6 +752,48 @@ def _convert_unit(value: float, unit: str | None, kind: str) -> float:
         return value
 
     return value
+
+
+PHASE_MIN_CURRENT_A = 1.0
+PHASE_MIN_POWER_KW = 0.23
+PHASE_RELATIVE_SHARE = 0.3
+
+
+def _filter_loaded_phases(
+    phases: list[dict[str, float | None]],
+) -> list[dict[str, float | None]]:
+    """Expose only phases that carry real load.
+
+    Phase measurements should appear once charging draws current. Idle
+    chargers report zero or residual values, and three-phase chargers can
+    report small phantom readings on unloaded phases during minimal
+    single-phase charging, which made three phases pop up on a single-phase
+    session. A phase is exposed only while its reading is meaningful both in
+    absolute terms and relative to the strongest phase.
+    """
+    currents = [phase.get("current") or 0.0 for phase in phases]
+    powers = [phase.get("power") or 0.0 for phase in phases]
+    max_current = max(currents)
+    max_power = max(powers)
+
+    filtered: list[dict[str, float | None]] = []
+    for phase, current, power in zip(phases, currents, powers):
+        if phase.get("current") is not None:
+            loaded = (
+                current >= PHASE_MIN_CURRENT_A
+                and current >= PHASE_RELATIVE_SHARE * max_current
+            )
+        elif phase.get("power") is not None:
+            loaded = (
+                power >= PHASE_MIN_POWER_KW
+                and power >= PHASE_RELATIVE_SHARE * max_power
+            )
+        else:
+            loaded = False
+        filtered.append(
+            phase if loaded else {"voltage": None, "current": None, "power": None}
+        )
+    return filtered
 
 
 def _decode_phase_payload(value: Any) -> dict[str, float] | None:
