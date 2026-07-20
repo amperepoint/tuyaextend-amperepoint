@@ -67,11 +67,16 @@ def install_homeassistant_stubs() -> None:
         return
 
     ha = _module("homeassistant", _ap_test_stub=True)
-    _module("homeassistant.config_entries", ConfigEntry=object)
+    _module(
+        "homeassistant.config_entries",
+        ConfigEntry=object,
+        SOURCE_INTEGRATION_DISCOVERY="integration_discovery",
+    )
     _module("homeassistant.core", HomeAssistant=object, callback=lambda func: func)
     _module("homeassistant.exceptions", HomeAssistantError=HomeAssistantError)
     _module(
         "homeassistant.const",
+        CONF_ICON="icon",
         ATTR_UNIT_OF_MEASUREMENT="unit_of_measurement",
         PERCENTAGE="%",
         UnitOfElectricCurrent=types.SimpleNamespace(MILLIAMPERE="mA", AMPERE="A"),
@@ -91,14 +96,17 @@ def install_homeassistant_stubs() -> None:
     helpers.device_registry = _module(
         "homeassistant.helpers.device_registry", async_get=lambda _hass: None
     )
+    helpers.entity_registry = _module(
+        "homeassistant.helpers.entity_registry", async_get=lambda _hass: None
+    )
     helpers.storage = _module("homeassistant.helpers.storage", Store=_Store)
     helpers.dispatcher = _module(
         "homeassistant.helpers.dispatcher",
-        async_dispatcher_connect=lambda *_args, **_kwargs: (lambda: None),
+        async_dispatcher_connect=lambda *_args, **_kwargs: lambda: None,
     )
     helpers.event = _module(
         "homeassistant.helpers.event",
-        async_track_time_change=lambda *_args, **_kwargs: (lambda: None),
+        async_track_time_change=lambda *_args, **_kwargs: lambda: None,
     )
     helpers.update_coordinator = _module(
         "homeassistant.helpers.update_coordinator",
@@ -116,6 +124,31 @@ def install_homeassistant_stubs() -> None:
     ha.util = util
 
     components = _module("homeassistant.components")
+    components.frontend = _module(
+        "homeassistant.components.frontend",
+        async_register_built_in_panel=lambda *_args, **_kwargs: None,
+        async_remove_panel=lambda *_args, **_kwargs: None,
+    )
+    lovelace = _module("homeassistant.components.lovelace")
+
+    class _ConfigNotFound(Exception):
+        pass
+
+    class _LovelaceStorage:
+        pass
+
+    lovelace.dashboard = _module(
+        "homeassistant.components.lovelace.dashboard",
+        LovelaceStorage=_LovelaceStorage,
+    )
+    lovelace.const = _module(
+        "homeassistant.components.lovelace.const",
+        ConfigNotFound=_ConfigNotFound,
+        CONF_TITLE="title",
+        LOVELACE_DATA="lovelace",
+        MODE_STORAGE="storage",
+    )
+    components.lovelace = lovelace
     tuya = _module("homeassistant.components.tuya")
     tuya.const = _module(
         "homeassistant.components.tuya.const",

@@ -15,6 +15,7 @@ from homeassistant.components.lovelace.const import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_ICON
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN, VERSION
 
@@ -27,6 +28,53 @@ DASHBOARD_STORAGE_ID = "amperepoint_panel"
 DASHBOARD_TITLE = "AmperePoint"
 DASHBOARD_ICON = "mdi:ev-station"
 SETTINGS_PATH = f"/config/integrations/integration/{DOMAIN}"
+
+_CARD_ENTITY_KEYS = {
+    "charging": "switch",
+    "current_limit": "currentLimit",
+    "target_energy": "targetEnergy",
+    "charging_mode": "chargingMode",
+    "schedule_time": "scheduleStartTime",
+    "schedule_end_time": "scheduleEndTime",
+    "planner": "planner",
+    "status": "status",
+    "vehicle_connected": "cp",
+    "error": "faults",
+    "power": "power",
+    "session_energy": "sessionEnergy",
+    "total_energy": "totalEnergy",
+    "last_session_energy": "lastSessionDp25",
+    "temperature": "temperature",
+    "system_version": "systemVersion",
+    "raw_dp": "rawDp",
+    "phase_count": "phaseCount",
+    "voltage_l1": "l1Voltage",
+    "voltage_l2": "l2Voltage",
+    "voltage_l3": "l3Voltage",
+    "current_l1": "l1Current",
+    "current_l2": "l2Current",
+    "current_l3": "l3Current",
+    "power_l1": "l1Power",
+    "power_l2": "l2Power",
+    "power_l3": "l3Power",
+}
+
+
+def _card_entities(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, str]:
+    """Return the exact entity mapping generated for a legacy entry panel."""
+    registry = er.async_get(hass)
+    prefix = f"{entry.entry_id}_"
+    entities: dict[str, str] = {}
+    for registry_entry in registry.entities.values():
+        if registry_entry.config_entry_id != entry.entry_id:
+            continue
+        unique_id = registry_entry.unique_id
+        if not unique_id.startswith(prefix):
+            continue
+        key = unique_id.removeprefix(prefix)
+        if card_key := _CARD_ENTITY_KEYS.get(key):
+            entities[card_key] = registry_entry.entity_id
+    return entities
 
 
 def _dashboard_config() -> dict[str, Any]:
@@ -52,7 +100,9 @@ def _dashboard_config() -> dict[str, Any]:
     }
 
 
-def _is_generated_legacy_dashboard(config: Any, entry: ConfigEntry) -> bool:
+def _is_generated_legacy_dashboard(
+    config: Any, entry: ConfigEntry, expected_entities: dict[str, str]
+) -> bool:
     """Return whether a legacy dashboard still has the generated shape.
 
     Older releases promised to preserve user dashboard edits.  We can safely
@@ -90,7 +140,7 @@ def _is_generated_legacy_dashboard(config: Any, entry: ConfigEntry) -> bool:
         return False
     if card.get("type") != "custom:amperepoint-q22-card":
         return False
-    return set(card).issubset(
+    if not set(card).issubset(
         {
             "type",
             "entities",
@@ -98,7 +148,15 @@ def _is_generated_legacy_dashboard(config: Any, entry: ConfigEntry) -> bool:
             "dashboardVersion",
             "settingsPath",
         }
-    ) and isinstance(card.get("entities", {}), dict)
+    ):
+        return False
+    if card.get("entities", {}) != expected_entities:
+        return False
+    if card.get("configEntryId", entry.entry_id) != entry.entry_id:
+        return False
+    if card.get("settingsPath", SETTINGS_PATH) != SETTINGS_PATH:
+        return False
+    return True
 
 
 async def _async_remove_legacy_dashboard(
@@ -115,7 +173,9 @@ async def _async_remove_legacy_dashboard(
         config = await legacy.async_load(False)
     except ConfigNotFound:
         config = None
-    if config is not None and not _is_generated_legacy_dashboard(config, entry):
+    if config is not None and not _is_generated_legacy_dashboard(
+        config, entry, _card_entities(hass, entry)
+    ):
         _LOGGER.warning(
             "Preserving customized legacy AmperePoint dashboard at /%s", url_path
         )

@@ -1,6 +1,6 @@
 # Installation
 
-TuyaExtend AmperePoint is a Home Assistant integration for AmperePoint EV
+AmperePoint is a Home Assistant integration for AmperePoint EV
 chargers. It can use the official Tuya integration directly or consume entities
 from Xtend Tuya, `tuya-local` and LocalTuya. Xtend Tuya is optional.
 
@@ -69,7 +69,7 @@ Settings -> Devices & services -> Add integration
 2. Search for:
 
 ```text
-TuyaExtend AmperePoint
+AmperePoint
 ```
 
 3. On the welcome screen, choose automatic setup or manual entity mapping.
@@ -81,6 +81,10 @@ and adopts the remaining detected Tuya chargers as additional entries. Every
 charger appears in the device selector on the panel. Chargers can also be
 added manually from the integration page - that never creates another panel,
 it only adds the device to the selector.
+
+When upgrading from an older version, the integration removes only an
+unchanged dashboard that it generated for a charger. If you edited that legacy
+dashboard, it is kept so your Lovelace changes are not lost.
 
 The integration detects Q Series models from the Tuya device name, model and
 product metadata. If the charger is not detected, rename the Tuya/Home Assistant

@@ -19,7 +19,7 @@
       },
       "settings": {
         "title": "Dokończ konfigurację",
-        "description": "Ustaw taryfę ładowania i zdecyduj, czy utworzyć gotowy panel AmperePoint na pasku bocznym.",
+        "description": "Ustaw taryfę ładowania i parametry wykrywania końca sesji. Wspólny panel AmperePoint jest tworzony automatycznie.",
         "data": {
           "tariff_value": "Stawka energii",
           "currency": "Waluta",

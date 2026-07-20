@@ -68,7 +68,7 @@ Ustawienia -> Urządzenia i usługi -> Dodaj integrację
 2. Wyszukaj:
 
 ```text
-TuyaExtend AmperePoint
+AmperePoint
 ```
 
 3. Na ekranie powitalnym wybierz konfigurację automatyczną albo ręczne
@@ -81,6 +81,10 @@ bocznym i sama przejmuje pozostałe wykryte ładowarki Tuya jako kolejne wpisy.
 Każda ładowarka pojawia się na liście rozwijanej na panelu. Kolejne
 urządzenia można też dodawać ręcznie z poziomu integracji — nie tworzy to
 nowych paneli, tylko dopisuje urządzenie do listy.
+
+Przy aktualizacji integracja usuwa tylko niezmieniony panel, który starsza
+wersja wygenerowała dla ładowarki. Jeśli panel był ręcznie edytowany, zostaje
+zachowany, aby nie utracić zmian Lovelace.
 
 Integracja wykrywa modele Q Series na podstawie nazwy urządzenia Tuya, modelu i
 metadanych produktu. Jeśli ładowarka nie zostanie wykryta, zmień nazwę

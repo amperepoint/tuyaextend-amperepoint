@@ -19,7 +19,7 @@
       },
       "settings": {
         "title": "Finish setup",
-        "description": "Set the charging tariff and choose whether to create a ready-to-use AmperePoint dashboard in the sidebar.",
+        "description": "Set the charging tariff and session-completion settings. A shared AmperePoint dashboard is created automatically.",
         "data": {
           "tariff_value": "Energy tariff",
           "currency": "Currency",

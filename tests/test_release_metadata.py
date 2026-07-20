@@ -28,7 +28,9 @@ class ReleaseMetadataTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        backend_version = re.search(r'^VERSION = "([^"]+)"$', const_source, re.MULTILINE)
+        backend_version = re.search(
+            r'^VERSION = "([^"]+)"$', const_source, re.MULTILINE
+        )
         dashboard_version = re.search(
             r'^const AP_Q22_DASHBOARD_VERSION = "([^"]+)";',
             card_source,
