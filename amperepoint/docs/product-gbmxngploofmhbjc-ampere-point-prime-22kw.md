@@ -14,6 +14,10 @@ The initial cloud integration exposed only light-like capabilities, so it is
 not a useful source of the charger DP map. Direct authenticated LAN status
 queries were used instead.
 
+> **Data availability:** the DP values documented here are available only
+> when this product is connected through `tuya-local`. The standard Home
+> Assistant Tuya cloud integration does not expose this local charger telemetry.
+
 ## Confirmed local DP set
 
 Direct LAN discovery and forced status reads returned these DPS:
