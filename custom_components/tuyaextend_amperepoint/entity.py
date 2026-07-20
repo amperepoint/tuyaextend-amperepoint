@@ -29,10 +29,12 @@ class AmperePointEntity(CoordinatorEntity[AmperePointCoordinator]):
 
     @property
     def device_info(self) -> DeviceInfo:
+        # The entry title distinguishes chargers of the same model, so the
+        # panel's device selector shows a unique name per charger.
         return DeviceInfo(
             identifiers={(DOMAIN, self.coordinator.config_entry.entry_id)},
             manufacturer="Ampere Point",
-            name=self.coordinator.model.name,
+            name=self.coordinator.config_entry.title or self.coordinator.model.name,
             model=self.coordinator.model.name,
         )
 

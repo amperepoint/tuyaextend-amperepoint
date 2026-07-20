@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Welcome to TuyaExtend AmperePoint",
+        "title": "Welcome to AmperePoint",
         "description": "{count} compatible Tuya charger(s) were detected. Choose automatic setup, or map entities manually.",
         "menu_options": {
           "automatic": "Set up a detected charger",
@@ -24,15 +24,12 @@
           "tariff_value": "Energy tariff",
           "currency": "Currency",
           "complete_power_threshold_kw": "Complete detection threshold",
-          "complete_idle_minutes": "Complete detection idle minutes",
-          "create_dashboard": "Create an AmperePoint dashboard"
+          "complete_idle_minutes": "Complete detection idle minutes"
         },
-        "data_description": {
-          "create_dashboard": "Creates a separate dashboard without changing any of your existing dashboards."
-        }
+        "data_description": {}
       },
       "manual": {
-        "title": "TuyaExtend AmperePoint",
+        "title": "AmperePoint",
         "description": "Select a charger model and map the available source entities. Fields for unavailable datapoints may be left empty.",
         "data": {
           "source_device_id": "Detected Tuya charger",
@@ -57,7 +54,6 @@
           "currency": "Currency",
           "complete_power_threshold_kw": "Complete detection threshold",
           "complete_idle_minutes": "Complete detection idle minutes",
-          "create_dashboard": "Create an AmperePoint dashboard",
           "source_voltage_l1": "Voltage L1 entity",
           "source_voltage_l2": "Voltage L2 entity",
           "source_voltage_l3": "Voltage L3 entity",
@@ -83,7 +79,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "TuyaExtend AmperePoint options",
+        "title": "AmperePoint options",
         "description": "Update model, source entity mapping and tariff settings.",
         "data": {
           "source_device_id": "Detected Tuya charger",
@@ -108,7 +104,6 @@
           "currency": "Currency",
           "complete_power_threshold_kw": "Complete detection threshold",
           "complete_idle_minutes": "Complete detection idle minutes",
-          "create_dashboard": "Create an AmperePoint dashboard",
           "source_voltage_l1": "Voltage L1 entity",
           "source_voltage_l2": "Voltage L2 entity",
           "source_voltage_l3": "Voltage L3 entity",
@@ -127,47 +122,109 @@
   },
   "entity": {
     "sensor": {
-      "status": { "name": "Status" },
-      "power": { "name": "Power" },
-      "session_energy": { "name": "Session energy" },
-      "total_energy": { "name": "Total energy" },
-      "last_session_energy": { "name": "Last session energy" },
-      "temperature": { "name": "Temperature" },
-      "session_cost": { "name": "Session cost" },
-      "tariff": { "name": "Tariff" },
-      "phase_count": { "name": "Phase count" },
-      "error": { "name": "Error" },
-      "voltage_l1": { "name": "Voltage L1" },
-      "voltage_l2": { "name": "Voltage L2" },
-      "voltage_l3": { "name": "Voltage L3" },
-      "current_l1": { "name": "Current L1" },
-      "current_l2": { "name": "Current L2" },
-      "current_l3": { "name": "Current L3" },
-      "power_l1": { "name": "Power L1" },
-      "power_l2": { "name": "Power L2" },
-      "power_l3": { "name": "Power L3" },
-      "system_version": { "name": "System version" },
-      "raw_dp": { "name": "Raw datapoints" },
-      "planner": { "name": "Charging planner" }
+      "status": {
+        "name": "Status"
+      },
+      "power": {
+        "name": "Power"
+      },
+      "session_energy": {
+        "name": "Session energy"
+      },
+      "total_energy": {
+        "name": "Total energy"
+      },
+      "last_session_energy": {
+        "name": "Last session energy"
+      },
+      "temperature": {
+        "name": "Temperature"
+      },
+      "session_cost": {
+        "name": "Session cost"
+      },
+      "tariff": {
+        "name": "Tariff"
+      },
+      "phase_count": {
+        "name": "Phase count"
+      },
+      "error": {
+        "name": "Error"
+      },
+      "voltage_l1": {
+        "name": "Voltage L1"
+      },
+      "voltage_l2": {
+        "name": "Voltage L2"
+      },
+      "voltage_l3": {
+        "name": "Voltage L3"
+      },
+      "current_l1": {
+        "name": "Current L1"
+      },
+      "current_l2": {
+        "name": "Current L2"
+      },
+      "current_l3": {
+        "name": "Current L3"
+      },
+      "power_l1": {
+        "name": "Power L1"
+      },
+      "power_l2": {
+        "name": "Power L2"
+      },
+      "power_l3": {
+        "name": "Power L3"
+      },
+      "system_version": {
+        "name": "System version"
+      },
+      "raw_dp": {
+        "name": "Raw datapoints"
+      },
+      "planner": {
+        "name": "Charging planner"
+      }
     },
     "binary_sensor": {
-      "vehicle_connected": { "name": "Vehicle connected" },
-      "charging_complete": { "name": "Charging complete" }
+      "vehicle_connected": {
+        "name": "Vehicle connected"
+      },
+      "charging_complete": {
+        "name": "Charging complete"
+      }
     },
     "number": {
-      "current_limit": { "name": "Current limit" },
-      "target_energy": { "name": "Target energy" }
+      "current_limit": {
+        "name": "Current limit"
+      },
+      "target_energy": {
+        "name": "Target energy"
+      }
     },
     "select": {
-      "model": { "name": "Model" },
-      "charging_mode": { "name": "Charging mode" }
+      "model": {
+        "name": "Model"
+      },
+      "charging_mode": {
+        "name": "Charging mode"
+      }
     },
     "switch": {
-      "charging": { "name": "Charging enabled" }
+      "charging": {
+        "name": "Charging enabled"
+      }
     },
     "time": {
-      "schedule_start_time": { "name": "Schedule starts" },
-      "schedule_end_time": { "name": "Schedule ends" }
+      "schedule_start_time": {
+        "name": "Schedule starts"
+      },
+      "schedule_end_time": {
+        "name": "Schedule ends"
+      }
     }
   }
 }

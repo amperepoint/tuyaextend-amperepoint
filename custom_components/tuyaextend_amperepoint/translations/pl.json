@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Witaj w TuyaExtend AmperePoint",
+        "title": "Witaj w AmperePoint",
         "description": "Wykryto zgodne ładowarki Tuya: {count}. Wybierz automatyczną konfigurację albo ręcznie przypisz encje.",
         "menu_options": {
           "automatic": "Skonfiguruj wykrytą ładowarkę",
@@ -24,15 +24,12 @@
           "tariff_value": "Stawka energii",
           "currency": "Waluta",
           "complete_power_threshold_kw": "Próg wykrycia końca ładowania",
-          "complete_idle_minutes": "Minuty bezczynności do końca ładowania",
-          "create_dashboard": "Utwórz panel AmperePoint"
+          "complete_idle_minutes": "Minuty bezczynności do końca ładowania"
         },
-        "data_description": {
-          "create_dashboard": "Tworzy osobny panel i nie zmienia żadnego z istniejących dashboardów."
-        }
+        "data_description": {}
       },
       "manual": {
-        "title": "TuyaExtend AmperePoint",
+        "title": "AmperePoint",
         "description": "Wybierz model ładowarki i przypisz dostępne encje źródłowe. Pola dla niedostępnych datapointów możesz pozostawić puste.",
         "data": {
           "source_device_id": "Wykryta ladowarka Tuya",
@@ -57,7 +54,6 @@
           "currency": "Waluta",
           "complete_power_threshold_kw": "Prog wykrycia konca ladowania",
           "complete_idle_minutes": "Minuty bezczynnosci do konca ladowania",
-          "create_dashboard": "Utwórz panel AmperePoint",
           "source_voltage_l1": "Encja napiecia L1",
           "source_voltage_l2": "Encja napiecia L2",
           "source_voltage_l3": "Encja napiecia L3",
@@ -83,7 +79,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Opcje TuyaExtend AmperePoint",
+        "title": "Opcje AmperePoint",
         "description": "Zmien model, mapowanie encji zrodlowych i ustawienia taryfy.",
         "data": {
           "source_device_id": "Wykryta ladowarka Tuya",
@@ -108,7 +104,6 @@
           "currency": "Waluta",
           "complete_power_threshold_kw": "Prog wykrycia konca ladowania",
           "complete_idle_minutes": "Minuty bezczynnosci do konca ladowania",
-          "create_dashboard": "Utwórz panel AmperePoint",
           "source_voltage_l1": "Encja napiecia L1",
           "source_voltage_l2": "Encja napiecia L2",
           "source_voltage_l3": "Encja napiecia L3",
@@ -127,47 +122,109 @@
   },
   "entity": {
     "sensor": {
-      "status": { "name": "Status" },
-      "power": { "name": "Moc" },
-      "session_energy": { "name": "Energia sesji" },
-      "total_energy": { "name": "Energia calkowita" },
-      "last_session_energy": { "name": "Energia ostatniej sesji" },
-      "temperature": { "name": "Temperatura" },
-      "session_cost": { "name": "Koszt sesji" },
-      "tariff": { "name": "Taryfa" },
-      "phase_count": { "name": "Liczba faz" },
-      "error": { "name": "Blad" },
-      "voltage_l1": { "name": "Napiecie L1" },
-      "voltage_l2": { "name": "Napiecie L2" },
-      "voltage_l3": { "name": "Napiecie L3" },
-      "current_l1": { "name": "Prad L1" },
-      "current_l2": { "name": "Prad L2" },
-      "current_l3": { "name": "Prad L3" },
-      "power_l1": { "name": "Moc L1" },
-      "power_l2": { "name": "Moc L2" },
-      "power_l3": { "name": "Moc L3" },
-      "system_version": { "name": "Wersja systemu" },
-      "raw_dp": { "name": "Surowe datapointy" },
-      "planner": { "name": "Planer ładowania" }
+      "status": {
+        "name": "Status"
+      },
+      "power": {
+        "name": "Moc"
+      },
+      "session_energy": {
+        "name": "Energia sesji"
+      },
+      "total_energy": {
+        "name": "Energia calkowita"
+      },
+      "last_session_energy": {
+        "name": "Energia ostatniej sesji"
+      },
+      "temperature": {
+        "name": "Temperatura"
+      },
+      "session_cost": {
+        "name": "Koszt sesji"
+      },
+      "tariff": {
+        "name": "Taryfa"
+      },
+      "phase_count": {
+        "name": "Liczba faz"
+      },
+      "error": {
+        "name": "Blad"
+      },
+      "voltage_l1": {
+        "name": "Napiecie L1"
+      },
+      "voltage_l2": {
+        "name": "Napiecie L2"
+      },
+      "voltage_l3": {
+        "name": "Napiecie L3"
+      },
+      "current_l1": {
+        "name": "Prad L1"
+      },
+      "current_l2": {
+        "name": "Prad L2"
+      },
+      "current_l3": {
+        "name": "Prad L3"
+      },
+      "power_l1": {
+        "name": "Moc L1"
+      },
+      "power_l2": {
+        "name": "Moc L2"
+      },
+      "power_l3": {
+        "name": "Moc L3"
+      },
+      "system_version": {
+        "name": "Wersja systemu"
+      },
+      "raw_dp": {
+        "name": "Surowe datapointy"
+      },
+      "planner": {
+        "name": "Planer ładowania"
+      }
     },
     "binary_sensor": {
-      "vehicle_connected": { "name": "Auto podlaczone" },
-      "charging_complete": { "name": "Ladowanie zakonczone" }
+      "vehicle_connected": {
+        "name": "Auto podlaczone"
+      },
+      "charging_complete": {
+        "name": "Ladowanie zakonczone"
+      }
     },
     "number": {
-      "current_limit": { "name": "Limit prądu" },
-      "target_energy": { "name": "Energia docelowa" }
+      "current_limit": {
+        "name": "Limit prądu"
+      },
+      "target_energy": {
+        "name": "Energia docelowa"
+      }
     },
     "select": {
-      "model": { "name": "Model" },
-      "charging_mode": { "name": "Tryb ładowania" }
+      "model": {
+        "name": "Model"
+      },
+      "charging_mode": {
+        "name": "Tryb ładowania"
+      }
     },
     "switch": {
-      "charging": { "name": "Ladowanie wlaczone" }
+      "charging": {
+        "name": "Ladowanie wlaczone"
+      }
     },
     "time": {
-      "schedule_start_time": { "name": "Początek harmonogramu" },
-      "schedule_end_time": { "name": "Koniec harmonogramu" }
+      "schedule_start_time": {
+        "name": "Początek harmonogramu"
+      },
+      "schedule_end_time": {
+        "name": "Koniec harmonogramu"
+      }
     }
   }
 }

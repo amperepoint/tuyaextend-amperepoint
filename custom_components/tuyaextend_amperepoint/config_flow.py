@@ -12,7 +12,6 @@ from homeassistant.helpers import config_validation as cv, selector
 from .const import (
     CONF_COMPLETE_IDLE_MINUTES,
     CONF_COMPLETE_POWER_THRESHOLD,
-    CONF_CREATE_DASHBOARD,
     CONF_CURRENCY,
     CONF_MODEL,
     CONF_SOURCE_CHARGE_SWITCH,
@@ -24,6 +23,7 @@ from .const import (
     CONF_SOURCE_DEVICE_ID,
     CONF_SOURCE_ERROR,
     CONF_SOURCE_LAST_SESSION_ENERGY,
+    CONF_SOURCE_NAME,
     CONF_SOURCE_PHASE_A,
     CONF_SOURCE_PHASE_B,
     CONF_SOURCE_PHASE_C,
@@ -45,7 +45,6 @@ from .const import (
     CONF_TARIFF_VALUE,
     DEFAULT_COMPLETE_IDLE_MINUTES,
     DEFAULT_COMPLETE_POWER_THRESHOLD_KW,
-    DEFAULT_CREATE_DASHBOARD,
     DEFAULT_CURRENCY,
     DEFAULT_TARIFF_VALUE,
     DOMAIN,
@@ -102,10 +101,6 @@ def _settings_fields(current: Mapping[str, Any] | None = None) -> dict[Any, Any]
                 CONF_COMPLETE_IDLE_MINUTES, DEFAULT_COMPLETE_IDLE_MINUTES
             ),
         ): cv.positive_int,
-        vol.Required(
-            CONF_CREATE_DASHBOARD,
-            default=current.get(CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD),
-        ): cv.boolean,
     }
 
 
@@ -182,6 +177,21 @@ class AmperePointConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     _candidates: list[SourceCandidate]
     _candidate: SourceCandidate
     _entry_name: str
+
+    async def async_step_integration_discovery(
+        self, discovery_info: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult:
+        """Adopt a discovered charger automatically with default settings."""
+        device_id = str(discovery_info.get(CONF_SOURCE_DEVICE_ID, ""))
+        if not device_id:
+            return self.async_abort(reason="device_not_found")
+        await self.async_set_unique_id(f"{DOMAIN}_{device_id}")
+        self._abort_if_unique_id_configured()
+        title = str(discovery_info.get(CONF_SOURCE_NAME) or NAME)
+        return self.async_create_entry(
+            title=title,
+            data={**discovery_info, CONF_NAME: title},
+        )
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None

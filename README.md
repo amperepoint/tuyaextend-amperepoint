@@ -19,9 +19,11 @@ Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 2. Configure the official Home Assistant Tuya integration first.
 3. Install this repository through HACS as a custom integration.
 4. Restart Home Assistant. This is required after every first HACS installation.
-5. Add `TuyaExtend AmperePoint` from Home Assistant integrations.
-6. Choose automatic setup, select the detected charger and keep the dashboard
-   option enabled to get a ready-to-use sidebar panel.
+5. Add `AmperePoint` from Home Assistant integrations.
+6. Choose automatic setup and select the detected charger. The integration
+   creates one shared `AmperePoint` sidebar panel and adopts the remaining
+   detected chargers automatically; every charger is available from the
+   device selector on the panel.
 
 Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](INSTALL.pl.md).
 

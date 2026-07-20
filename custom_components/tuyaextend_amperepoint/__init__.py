@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY, ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD, DOMAIN, PLATFORMS
+from .const import DOMAIN, PLATFORMS
 from .coordinator import AmperePointCoordinator
 from .dashboard import async_create_dashboard
+from .discovery import discover_sources
 from .frontend import async_register_frontend
 from .planner import AmperePointPlanner
 from .planner_model import PlannerConfigError
@@ -39,12 +40,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     await planner.async_start()
 
-    settings = {**entry.data, **entry.options}
-    if settings.get(CONF_CREATE_DASHBOARD, DEFAULT_CREATE_DASHBOARD):
-        await async_create_dashboard(hass, entry)
+    await async_create_dashboard(hass, entry)
+    _async_adopt_discovered_chargers(hass)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
+
+
+def _async_adopt_discovered_chargers(hass: HomeAssistant) -> None:
+    """Start discovery flows for Tuya chargers that have no entry yet.
+
+    New devices join the integration (and the panel's device selector)
+    automatically; duplicates are rejected by the flow's unique_id.
+    """
+    for candidate in discover_sources(hass):
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_INTEGRATION_DISCOVERY},
+                data=candidate.as_config_data(),
+            )
+        )
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -526,20 +526,24 @@ class AmperePointQ22Card extends HTMLElement {
 
   applyAutoEntities() {
     if (!this._hass?.states || !this.config) return;
+    // Detection is scoped to one charger so a shared panel never mixes
+    // entities of different devices.
+    const deviceId = this.apSelectedDeviceId();
+    const detected = this.detectEntities(deviceId);
     if (this._deviceOverride) {
       // A charger picked from the device selector replaces the static
       // entity mapping so the card follows the chosen device.
-      const detected = this.detectEntities(this.apSelectedDeviceId());
       this.config.entities = { ...detected.entities };
-      return;
+    } else {
+      this.config.entities = {
+        ...detected.entities,
+        ...(this.config.entities || {}),
+      };
     }
-    const detected = this.detectEntities();
-    this.config.entities = {
-      ...detected.entities,
-      ...(this.config.entities || {}),
-    };
-    if ((!this.config.title || this.config.title === "AmperePoint") && detected.title) {
-      this.config.title = detected.title;
+    if (!this.config.title || this.config.title === "AmperePoint") {
+      const device = deviceId ? this._hass?.devices?.[deviceId] : null;
+      const label = device?.name_by_user || device?.name || detected.title;
+      if (label) this.config.title = label;
     }
   }
 

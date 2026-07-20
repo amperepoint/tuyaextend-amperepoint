@@ -74,9 +74,13 @@ TuyaExtend AmperePoint
 3. Na ekranie powitalnym wybierz konfigurację automatyczną albo ręczne
    przypisanie encji.
 4. Wybierz wykrytą ładowarkę AmperePoint i ustaw taryfę.
-5. Pozostaw włączone `Utwórz panel AmperePoint`, aby otrzymać gotowy panel na
-   pasku bocznym z automatycznie przypisanymi encjami ładowarki.
-6. Zapisz wpis integracji.
+5. Zapisz wpis integracji.
+
+Integracja automatycznie tworzy jeden wspólny panel `AmperePoint` na pasku
+bocznym i sama przejmuje pozostałe wykryte ładowarki Tuya jako kolejne wpisy.
+Każda ładowarka pojawia się na liście rozwijanej na panelu. Kolejne
+urządzenia można też dodawać ręcznie z poziomu integracji — nie tworzy to
+nowych paneli, tylko dopisuje urządzenie do listy.
 
 Integracja wykrywa modele Q Series na podstawie nazwy urządzenia Tuya, modelu i
 metadanych produktu. Jeśli ładowarka nie zostanie wykryta, zmień nazwę
@@ -94,14 +98,14 @@ ponownie.
 
 ## 4. Otwórz panel AmperePoint
 
-Gdy opcja panelu jest włączona, integracja tworzy osobny panel AmperePoint na
-pasku bocznym Home Assistanta. Nie nadpisuje ani nie zmienia istniejących
-dashboardów. Późniejsze zmiany w tym panelu są zachowywane po restartach Home
-Assistanta.
+Integracja tworzy jeden panel `AmperePoint` na pasku bocznym Home Assistanta.
+Nie nadpisuje ani nie zmienia istniejących dashboardów, a późniejsze zmiany w
+tym panelu są zachowywane po restartach. Przy więcej niż jednej ładowarce w
+nagłówku karty pojawia się lista rozwijana z wyborem urządzenia.
 
 Zasób karty jest rejestrowany automatycznie w standardowych dashboardach
-Home Assistant działających w trybie storage. Jeśli automatyczne utworzenie
-panelu zostało wyłączone, dodaj kartę ręcznie:
+Home Assistant działających w trybie storage. Kartę można też dodać ręcznie na
+dowolny własny dashboard:
 
 ```yaml
 type: custom:amperepoint-q22-card

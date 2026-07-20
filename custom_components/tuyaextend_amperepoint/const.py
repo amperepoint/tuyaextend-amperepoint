@@ -5,8 +5,8 @@ from datetime import timedelta
 from homeassistant.const import Platform
 
 DOMAIN = "tuyaextend_amperepoint"
-NAME = "TuyaExtend AmperePoint"
-VERSION = "0.5.3"
+NAME = "AmperePoint"
+VERSION = "0.5.4"
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -22,7 +22,6 @@ DEFAULT_TARIFF_VALUE = 1.20
 DEFAULT_CURRENCY = "PLN"
 DEFAULT_COMPLETE_POWER_THRESHOLD_KW = 0.25
 DEFAULT_COMPLETE_IDLE_MINUTES = 3
-DEFAULT_CREATE_DASHBOARD = True
 
 CONF_MODEL = "model"
 CONF_SOURCE_DEVICE_ID = "source_device_id"
@@ -48,7 +47,6 @@ CONF_TARIFF_ENTITY = "tariff_entity"
 CONF_CURRENCY = "currency"
 CONF_COMPLETE_POWER_THRESHOLD = "complete_power_threshold_kw"
 CONF_COMPLETE_IDLE_MINUTES = "complete_idle_minutes"
-CONF_CREATE_DASHBOARD = "create_dashboard"
 
 CONF_SOURCE_VOLTAGE_L1 = "source_voltage_l1"
 CONF_SOURCE_VOLTAGE_L2 = "source_voltage_l2"
