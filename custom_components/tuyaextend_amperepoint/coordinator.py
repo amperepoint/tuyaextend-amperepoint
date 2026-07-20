@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 import logging
 from datetime import datetime, time, timedelta
 from typing import Any
@@ -82,6 +83,7 @@ from .source import NativeTuyaSource
 _LOGGER = logging.getLogger(__name__)
 
 STORAGE_VERSION = 1
+PRIME_TELEMETRY_ATTRIBUTE = "telemetry"
 
 
 class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -142,6 +144,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         now = dt_util.utcnow()
+        prime_telemetry = _decode_prime_telemetry(
+            self._raw_attr(PRIME_TELEMETRY_ATTRIBUTE)
+        )
 
         status = normalize_status(
             self._state_value(CONF_SOURCE_STATUS)
@@ -152,10 +157,12 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._numeric_entity(CONF_SOURCE_POWER, "power_kw"),
             self._numeric_raw_attr("power_total_kw"),
             self._native_numeric("power_total"),
+            prime_telemetry.get("power_kw") if prime_telemetry else None,
         )
         power_kw = source_power_kw or 0.0
-        source_session_energy = self._numeric_entity(
-            CONF_SOURCE_SESSION_ENERGY, "energy_kwh"
+        source_session_energy = _first_not_none(
+            self._numeric_entity(CONF_SOURCE_SESSION_ENERGY, "energy_kwh"),
+            prime_telemetry.get("session_energy_kwh") if prime_telemetry else None,
         )
         source_total_energy = self._numeric_entity(
             CONF_SOURCE_TOTAL_ENERGY, "energy_kwh"
@@ -176,6 +183,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             temperature_c = self._numeric_raw_attr("temp_current_c")
         if temperature_c is None:
             temperature_c = self._native_numeric("temp_current")
+        if temperature_c is None and prime_telemetry:
+            temperature_c = prime_telemetry.get("temperature_c")
         threshold_kw = float(
             self._config(
                 CONF_COMPLETE_POWER_THRESHOLD, DEFAULT_COMPLETE_POWER_THRESHOLD_KW
@@ -184,11 +193,14 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         is_charging = status in CHARGING_STATUSES or power_kw > threshold_kw
         is_complete_from_status = status in COMPLETE_STATUSES
+        connected_fallback = is_charging or power_kw > 0
+        if prime_telemetry and prime_telemetry.get("vehicle_connected") is not None:
+            connected_fallback = bool(prime_telemetry["vehicle_connected"])
         connected = normalize_connected(
             self._state_value(CONF_SOURCE_CONNECTED)
             or self._raw_attr("raw_connection_state")
             or self._native_value("connection_state"),
-            fallback=is_charging or power_kw > 0,
+            fallback=connected_fallback,
         )
 
         session_energy_kwh = self._calculate_session_energy(
@@ -211,6 +223,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 CONF_SOURCE_POWER_L1,
                 CONF_SOURCE_PHASE_A,
                 "phase_a",
+                _prime_phase(prime_telemetry, "L1"),
             ),
             self._phase_values(
                 CONF_SOURCE_VOLTAGE_L2,
@@ -218,6 +231,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 CONF_SOURCE_POWER_L2,
                 CONF_SOURCE_PHASE_B,
                 "phase_b",
+                _prime_phase(prime_telemetry, "L2"),
             ),
             self._phase_values(
                 CONF_SOURCE_VOLTAGE_L3,
@@ -225,6 +239,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 CONF_SOURCE_POWER_L3,
                 CONF_SOURCE_PHASE_C,
                 "phase_c",
+                _prime_phase(prime_telemetry, "L3"),
             ),
         ]
         phases = _filter_loaded_phases(phases)
@@ -307,6 +322,20 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "temperature_c": (
                 round(temperature_c, 1) if temperature_c is not None else None
+            ),
+            "cp_voltage_v": (
+                prime_telemetry.get("cp_voltage_v") if prime_telemetry else None
+            ),
+            "session_duration_s": (
+                prime_telemetry.get("session_duration_s")
+                if prime_telemetry
+                else None
+            ),
+            "session_duration_min": (
+                round(prime_telemetry["session_duration_s"] / 60, 1)
+                if prime_telemetry
+                and prime_telemetry.get("session_duration_s") is not None
+                else None
             ),
             "voltage_l1": phase_voltages[0],
             "voltage_l2": phase_voltages[1],
@@ -391,6 +420,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         embedded = state.attributes.get("raw_dp")
         if isinstance(embedded, dict):
             return dict(embedded)
+        prime_values = _prime_raw_values(state.state, state.attributes)
+        if prime_values:
+            return prime_values
         excluded_suffixes = ("_voltage_v", "_current_a", "_power_kw")
         return {
             key.removeprefix("raw_"): value
@@ -411,6 +443,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         power_key: str,
         raw_key: str,
         raw_attr_prefix: str,
+        fallback: dict[str, float | None] | None = None,
     ) -> dict[str, float | None]:
         voltage = self._numeric_entity(voltage_key, "voltage_v")
         current = self._numeric_entity(current_key, "current_a")
@@ -421,6 +454,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             voltage = voltage if voltage is not None else decoded["voltage"]
             current = current if current is not None else decoded["current"]
             power = power if power is not None else decoded["power"]
+        if fallback is not None:
+            voltage = voltage if voltage is not None else fallback["voltage"]
+            current = current if current is not None else fallback["current"]
+            power = power if power is not None else fallback["power"]
 
         return {
             "voltage": voltage,
@@ -476,8 +513,14 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._update_total_energy_tracking(source_total_energy, connected)
             return self._session_energy_kwh
 
-        if mode == SESSION_ENERGY_MODE_TOTAL_DELTA and source_total_energy is not None:
-            return self._calculate_total_delta_session(source_total_energy, connected)
+        if mode == SESSION_ENERGY_MODE_TOTAL_DELTA:
+            if source_total_energy is not None:
+                return self._calculate_total_delta_session(
+                    source_total_energy, connected
+                )
+            if source_session_energy is not None:
+                self._session_energy_kwh = max(source_session_energy, 0.0)
+                return self._session_energy_kwh
 
         if mode == SESSION_ENERGY_MODE_AUTO:
             if source_total_energy is not None:
@@ -707,6 +750,89 @@ def _as_float(value: Any) -> float | None:
         return float(str(value).replace(",", "."))
     except (TypeError, ValueError):
         return None
+
+
+def _scaled_number(value: Any, scale: float = 10.0) -> float | None:
+    if isinstance(value, bool):
+        return None
+    numeric = _as_float(value)
+    return numeric / scale if numeric is not None else None
+
+
+def _decode_prime_phase(value: Any) -> dict[str, float | None] | None:
+    if not isinstance(value, list | tuple) or len(value) < 3:
+        return None
+    voltage = _scaled_number(value[0])
+    current = _scaled_number(value[1])
+    power = _scaled_number(value[2])
+    if voltage is None and current is None and power is None:
+        return None
+    return {"voltage": voltage, "current": current, "power": power}
+
+
+def _decode_prime_telemetry(value: Any) -> dict[str, Any] | None:
+    """Decode the Wallbox Prime 22kW JSON payload exposed by tuya-local."""
+    payload = value
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(payload, dict):
+        return None
+    if not any(key in payload for key in ("L1", "L2", "L3", "p", "e", "cp")):
+        return None
+
+    phases = {
+        phase: _decode_prime_phase(payload.get(phase))
+        for phase in ("L1", "L2", "L3")
+    }
+    cp_voltage_v = _scaled_number(payload.get("cp"))
+    vehicle_connected: bool | None = None
+    if cp_voltage_v is not None:
+        if 2.0 <= cp_voltage_v < 11.0:
+            vehicle_connected = True
+        elif cp_voltage_v >= 11.0:
+            vehicle_connected = False
+
+    duration = _as_float(payload.get("d"))
+    return {
+        "phases": phases,
+        "power_kw": _scaled_number(payload.get("p")),
+        "session_energy_kwh": _scaled_number(payload.get("e")),
+        "temperature_c": _scaled_number(payload.get("t")),
+        "session_duration_s": int(duration) if duration is not None else None,
+        "cp_voltage_v": cp_voltage_v,
+        "vehicle_connected": vehicle_connected,
+    }
+
+
+def _prime_phase(
+    telemetry: dict[str, Any] | None, phase: str
+) -> dict[str, float | None] | None:
+    if not telemetry:
+        return None
+    value = telemetry.get("phases", {}).get(phase)
+    return value if isinstance(value, dict) else None
+
+
+def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
+    telemetry = attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
+    if _decode_prime_telemetry(telemetry) is None:
+        return {}
+    attr_to_dp = {
+        "state_code": "101",
+        PRIME_TELEMETRY_ATTRIBUTE: "102",
+        "session_data": "103",
+        "device_information": "106",
+    }
+    values = {
+        dp_id: attributes[attr]
+        for attr, dp_id in attr_to_dp.items()
+        if attr in attributes
+    }
+    values["109"] = state
+    return values
 
 
 def _first_not_none(*values: Any) -> Any:

@@ -140,6 +140,12 @@
       "temperature": {
         "name": "Temperatura"
       },
+      "cp_voltage": {
+        "name": "Napiecie Control Pilot"
+      },
+      "session_duration": {
+        "name": "Czas sesji"
+      },
       "session_cost": {
         "name": "Koszt sesji"
       },

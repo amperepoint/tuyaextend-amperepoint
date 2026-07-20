@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.4";
+const AP_Q22_DASHBOARD_VERSION = "0.5.5";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 

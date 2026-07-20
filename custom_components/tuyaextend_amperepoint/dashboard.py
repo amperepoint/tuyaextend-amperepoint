@@ -45,6 +45,7 @@ _CARD_ENTITY_KEYS = {
     "total_energy": "totalEnergy",
     "last_session_energy": "lastSessionDp25",
     "temperature": "temperature",
+    "session_duration": "sessionDuration",
     "system_version": "systemVersion",
     "raw_dp": "rawDp",
     "phase_count": "phaseCount",

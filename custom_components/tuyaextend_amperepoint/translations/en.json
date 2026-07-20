@@ -19,6 +19,12 @@
       "temperature": {
         "name": "Temperature"
       },
+      "cp_voltage": {
+        "name": "Control pilot voltage"
+      },
+      "session_duration": {
+        "name": "Session duration"
+      },
       "session_cost": {
         "name": "Session cost"
       },

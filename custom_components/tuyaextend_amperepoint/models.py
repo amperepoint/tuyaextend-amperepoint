@@ -58,11 +58,22 @@ MODELS: dict[str, AmperePointModel] = {
         min_current_a=6,
         max_current_a=32,
     ),
+    "prime_22kw": AmperePointModel(
+        key="prime_22kw",
+        name="Ampere Point Wallbox Prime 22kW",
+        phases=3,
+        min_current_a=6,
+        max_current_a=32,
+    ),
 }
 
 DEFAULT_MODEL = "q_series"
 
 MODEL_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "prime_22kw",
+        ("wallbox prime", "prime 22kw", "gbmxngploofmhbjc"),
+    ),
     ("q22_ota", ("q22 ota", "q22_ota", "cu111poj2mtikvls")),
     ("q37", ("q37", "ev charger ve", "fdfjiphjxtc9qyhd")),
     ("q22", ("q22",)),

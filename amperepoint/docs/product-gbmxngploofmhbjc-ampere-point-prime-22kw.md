@@ -80,3 +80,24 @@ does not expose writable controls until local writes have been tested. Capture
 samples at multiple current limits and with RFID and schedule settings toggled
 one at a time before promoting the remaining candidate fields to named
 entities.
+
+## AmperePoint normalization mapping
+
+Starting with AmperePoint integration version `0.5.5`, the integration detects
+the `telemetry` attribute produced by the profile and maps DP102 to its standard
+dashboard entities:
+
+| Local DP102 field | Scale | Normalized value / entity |
+| --- | --- | --- |
+| `p` | `/ 10` | `power_kw` / Power |
+| `e` | `/ 10` | `session_energy_kwh` / Session energy |
+| `t` | `/ 10` | `temperature_c` / Temperature |
+| `L1[0..2]` | `/ 10` | Voltage, current and power L1 |
+| `L2[0..2]` | `/ 10` | Voltage, current and power L2 |
+| `L3[0..2]` | `/ 10` | Voltage, current and power L3 |
+| `cp` | `/ 10` | Control-pilot voltage and Vehicle connected |
+| `d` | seconds | Session duration, displayed in minutes |
+
+The DP102 session counter is used directly when no cumulative total-energy
+source is configured. These mappings depend on the local `tuya-local` entity;
+the standard Tuya cloud integration still does not provide this payload.

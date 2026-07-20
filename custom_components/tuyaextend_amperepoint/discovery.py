@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
@@ -39,6 +40,7 @@ from .const import (
     CONF_SOURCE_VOLTAGE_L2,
     CONF_SOURCE_VOLTAGE_L3,
     CONF_SOURCE_WORK_MODE,
+    SESSION_ENERGY_MODE_AUTO,
     SESSION_ENERGY_MODE_TOTAL_DELTA,
 )
 from .models import DEFAULT_MODEL, MODELS, detect_model_key
@@ -61,13 +63,19 @@ class SourceCandidate:
         return f"{self.title} ({model.name}{source})"
 
     def as_config_data(self) -> dict[str, Any]:
+        session_energy_mode = SESSION_ENERGY_MODE_TOTAL_DELTA
+        if (
+            CONF_SOURCE_RAW_DP in self.mapping
+            and CONF_SOURCE_TOTAL_ENERGY not in self.mapping
+        ):
+            session_energy_mode = SESSION_ENERGY_MODE_AUTO
         return {
             CONF_AUTO_DISCOVERED: True,
             CONF_MODEL: self.model_key,
             CONF_SOURCE_DEVICE_ID: self.device_id,
             CONF_SOURCE_NAME: self.title,
             CONF_SOURCE_INTEGRATION: self.source_integration,
-            CONF_SESSION_ENERGY_MODE: SESSION_ENERGY_MODE_TOTAL_DELTA,
+            CONF_SESSION_ENERGY_MODE: session_energy_mode,
             **self.mapping,
         }
 
@@ -107,21 +115,29 @@ def discover_sources(hass: HomeAssistant) -> list[SourceCandidate]:
                 title=title,
                 model_key=detect_model_key(device_text),
                 source_integration=source_platform,
-                mapping=map_source_entities(entries),
+                mapping=map_source_entities(entries, hass),
             )
         )
 
     return sorted(candidates, key=lambda item: item.option_label.lower())
 
 
-def map_source_entities(entries: Iterable[er.RegistryEntry]) -> dict[str, str]:
+def map_source_entities(
+    entries: Iterable[er.RegistryEntry], hass: HomeAssistant | None = None
+) -> dict[str, str]:
     mapping: dict[str, str] = {}
     scored: dict[str, tuple[int, str]] = {}
 
     for entry in entries:
         text = _normalize(_entity_text(entry))
         domain = entry.entity_id.split(".", 1)[0]
-        for key, score in _match_mapping_keys(text, domain):
+        matches = list(_match_mapping_keys(text, domain))
+        state = hass.states.get(entry.entity_id) if hass is not None else None
+        if state is not None and _has_prime_telemetry(
+            state.attributes.get("telemetry")
+        ):
+            matches.append((CONF_SOURCE_RAW_DP, 100))
+        for key, score in matches:
             current = scored.get(key)
             if current is None or score > current[0]:
                 scored[key] = (score, entry.entity_id)
@@ -367,3 +383,15 @@ def _normalize(value: str) -> str:
         }
     )
     return " ".join(value.lower().translate(translation).split())
+
+
+def _has_prime_telemetry(value: Any) -> bool:
+    payload = value
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except (TypeError, ValueError):
+            return False
+    return isinstance(payload, dict) and all(
+        key in payload for key in ("L1", "p", "e", "cp")
+    )
