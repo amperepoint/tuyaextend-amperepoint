@@ -159,6 +159,40 @@ class AutoAdoptionTests(unittest.TestCase):
         finally:
             hass.close_tasks()
 
+    def test_mapping_to_a_deleted_entity_is_replaced(self) -> None:
+        """Re-pairing a charger must overwrite mappings left pointing at ghosts."""
+        entry = types.SimpleNamespace(
+            data={
+                const.CONF_SOURCE_DEVICE_ID: "dev-1",
+                "source_status": "sensor.gone_status",
+                "source_power": "sensor.live_power",
+            },
+            options={},
+        )
+        hass = _Hass()
+        hass.config_entries._entries = [entry]
+        candidate = _Candidate(
+            "dev-1",
+            {
+                "source_status": "sensor.new_status",
+                "source_power": "sensor.new_power",
+            },
+        )
+
+        class _EntityRegistry:
+            def async_get(self, entity_id):
+                # Only the power source survived the re-pairing.
+                return object() if entity_id == "sensor.live_power" else None
+
+        with patch.object(adoption.er, "async_get", return_value=_EntityRegistry()):
+            adoption._async_backfill_mapping(
+                hass, {"entry": entry}, candidate
+            )
+
+        # The dead mapping is replaced, the live one is left alone.
+        self.assertEqual(entry.options["source_status"], "sensor.new_status")
+        self.assertNotIn("source_power", entry.options)
+
     def test_deleted_charger_is_not_adopted_again(self) -> None:
         """A charger the user removed must stay removed across restarts."""
         hass = _Hass()

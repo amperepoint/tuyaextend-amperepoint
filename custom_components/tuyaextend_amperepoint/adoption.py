@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY
 from homeassistant.const import CONF_NAME, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 
 from .const import CONF_SOURCE_DEVICE_ID, CONF_SOURCE_NAME, DOMAIN
@@ -41,6 +41,22 @@ def _physical_ids(hass: HomeAssistant, device_id: str) -> set[str]:
     if device is None:
         return set()
     return {str(identifier[-1]) for identifier in device.identifiers}
+
+
+def _live_entity(hass: HomeAssistant, value: object) -> bool:
+    """Whether a mapped source still exists.
+
+    Deleting a charger's tuya-local pairing removes its entities but leaves
+    the mapping behind, and a mapping pointing at a deleted entity would
+    otherwise look configured and block the replacement from being written
+    when the charger is paired again.
+    """
+    if not isinstance(value, str) or not _ENTITY_ID_PATTERN.match(value):
+        return bool(value)
+    registry = er.async_get(hass)
+    if registry is None:
+        return True
+    return registry.async_get(value) is not None
 
 
 def _normalized_title(value: object) -> str:
@@ -95,7 +111,9 @@ def _async_backfill_mapping(
         return
     merged = {**entry.data, **entry.options}
     missing = {
-        key: value for key, value in candidate.mapping.items() if not merged.get(key)
+        key: value
+        for key, value in candidate.mapping.items()
+        if not _live_entity(hass, merged.get(key))
     }
     if not missing:
         return
