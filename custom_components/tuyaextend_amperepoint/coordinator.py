@@ -150,6 +150,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._was_charging = False
         self._was_connected = False
         self._complete_candidate_since: datetime | None = None
+        # Datapoints the charger reported at least once in this run, so the
+        # raw view keeps them when the charger stops sending them.
+        self._seen_datapoints: dict[str, tuple[Any, dict[str, Any]]] = {}
 
     @callback
     def _handle_native_update(self, *_: Any) -> None:
@@ -512,6 +515,12 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         Chargers reached over LAN expose one entity per datapoint instead of a
         single raw-DP entity, so the datapoint list is reassembled from the
         entities the config entry maps.
+
+        A charger stops reporting some datapoints outside a session, and a
+        reload starts from an empty cache, so rows would vanish from the list
+        until the charger sent them again. Datapoints seen earlier in this
+        run are therefore kept at their last reading, which is also what the
+        cloud runtime does.
         """
         values: dict[str, Any] = {}
         metadata: dict[str, Any] = {}
@@ -521,6 +530,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 continue
             state = self.hass.states.get(entity_id)
             if state is None or state.state in {None, "unknown", "unavailable"}:
+                remembered = self._seen_datapoints.get(code)
+                if remembered is not None:
+                    values[code], metadata[code] = remembered
                 continue
             values[code] = state.state
             definition: dict[str, Any] = {"dp_id": dp_id}
@@ -535,6 +547,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "input_boolean",
             }
             metadata[code] = definition
+            self._seen_datapoints[code] = (state.state, definition)
         if not values:
             return None
         return values, metadata

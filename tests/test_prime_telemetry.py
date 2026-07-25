@@ -224,6 +224,7 @@ class MappedDatapointViewTests(unittest.TestCase):
             )
         )
         instance.native_source = None
+        instance._seen_datapoints = {}
         return instance
 
     def test_snapshot_carries_codes_dp_ids_and_write_access(self) -> None:
@@ -278,6 +279,24 @@ class MappedDatapointViewTests(unittest.TestCase):
         values, metadata = instance._datapoint_view(True)
         self.assertEqual(set(values), {"telemetry"})
         self.assertEqual(metadata["telemetry"]["dp_id"], 102)
+
+    def test_datapoints_survive_a_charger_that_stops_reporting(self) -> None:
+        """Rows must not vanish when the charger goes quiet between sessions."""
+        instance = self._coordinator()
+        values, _ = instance._mapped_source_snapshot()
+        self.assertEqual(values["power_total"], "0")
+        self.assertEqual(values["temp_current"], "25")
+
+        # The charger stops sending power and temperature.
+        instance.hass.states._states["sensor.q11_power"] = _state("unavailable")
+        del instance.hass.states._states["sensor.q11_temperature"]
+
+        values, metadata = instance._mapped_source_snapshot()
+        self.assertEqual(values["power_total"], "0")
+        self.assertEqual(values["temp_current"], "25")
+        self.assertEqual(metadata["temp_current"]["dp_id"], 24)
+        # A datapoint never seen stays absent.
+        self.assertNotIn("forward_energy_total", values)
 
     def test_empty_cloud_snapshot_is_replaced(self) -> None:
         self.assertFalse(coordinator._has_reported_values({}))
