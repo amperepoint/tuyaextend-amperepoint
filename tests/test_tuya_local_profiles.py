@@ -111,20 +111,22 @@ class TuyaLocalProfileTests(unittest.TestCase):
                 name, "EV charger", "generic name is unfindable in the picker"
             )
 
-    def test_prime_datapoints_are_optional(self) -> None:
-        """A missing datapoint must not hide the profile from the picker.
+    def test_every_datapoint_is_optional(self) -> None:
+        """A missing datapoint must not hide a profile from the picker.
 
         helpers/device_config.py excludes a config whose non-optional
-        datapoints are absent from the device response, so a charger that
-        answers with only part of its datapoints would never be offered.
+        datapoints are absent from the device response. Both the Prime (DP108)
+        and the Q11 (DP1/17/25) stopped reporting datapoints the profiles
+        declared as required, which made the chargers unpairable.
         """
-        config = dict(_profiles())["amperepoint_prime_22kw_evcharger.yaml"]
-        for entity in config["entities"]:
-            for dps in entity["dps"]:
-                with self.subTest(f"{entity.get('name')}/{dps['id']}"):
-                    self.assertTrue(
-                        dps.get("optional"), f"dps {dps['id']} must be optional"
-                    )
+        for filename, config in self.profiles:
+            for entity in config["entities"]:
+                for dps in entity["dps"]:
+                    with self.subTest(f"{filename}/{entity.get('name')}/{dps['id']}"):
+                        self.assertTrue(
+                            dps.get("optional"),
+                            f"dps {dps['id']} must be optional",
+                        )
 
     def test_prime_profile_exposes_the_telemetry_datapoint(self) -> None:
         """The AmperePoint coordinator decodes DP102 from this attribute."""
