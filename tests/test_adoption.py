@@ -111,8 +111,8 @@ class AutoAdoptionTests(unittest.TestCase):
         candidates = [_Candidate("configured"), _Candidate("new")]
         try:
             with patch.object(adoption, "discover_sources", return_value=candidates):
-                self.assertEqual(adoption.start_auto_adoption(hass), 1)
-                self.assertEqual(adoption.start_auto_adoption(hass), 0)
+                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
+                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
 
             self.assertEqual(len(hass.tasks), 1)
             self.assertTrue(hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED])
@@ -122,7 +122,7 @@ class AutoAdoptionTests(unittest.TestCase):
     def test_empty_discovery_can_be_retried_later(self) -> None:
         hass = _Hass()
         with patch.object(adoption, "discover_sources", return_value=[]):
-            self.assertEqual(adoption.start_auto_adoption(hass), 0)
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
 
         self.assertNotIn(
             adoption._AUTO_ADOPTION_STARTED, hass.data.get(const.DOMAIN, {})
@@ -131,7 +131,7 @@ class AutoAdoptionTests(unittest.TestCase):
             with patch.object(
                 adoption, "discover_sources", return_value=[_Candidate("new")]
             ):
-                self.assertEqual(adoption.start_auto_adoption(hass), 1)
+                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
         finally:
             hass.close_tasks()
 
@@ -141,7 +141,7 @@ class AutoAdoptionTests(unittest.TestCase):
         with patch.object(
             adoption, "discover_sources", return_value=[_Candidate("new")]
         ) as discover:
-            self.assertEqual(adoption.start_auto_adoption(hass), 0)
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
             discover.assert_not_called()
 
         self.assertEqual(len(hass.tasks), 0)
@@ -155,9 +155,30 @@ class AutoAdoptionTests(unittest.TestCase):
                 adoption, "discover_sources", return_value=[_Candidate("new")]
             ):
                 hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
-                self.assertEqual(adoption.start_auto_adoption(hass), 1)
+                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
         finally:
             hass.close_tasks()
+
+    def test_deleted_charger_is_not_adopted_again(self) -> None:
+        """A charger the user removed must stay removed across restarts."""
+        hass = _Hass()
+        candidate = _Candidate("dev-1", {"source_status": "sensor.a"}, "Charger")
+        with patch.object(adoption, "discover_sources", return_value=[candidate]):
+            self.assertEqual(
+                asyncio.run(adoption.async_start_auto_adoption(hass)), 1
+            )
+        hass.close_tasks()
+
+        # The user deletes the entry, so no config entry references it; the
+        # next restart re-runs discovery with the same candidate.
+        hass.config_entries._entries.clear()
+        hass.tasks.clear()
+        hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
+        with patch.object(adoption, "discover_sources", return_value=[candidate]):
+            self.assertEqual(
+                asyncio.run(adoption.async_start_auto_adoption(hass)), 0
+            )
+        self.assertEqual(len(hass.tasks), 0)
 
     def test_physical_twin_backfills_the_existing_entry(self) -> None:
         # Cloud Tuya entry exists; the tuya-local twin of the same charger
@@ -185,7 +206,7 @@ class AutoAdoptionTests(unittest.TestCase):
                 patch.object(adoption, "discover_sources", return_value=candidates),
                 patch.object(adoption.dr, "async_get", return_value=registry),
             ):
-                self.assertEqual(adoption.start_auto_adoption(hass), 0)
+                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
             entry = hass.config_entries.async_entries(const.DOMAIN)[0]
             self.assertEqual(
                 entry.options["source_raw_dp"], "sensor.local_status"
@@ -207,7 +228,7 @@ class AutoAdoptionTests(unittest.TestCase):
             ),
         ]
         with patch.object(adoption, "discover_sources", return_value=candidates):
-            self.assertEqual(adoption.start_auto_adoption(hass), 1)
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
         self.assertEqual(len(hass.tasks), 1)
         asyncio.run(hass.tasks.pop())
         _, _, data = hass.config_entries.flow.calls[0]
@@ -246,7 +267,7 @@ class AutoAdoptionTests(unittest.TestCase):
             patch.object(adoption, "discover_sources", return_value=candidates),
             patch.object(adoption.dr, "async_get", return_value=registry),
         ):
-            self.assertEqual(adoption.start_auto_adoption(hass), 1)
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
         self.assertEqual(len(hass.tasks), 1)
         asyncio.run(hass.tasks.pop())
         _, _, data = hass.config_entries.flow.calls[0]
@@ -275,7 +296,7 @@ class AutoAdoptionTests(unittest.TestCase):
         ]
         try:
             with patch.object(adoption, "discover_sources", return_value=candidates):
-                self.assertEqual(adoption.start_auto_adoption(hass), 1)
+                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
             self.assertEqual(len(hass.tasks), 1)
         finally:
             hass.close_tasks()

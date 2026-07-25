@@ -7,13 +7,26 @@ from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY
 from homeassistant.const import CONF_NAME, EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.storage import Store
 
 from .const import CONF_SOURCE_DEVICE_ID, CONF_SOURCE_NAME, DOMAIN
 from .discovery import discover_sources
 
 _AUTO_ADOPTION_STARTED = "auto_adoption_started"
+_ADOPTION_STORE = "adoption_store"
+_ADOPTION_STORAGE_VERSION = 1
 
 _ENTITY_ID_PATTERN = re.compile(r"^[a-z_]+\.[a-z0-9_]+$")
+
+
+def _adoption_store(hass: HomeAssistant) -> Store:
+    """Return the store that remembers which chargers were already adopted."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    store = domain_data.get(_ADOPTION_STORE)
+    if store is None:
+        store = Store(hass, _ADOPTION_STORAGE_VERSION, f"{DOMAIN}.adoption")
+        domain_data[_ADOPTION_STORE] = store
+    return store
 
 
 def _physical_ids(hass: HomeAssistant, device_id: str) -> set[str]:
@@ -67,7 +80,9 @@ def _entry_infos(hass: HomeAssistant) -> list[dict[str, Any]]:
     return infos
 
 
-def _async_backfill_mapping(hass: HomeAssistant, info: dict[str, Any], candidate) -> None:
+def _async_backfill_mapping(
+    hass: HomeAssistant, info: dict[str, Any], candidate
+) -> None:
     """Copy mapping keys a twin source provides into the existing entry.
 
     When the same physical charger becomes visible through a richer source
@@ -80,9 +95,7 @@ def _async_backfill_mapping(hass: HomeAssistant, info: dict[str, Any], candidate
         return
     merged = {**entry.data, **entry.options}
     missing = {
-        key: value
-        for key, value in candidate.mapping.items()
-        if not merged.get(key)
+        key: value for key, value in candidate.mapping.items() if not merged.get(key)
     }
     if not missing:
         return
@@ -91,8 +104,8 @@ def _async_backfill_mapping(hass: HomeAssistant, info: dict[str, Any], candidate
     )
 
 
-def start_auto_adoption(hass: HomeAssistant) -> int:
-    """Schedule one discovery pass for unconfigured AmperePoint chargers.
+async def async_start_auto_adoption(hass: HomeAssistant) -> int:
+    """Schedule one discovery pass for chargers that were never adopted.
 
     Config-entry setup runs again for every entry created by discovery.  The
     domain guard prevents those nested setups from scheduling duplicate flows
@@ -110,7 +123,7 @@ def start_auto_adoption(hass: HomeAssistant) -> int:
 
         async def _scan_after_start(_event) -> None:
             domain_data[_AUTO_ADOPTION_STARTED] = False
-            start_auto_adoption(hass)
+            await async_start_auto_adoption(hass)
 
         hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _scan_after_start)
         return 0
@@ -120,6 +133,12 @@ def start_auto_adoption(hass: HomeAssistant) -> int:
         return 0
 
     domain_data[_AUTO_ADOPTION_STARTED] = True
+
+    store = _adoption_store(hass)
+    stored = await store.async_load() or {}
+    # A charger is adopted at most once. Without this an entry the user
+    # deleted on purpose would come back on the next restart.
+    known: set[str] = set(stored.get("adopted", []))
     infos = _entry_infos(hass)
 
     scheduled = 0
@@ -146,6 +165,12 @@ def start_auto_adoption(hass: HomeAssistant) -> int:
         )
         if match is not None:
             _async_backfill_mapping(hass, match, candidate)
+            known.add(candidate.device_id)
+            known |= candidate_physical
+            continue
+
+        if candidate.device_id in known or (candidate_physical & known):
+            # Adopted before and no longer configured: the user removed it.
             continue
 
         hass.async_create_task(
@@ -156,6 +181,8 @@ def start_auto_adoption(hass: HomeAssistant) -> int:
             )
         )
         scheduled += 1
+        known.add(candidate.device_id)
+        known |= candidate_physical
         infos.append(
             {
                 "entry": None,
@@ -165,6 +192,8 @@ def start_auto_adoption(hass: HomeAssistant) -> int:
                 "entities": set(candidate.mapping.values()),
             }
         )
+
+    await store.async_save({"adopted": sorted(known)})
     return scheduled
 
 

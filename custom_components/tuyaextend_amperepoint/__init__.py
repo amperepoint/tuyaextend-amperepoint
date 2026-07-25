@@ -5,7 +5,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.typing import ConfigType
 
-from .adoption import start_auto_adoption
+from .adoption import async_start_auto_adoption
 from .const import DOMAIN, PLATFORMS
 from .coordinator import AmperePointCoordinator
 from .dashboard import async_create_dashboard
@@ -41,7 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await planner.async_start()
 
     await async_create_dashboard(hass, entry)
-    start_auto_adoption(hass)
+    await async_start_auto_adoption(hass)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
