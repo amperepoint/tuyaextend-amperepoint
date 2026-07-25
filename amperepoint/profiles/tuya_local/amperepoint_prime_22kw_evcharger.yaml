@@ -48,7 +48,7 @@ name: Ampere Point Wallbox Prime 22kW (local)
 products:
   - id: gbmxngploofmhbjc
     manufacturer: Ampere Point
-    model: Wallbox Prime 22kW
+    model: Wallbox Prime 22kW (local)
 
 entities:
   - entity: sensor

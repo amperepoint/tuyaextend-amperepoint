@@ -35,7 +35,7 @@
 name: Ampere Point Q11 PRO (local)
 products:
   - manufacturer: Ampere Point
-    model: Q11 PRO
+    model: Q11 PRO (local)
 
 entities:
   - entity: sensor

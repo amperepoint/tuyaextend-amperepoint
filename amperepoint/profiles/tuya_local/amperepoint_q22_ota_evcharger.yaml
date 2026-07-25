@@ -1,8 +1,8 @@
 name: Ampere Point Q22 OTA (local)
 products:
   - id: cu111poj2mtikvls
-    manufacturer: AmperePoint
-    model: Q22 OTA
+    manufacturer: Ampere Point
+    model: Q22 OTA (local)
 entities:
   - entity: sensor
     translation_key: status

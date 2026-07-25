@@ -1,8 +1,8 @@
 name: Ampere Point EV Charger VE (local)
 products:
   - id: fdfjiphjxtc9qyhd
-    manufacturer: AmperePoint
-    model: VE 1P/3P
+    manufacturer: Ampere Point
+    model: VE 1P/3P (local)
 entities:
   - entity: sensor
     translation_key: status

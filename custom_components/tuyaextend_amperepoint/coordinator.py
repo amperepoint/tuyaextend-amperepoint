@@ -305,23 +305,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         switch_enabled = _as_bool(self._state_value(CONF_SOURCE_CHARGE_SWITCH))
         if switch_enabled is None:
             switch_enabled = _as_bool(self._native_value("switch"))
-        raw_dp = (
-            self.native_source.values()
-            if self.native_source
-            else self._mapped_raw_values()
-        )
-        dp_metadata = (
-            self.native_source.definitions()
-            if self.native_source
-            else self._mapped_raw_metadata()
-        )
-        if not _has_reported_values(raw_dp):
-            # A cloud device that lists its codes without ever sending values
-            # would leave the raw view empty, even though the mapped local
-            # entities carry the same datapoints.
-            mapped_dp = self._mapped_source_snapshot()
-            if mapped_dp:
-                raw_dp, dp_metadata = mapped_dp
+        raw_dp, dp_metadata = self._datapoint_view(prime_telemetry is not None)
         schedule_window = _decode_schedule_window(self._native_value("local_timer"))
 
         self._last_update = now
@@ -498,6 +482,45 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for key, value in state.attributes.items()
             if key.startswith("raw_") and not key.endswith(excluded_suffixes)
         }
+
+    def _datapoint_view(
+        self, packed_source: bool
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Combine everything known about the charger's datapoints.
+
+        A charger paired through both the cloud and the LAN reports a
+        different subset on each side: the cloud runtime keeps every datapoint
+        the charger has ever sent, while the LAN answer carries fewer but
+        live ones. Showing only one side loses information, so the cloud view
+        is used as the base and the mapped local entities take precedence for
+        the datapoints they cover.
+        """
+        if self.native_source:
+            values = dict(self.native_source.values())
+            metadata = dict(self.native_source.definitions())
+        else:
+            values = self._mapped_raw_values()
+            metadata = self._mapped_raw_metadata()
+
+        if packed_source:
+            # The packed payload already carries this charger's datapoints,
+            # and its numbering differs from the Q Series one.
+            return values, metadata
+
+        mapped = self._mapped_source_snapshot()
+        if not mapped:
+            return values, metadata
+
+        mapped_values, mapped_metadata = mapped
+        if not _has_reported_values(values):
+            return mapped_values, mapped_metadata
+
+        for code, value in mapped_values.items():
+            values[code] = value
+            # The entity state is already scaled, so the cloud definition's
+            # scale must not be applied to it a second time.
+            metadata[code] = mapped_metadata[code]
+        return values, metadata
 
     def _mapped_source_snapshot(self) -> tuple[dict[str, Any], dict[str, Any]] | None:
         """Build a raw-DP view from the mapped source entities.

@@ -1,8 +1,8 @@
 name: Ampere Point Q Series (local)
 products:
   - id: bktb3jskdic1ar2t
-    manufacturer: AmperePoint
-    model: Q Series
+    manufacturer: Ampere Point
+    model: Q Series (local)
 entities:
   - entity: sensor
     translation_key: status

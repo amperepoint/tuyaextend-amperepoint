@@ -238,6 +238,49 @@ class MappedDatapointViewTests(unittest.TestCase):
         self.assertTrue(metadata["charge_cur_set"]["writable"])
         self.assertFalse(metadata["work_state"]["writable"])
 
+    def test_local_readings_win_over_the_cloud_copy(self) -> None:
+        """Cloud keeps every datapoint; LAN carries the live ones."""
+        instance = self._coordinator()
+
+        class _Native:
+            def values(self):
+                return {
+                    "work_state": "charger_charging",
+                    "charge_cur_set": 16,
+                    "forward_energy_total": 4210,
+                    "system_version": "V1",
+                }
+
+            def definitions(self):
+                return {
+                    "work_state": {"dp_id": 3},
+                    "charge_cur_set": {"dp_id": 4, "scale": 0},
+                    "forward_energy_total": {"dp_id": 1, "scale": 2},
+                    "system_version": {"dp_id": 23},
+                }
+
+        instance.native_source = _Native()
+        values, metadata = instance._datapoint_view(False)
+
+        # Datapoints only the cloud knows are kept...
+        self.assertEqual(values["forward_energy_total"], 4210)
+        self.assertEqual(values["system_version"], "V1")
+        self.assertEqual(metadata["forward_energy_total"]["scale"], 2)
+        # ...while the LAN reading replaces the cloud copy, without the
+        # cloud's scale, because an entity state is already scaled.
+        self.assertEqual(values["charge_cur_set"], "8")
+        self.assertNotIn("scale", metadata["charge_cur_set"])
+        self.assertEqual(values["work_state"], "charger_free")
+
+    def test_packed_source_keeps_its_own_numbering(self) -> None:
+        """A Prime's DP150 must not be relabelled as the Q Series DP4."""
+        instance = self._coordinator()
+        instance._mapped_raw_values = lambda: {"telemetry": "{}"}
+        instance._mapped_raw_metadata = lambda: {"telemetry": {"dp_id": 102}}
+        values, metadata = instance._datapoint_view(True)
+        self.assertEqual(set(values), {"telemetry"})
+        self.assertEqual(metadata["telemetry"]["dp_id"], 102)
+
     def test_empty_cloud_snapshot_is_replaced(self) -> None:
         self.assertFalse(coordinator._has_reported_values({}))
         self.assertFalse(
