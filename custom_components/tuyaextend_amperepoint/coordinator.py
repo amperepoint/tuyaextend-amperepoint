@@ -860,6 +860,56 @@ PRIME_DP_CODES: tuple[tuple[str, str, int], ...] = (
 )
 
 
+# DP102 fields, unpacked into one raw row each: (payload key, code, unit,
+# scale, index inside a phase array).
+PRIME_TELEMETRY_FIELDS: tuple[tuple[str, str, str, float, int | None], ...] = (
+    ("L1", "l1_voltage_v", "V", 10, 0),
+    ("L1", "l1_current_a", "A", 10, 1),
+    ("L1", "l1_power_kw", "kW", 10, 2),
+    ("L2", "l2_voltage_v", "V", 10, 0),
+    ("L2", "l2_current_a", "A", 10, 1),
+    ("L2", "l2_power_kw", "kW", 10, 2),
+    ("L3", "l3_voltage_v", "V", 10, 0),
+    ("L3", "l3_current_a", "A", 10, 1),
+    ("L3", "l3_power_kw", "kW", 10, 2),
+    ("p", "power_total_kw", "kW", 10, None),
+    ("e", "session_energy_kwh", "kWh", 10, None),
+    ("t", "temp_current_c", "C", 10, None),
+    ("cp", "cp_voltage_v", "V", 10, None),
+    ("d", "session_duration_s", "s", 1, None),
+)
+
+
+def _prime_telemetry_fields(payload: Any) -> dict[str, dict[str, Any]]:
+    """Unpack DP102 into one entry per reading.
+
+    The charger delivers all of its live measurements inside a single JSON
+    datapoint. Listing that payload as one row hides the individual values,
+    so each field is exposed separately, the way a charger with discrete
+    datapoints reports them.
+    """
+    payload = _as_json_mapping(payload)
+    if not payload:
+        return {}
+
+    fields: dict[str, dict[str, Any]] = {}
+    for key, code, unit, scale, index in PRIME_TELEMETRY_FIELDS:
+        value = payload.get(key)
+        if index is not None:
+            if not isinstance(value, list | tuple) or len(value) <= index:
+                continue
+            value = value[index]
+        raw = _as_float(value)
+        if raw is None:
+            continue
+        fields[code] = {
+            "raw": value,
+            "scaled": raw / scale if scale else raw,
+            "unit": unit,
+        }
+    return fields
+
+
 def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
     if _decode_prime_telemetry(attributes.get(PRIME_TELEMETRY_ATTRIBUTE)) is None:
         return {}
@@ -869,6 +919,8 @@ def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
         if attr in attributes
     }
     values["work_state"] = state
+    fields = _prime_telemetry_fields(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+    values.update({code: field["raw"] for code, field in fields.items()})
     return values
 
 
@@ -891,6 +943,15 @@ def _prime_raw_metadata(state: Any, attributes: dict[str, Any]) -> dict[str, Any
 
     if "telemetry" in metadata:
         metadata["telemetry"]["meaning"] = _prime_telemetry_summary(telemetry)
+    for code, field in _prime_telemetry_fields(
+        attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
+    ).items():
+        metadata[code] = {
+            "dp_id": 102,
+            "writable": False,
+            "unit": field["unit"],
+            "meaning": f"{field['scaled']:g} {field['unit']}",
+        }
     if "device_information" in metadata:
         info = _as_json_mapping(attributes.get("device_information"))
         parts = [str(info[key]) for key in ("fv", "r") if info.get(key)]

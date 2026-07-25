@@ -155,10 +155,10 @@ class PrimeTelemetryFallbackTests(unittest.TestCase):
         raw = data["raw_dp"]
         metadata = data["dp_metadata"]
         # Codes, not bare DP numbers, and every code carries its DP id.
-        self.assertEqual(
-            set(raw),
+        self.assertLessEqual(
             {"work_state", "state_code", "telemetry", "session_data",
              "device_information"},
+            set(raw),
         )
         self.assertEqual(metadata["telemetry"]["dp_id"], 102)
         self.assertEqual(metadata["work_state"]["dp_id"], 109)
@@ -170,6 +170,26 @@ class PrimeTelemetryFallbackTests(unittest.TestCase):
         self.assertIn("CP 6.0 V", meaning)
         self.assertIn("22 min", meaning)
         self.assertIn("(V9.1.0)F1.4.1", metadata["device_information"]["meaning"])
+
+    def test_packed_payload_is_listed_as_separate_rows(self) -> None:
+        """DP102 readings appear individually, like discrete datapoints."""
+        data = asyncio.run(_make_coordinator()._async_update_data())
+        raw = data["raw_dp"]
+        metadata = data["dp_metadata"]
+
+        # Raw values keep the payload's own encoding...
+        self.assertEqual(raw["l1_voltage_v"], 2180)
+        self.assertEqual(raw["l1_current_a"], 66)
+        self.assertEqual(raw["power_total_kw"], 14)
+        self.assertEqual(raw["session_duration_s"], 1340)
+        # ...and every row carries its DP, unit and scaled reading.
+        self.assertEqual(metadata["l1_voltage_v"]["dp_id"], 102)
+        self.assertEqual(metadata["l1_voltage_v"]["meaning"], "218 V")
+        self.assertEqual(metadata["l1_current_a"]["meaning"], "6.6 A")
+        self.assertEqual(metadata["temp_current_c"]["meaning"], "36 C")
+        self.assertEqual(metadata["cp_voltage_v"]["meaning"], "6 V")
+        # Phases the charger reports as zeroed stay listed, like a real DP.
+        self.assertEqual(raw["l2_voltage_v"], 0)
 
     def test_sleep_state_is_normalized(self) -> None:
         self.assertEqual(models.normalize_status("sleep"), "Uspiony")

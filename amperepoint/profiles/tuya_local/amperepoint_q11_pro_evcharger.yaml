@@ -164,6 +164,154 @@ entities:
         optional: true
         name: sensor
 
+  # Packed phase payloads. tuya-local slices the base64 bytes with "mask",
+  # so each reading becomes its own entity instead of one opaque blob.
+  - entity: sensor
+    name: Voltage L1
+    class: voltage
+    category: diagnostic
+    dps:
+      - id: 6
+        type: base64
+        optional: true
+        name: sensor
+        unit: V
+        mask: "FFFF0000000000"
+        mapping:
+          - scale: 10
+
+  - entity: sensor
+    name: Current L1
+    class: current
+    category: diagnostic
+    dps:
+      - id: 6
+        type: base64
+        optional: true
+        name: sensor
+        unit: A
+        mask: "0000FFFFFF0000"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Power L1
+    class: power
+    category: diagnostic
+    dps:
+      - id: 6
+        type: base64
+        optional: true
+        name: sensor
+        unit: kW
+        mask: "0000000000FFFF"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Voltage L2
+    class: voltage
+    category: diagnostic
+    dps:
+      - id: 7
+        type: base64
+        optional: true
+        name: sensor
+        unit: V
+        mask: "FFFF0000000000"
+        mapping:
+          - scale: 10
+
+  - entity: sensor
+    name: Current L2
+    class: current
+    category: diagnostic
+    dps:
+      - id: 7
+        type: base64
+        optional: true
+        name: sensor
+        unit: A
+        mask: "0000FFFFFF0000"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Power L2
+    class: power
+    category: diagnostic
+    dps:
+      - id: 7
+        type: base64
+        optional: true
+        name: sensor
+        unit: kW
+        mask: "0000000000FFFF"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Voltage L3
+    class: voltage
+    category: diagnostic
+    dps:
+      - id: 8
+        type: base64
+        optional: true
+        name: sensor
+        unit: V
+        mask: "FFFF0000000000"
+        mapping:
+          - scale: 10
+
+  - entity: sensor
+    name: Current L3
+    class: current
+    category: diagnostic
+    dps:
+      - id: 8
+        type: base64
+        optional: true
+        name: sensor
+        unit: A
+        mask: "0000FFFFFF0000"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Power L3
+    class: power
+    category: diagnostic
+    dps:
+      - id: 8
+        type: base64
+        optional: true
+        name: sensor
+        unit: kW
+        mask: "0000000000FFFF"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Schedule payload
+    category: diagnostic
+    hidden: true
+    dps:
+      - id: 19
+        type: base64
+        optional: true
+        name: sensor
+
+  - entity: sensor
+    name: Charge mode payload
+    category: diagnostic
+    hidden: true
+    dps:
+      - id: 33
+        type: base64
+        optional: true
+        name: sensor
+
   # Datapoints this unit did not report, kept for other Q Series units.
   - entity: sensor
     name: Total energy
