@@ -1,4 +1,4 @@
-name: Ampere Point Q22 OTA
+name: Ampere Point Q22 OTA (local)
 products:
   - id: cu111poj2mtikvls
     manufacturer: AmperePoint

@@ -196,6 +196,56 @@ class PrimeTelemetryFallbackTests(unittest.TestCase):
         self.assertEqual(models.normalize_status("SLEEP"), "Uspiony")
 
 
+class MappedDatapointViewTests(unittest.TestCase):
+    """Chargers with one entity per datapoint still get a raw-DP view."""
+
+    def _coordinator(self):
+        instance = object.__new__(coordinator.AmperePointCoordinator)
+        instance.config_entry = types.SimpleNamespace(
+            data={
+                const.CONF_MODEL: "q_series",
+                const.CONF_SOURCE_STATUS: "sensor.q11_status",
+                const.CONF_SOURCE_CURRENT_LIMIT: "number.q11_current",
+                const.CONF_SOURCE_POWER: "sensor.q11_power",
+                const.CONF_SOURCE_CONNECTED: "sensor.q11_connection",
+                const.CONF_SOURCE_TEMPERATURE: "sensor.q11_temperature",
+            },
+            options={},
+        )
+        instance.hass = types.SimpleNamespace(
+            states=_States(
+                {
+                    "sensor.q11_status": _state("charger_free"),
+                    "number.q11_current": _state("8", unit_of_measurement="A"),
+                    "sensor.q11_power": _state("0", unit_of_measurement="kW"),
+                    "sensor.q11_connection": _state("controlpi_12v"),
+                    "sensor.q11_temperature": _state("25", unit_of_measurement="C"),
+                }
+            )
+        )
+        instance.native_source = None
+        return instance
+
+    def test_snapshot_carries_codes_dp_ids_and_write_access(self) -> None:
+        values, metadata = self._coordinator()._mapped_source_snapshot()
+        self.assertEqual(values["work_state"], "charger_free")
+        self.assertEqual(values["charge_cur_set"], "8")
+        self.assertEqual(values["connection_state"], "controlpi_12v")
+        self.assertEqual(metadata["work_state"]["dp_id"], 3)
+        self.assertEqual(metadata["charge_cur_set"]["dp_id"], 4)
+        self.assertEqual(metadata["temp_current"]["dp_id"], 24)
+        # A number entity can be written back, a sensor cannot.
+        self.assertTrue(metadata["charge_cur_set"]["writable"])
+        self.assertFalse(metadata["work_state"]["writable"])
+
+    def test_empty_cloud_snapshot_is_replaced(self) -> None:
+        self.assertFalse(coordinator._has_reported_values({}))
+        self.assertFalse(
+            coordinator._has_reported_values({"work_state": None, "fault": ""})
+        )
+        self.assertTrue(coordinator._has_reported_values({"work_state": "charging"}))
+
+
 class PrimeDiscoveryGateTests(unittest.TestCase):
     def test_wallbox_and_prime_names_pass_the_gate(self) -> None:
         for text in (

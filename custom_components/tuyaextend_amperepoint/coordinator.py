@@ -85,6 +85,41 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 PRIME_TELEMETRY_ATTRIBUTE = "telemetry"
 
+# Mapped source entities for the raw view of chargers that expose one entity
+# per datapoint instead of a raw-DP entity: (config key, code, DP id, unit).
+# The phase readings share DP6/7/8, the way the charger packs them.
+MAPPED_DP_CODES: tuple[tuple[str, str, int, str | None], ...] = (
+    (CONF_SOURCE_TOTAL_ENERGY, "forward_energy_total", 1, "kWh"),
+    (CONF_SOURCE_STATUS, "work_state", 3, None),
+    (CONF_SOURCE_CURRENT_LIMIT, "charge_cur_set", 4, "A"),
+    (CONF_SOURCE_VOLTAGE_L1, "l1_voltage", 6, "V"),
+    (CONF_SOURCE_CURRENT_L1, "l1_current", 6, "A"),
+    (CONF_SOURCE_POWER_L1, "l1_power", 6, "kW"),
+    (CONF_SOURCE_VOLTAGE_L2, "l2_voltage", 7, "V"),
+    (CONF_SOURCE_CURRENT_L2, "l2_current", 7, "A"),
+    (CONF_SOURCE_POWER_L2, "l2_power", 7, "kW"),
+    (CONF_SOURCE_VOLTAGE_L3, "l3_voltage", 8, "V"),
+    (CONF_SOURCE_CURRENT_L3, "l3_current", 8, "A"),
+    (CONF_SOURCE_POWER_L3, "l3_power", 8, "kW"),
+    (CONF_SOURCE_POWER, "power_total", 9, "kW"),
+    (CONF_SOURCE_ERROR, "fault", 10, None),
+    (CONF_SOURCE_CONNECTED, "connection_state", 13, None),
+    (CONF_SOURCE_WORK_MODE, "work_mode", 14, None),
+    (CONF_SOURCE_TARGET_ENERGY, "energy_charge", 17, "kWh"),
+    (CONF_SOURCE_CHARGE_SWITCH, "switch", 18, None),
+    (CONF_SOURCE_TEMPERATURE, "temp_current", 24, "C"),
+    (CONF_SOURCE_LAST_SESSION_ENERGY, "charge_energy_once", 25, "kWh"),
+)
+
+
+def _has_reported_values(raw_dp: Any) -> bool:
+    """Whether a datapoint snapshot carries at least one real value."""
+    if not isinstance(raw_dp, dict) or not raw_dp:
+        return False
+    return any(
+        value not in (None, "", "unknown", "unavailable") for value in raw_dp.values()
+    )
+
 
 class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
@@ -280,6 +315,13 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if self.native_source
             else self._mapped_raw_metadata()
         )
+        if not _has_reported_values(raw_dp):
+            # A cloud device that lists its codes without ever sending values
+            # would leave the raw view empty, even though the mapped local
+            # entities carry the same datapoints.
+            mapped_dp = self._mapped_source_snapshot()
+            if mapped_dp:
+                raw_dp, dp_metadata = mapped_dp
         schedule_window = _decode_schedule_window(self._native_value("local_timer"))
 
         self._last_update = now
@@ -456,6 +498,39 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for key, value in state.attributes.items()
             if key.startswith("raw_") and not key.endswith(excluded_suffixes)
         }
+
+    def _mapped_source_snapshot(self) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        """Build a raw-DP view from the mapped source entities.
+
+        Chargers reached over LAN expose one entity per datapoint instead of a
+        single raw-DP entity, so the datapoint list is reassembled from the
+        entities the config entry maps.
+        """
+        values: dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
+        for config_key, code, dp_id, unit in MAPPED_DP_CODES:
+            entity_id = self._config(config_key)
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state is None or state.state in {None, "unknown", "unavailable"}:
+                continue
+            values[code] = state.state
+            definition: dict[str, Any] = {"dp_id": dp_id}
+            entity_unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) or unit
+            if entity_unit:
+                definition["unit"] = entity_unit
+            definition["writable"] = entity_id.split(".", 1)[0] in {
+                "number",
+                "input_number",
+                "select",
+                "switch",
+                "input_boolean",
+            }
+            metadata[code] = definition
+        if not values:
+            return None
+        return values, metadata
 
     def _mapped_raw_metadata(self) -> dict[str, Any]:
         entity_id = self._config(CONF_SOURCE_RAW_DP)

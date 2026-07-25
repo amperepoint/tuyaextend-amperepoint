@@ -32,7 +32,7 @@
 
 ---
 
-name: Ampere Point Q11 PRO
+name: Ampere Point Q11 PRO (local)
 products:
   - manufacturer: Ampere Point
     model: Q11 PRO
@@ -70,7 +70,7 @@ entities:
         name: system_version
 
   - entity: sensor
-    name: Vehicle connection
+    name: Vehicle connection state
     icon: "mdi:car-electric"
     class: enum
     dps:
