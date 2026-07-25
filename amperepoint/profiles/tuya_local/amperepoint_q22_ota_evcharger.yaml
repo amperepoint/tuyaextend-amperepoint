@@ -31,6 +31,7 @@ entities:
           - dps_val: charger_fault
             value: fault
       - id: 23
+        force: true
         type: string
         optional: true
         name: system_version
@@ -38,6 +39,7 @@ entities:
     class: energy
     dps:
       - id: 1
+        force: true
         type: integer
         optional: true
         name: sensor
@@ -71,6 +73,7 @@ entities:
     category: diagnostic
     dps:
       - id: 6
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -86,6 +89,7 @@ entities:
     category: diagnostic
     dps:
       - id: 6
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -101,6 +105,7 @@ entities:
     category: diagnostic
     dps:
       - id: 6
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -117,6 +122,7 @@ entities:
     category: diagnostic
     dps:
       - id: 7
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -132,6 +138,7 @@ entities:
     category: diagnostic
     dps:
       - id: 7
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -147,6 +154,7 @@ entities:
     category: diagnostic
     dps:
       - id: 7
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -163,6 +171,7 @@ entities:
     category: diagnostic
     dps:
       - id: 8
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -178,6 +187,7 @@ entities:
     category: diagnostic
     dps:
       - id: 8
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -193,6 +203,7 @@ entities:
     category: diagnostic
     dps:
       - id: 8
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -316,6 +327,7 @@ entities:
     icon: "mdi:battery-charging-high"
     dps:
       - id: 17
+        force: true
         type: integer
         name: value
         optional: true
@@ -336,6 +348,7 @@ entities:
     hidden: true
     dps:
       - id: 19
+        force: true
         type: base64
         name: sensor
         optional: true
@@ -354,6 +367,7 @@ entities:
     class: energy_storage
     dps:
       - id: 25
+        force: true
         type: integer
         name: sensor
         optional: true
@@ -367,6 +381,7 @@ entities:
     hidden: true
     dps:
       - id: 33
+        force: true
         type: base64
         name: sensor
         optional: true

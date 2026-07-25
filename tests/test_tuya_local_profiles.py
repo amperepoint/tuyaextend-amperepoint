@@ -143,6 +143,29 @@ class TuyaLocalProfileTests(unittest.TestCase):
         # accepts both a JSON string and a mapping.
         self.assertEqual(telemetry[0]["type"], "json")
 
+    def test_datapoints_missing_from_a_status_reply_are_forced(self) -> None:
+        """tuya-local asks for a datapoint explicitly only when force is set.
+
+        A Q Series charger answers a plain status query with eight datapoints;
+        the phase payloads arrive once a session starts, and the meters were
+        never seen at all. helpers/device_config.py collects dps marked force
+        into the updatedps request that device.py alternates with status, so
+        they must carry the flag to be polled.
+        """
+        answered_by_status = {3, 4, 9, 10, 13, 14, 18, 24}
+        for filename, config in self.profiles:
+            if "prime" in filename:
+                continue  # packs its readings into one datapoint
+            for entity in config["entities"]:
+                for dps in entity["dps"]:
+                    if dps["id"] in answered_by_status:
+                        continue
+                    with self.subTest(f"{filename}/{dps['id']}"):
+                        self.assertTrue(
+                            dps.get("force"),
+                            f"dp {dps['id']} is not returned by a status query",
+                        )
+
 
 if __name__ == "__main__":
     unittest.main()
