@@ -102,6 +102,30 @@ class TuyaLocalProfileTests(unittest.TestCase):
                         )
                         self.assertTrue(dps.get("name"), f"{label}: dps without name")
 
+    def test_profiles_have_distinct_recognizable_names(self) -> None:
+        """tuya-local labels a profile '<name> (<filename>)' in its picker."""
+        names = [config["name"] for _, config in self.profiles]
+        self.assertEqual(len(names), len(set(names)), f"duplicate names: {names}")
+        for name in names:
+            self.assertNotEqual(
+                name, "EV charger", "generic name is unfindable in the picker"
+            )
+
+    def test_prime_datapoints_are_optional(self) -> None:
+        """A missing datapoint must not hide the profile from the picker.
+
+        helpers/device_config.py excludes a config whose non-optional
+        datapoints are absent from the device response, so a charger that
+        answers with only part of its datapoints would never be offered.
+        """
+        config = dict(_profiles())["amperepoint_prime_22kw_evcharger.yaml"]
+        for entity in config["entities"]:
+            for dps in entity["dps"]:
+                with self.subTest(f"{entity.get('name')}/{dps['id']}"):
+                    self.assertTrue(
+                        dps.get("optional"), f"dps {dps['id']} must be optional"
+                    )
+
     def test_prime_profile_exposes_the_telemetry_datapoint(self) -> None:
         """The AmperePoint coordinator decodes DP102 from this attribute."""
         config = dict(_profiles())["amperepoint_prime_22kw_evcharger.yaml"]

@@ -119,5 +119,30 @@ If the credentials step keeps returning a connection error, the flow never
 reaches profile selection at all: re-read the local key, confirm the charger's
 current IP and select protocol version `3.5` explicitly instead of `auto`.
 
+### Reading the ground truth from the Home Assistant log
+
+When the device-type step renders, tuya-local logs at WARNING level:
+
+```text
+Device matches <config> with quality of <n>%. LOCAL DPS: {...}
+```
+
+That `LOCAL DPS` dump is the authoritative record of which datapoints the
+charger returned and of their wire types - a JSON payload arriving as a quoted
+string is a `json`/`string` datapoint, while one arriving as a nested object
+cannot be declared in a tuya-local profile at all. Capture this line before
+extending the profile with the datapoints it does not yet declare; a single
+datapoint declared with the wrong type removes the whole profile from the
+device-type list.
+
+### Why the shipped profile declares only four datapoints
+
+`TuyaDeviceConfig.matches` drops a profile when a non-optional datapoint is
+absent from the device response, and drops it for every user when any declared
+datapoint that is present has a different type than declared. The profile
+therefore marks every datapoint optional and declares only the four the
+AmperePoint integration consumes (`109`, `102`, `101`, `150`), so it stays
+selectable even when the charger answers with a partial datapoint set.
+
 The full step-by-step procedure is documented in `INSTALL.md` /
 `INSTALL.pl.md` and in the profile's own header comment.

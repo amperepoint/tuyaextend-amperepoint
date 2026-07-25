@@ -16,6 +16,23 @@
 #      re-renders the credentials form and never reaches profile selection).
 #   5. In the device-type step choose
 #      "Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)".
+#      The list is sorted by match quality, not alphabetically.
+#
+# Design notes - why this profile is deliberately small:
+#
+# tuya-local excludes a profile from the device-type list entirely when any
+# declared datapoint is missing from the device response (unless the datapoint
+# is optional) or when any declared datapoint that IS present has a different
+# type than declared - see helpers/device_config.py, TuyaDeviceConfig.matches.
+# A charger that answers with only part of its datapoints during the config
+# flow would therefore hide a profile that declares all fourteen of them.
+#
+# Every datapoint below is optional so the profile always remains selectable,
+# and only the datapoints the AmperePoint integration consumes are declared,
+# so undocumented value types cannot disqualify the whole profile. The
+# remaining datapoints (103, 106, 107, 108, 151-157, 188) are documented in
+# amperepoint/docs/product-gbmxngploofmhbjc-ampere-point-prime-22kw.md and can
+# be added once their wire types are confirmed from a "LOCAL DPS:" log line.
 #
 # A HACS update of tuya-local can remove files from its devices/ directory;
 # re-copy this profile and repeat steps 2-5 if the charger stops working
@@ -23,7 +40,7 @@
 
 ---
 
-name: EV charger
+name: Ampere Point Wallbox Prime 22kW
 products:
   - id: gbmxngploofmhbjc
     manufacturer: Ampere Point
@@ -37,6 +54,7 @@ entities:
     dps:
       - id: 109
         type: string
+        optional: true
         name: sensor
         mapping:
           - dps_val: SLEEP
@@ -45,19 +63,18 @@ entities:
             value: idle
           - dps_val: WORKING
             value: charging
-      - id: 101
-        type: integer
-        name: state_code
+      # DP102 carries the live telemetry payload the AmperePoint integration
+      # decodes (voltage, current, power, energy, temperature, control pilot
+      # and session duration). tuya-local delivers a json datapoint as a
+      # string; the integration accepts both a JSON string and a mapping.
       - id: 102
         type: json
-        name: telemetry
-      - id: 103
-        type: json
         optional: true
-        name: session_data
-      - id: 106
-        type: json
-        name: device_information
+        name: telemetry
+      - id: 101
+        type: integer
+        optional: true
+        name: state_code
 
   - entity: sensor
     name: Current limit
@@ -67,57 +84,6 @@ entities:
     dps:
       - id: 150
         type: integer
+        optional: true
         name: sensor
         unit: A
-      - id: 107
-        type: json
-        name: allowed_values
-      - id: 152
-        type: integer
-        name: maximum_value
-      - id: 157
-        type: integer
-        name: minimum_value
-
-  - entity: sensor
-    name: Schedule configuration
-    category: diagnostic
-    dps:
-      - id: 151
-        type: json
-        name: sensor
-
-  - entity: sensor
-    name: Language
-    class: enum
-    category: diagnostic
-    dps:
-      - id: 153
-        type: string
-        name: sensor
-
-  - entity: binary_sensor
-    name: Unknown setting
-    category: diagnostic
-    dps:
-      - id: 155
-        type: boolean
-        name: sensor
-
-  - entity: sensor
-    name: Raw diagnostics
-    category: diagnostic
-    hidden: true
-    dps:
-      # tuya-local raises "is missing a sensor dps" unless one dps is named
-      # "sensor"; the remaining ones are exposed as attributes.
-      - id: 108
-        type: integer
-        name: sensor
-      - id: 154
-        type: integer
-        name: dp_154
-      - id: 188
-        type: boolean
-        optional: true
-        name: dp_188

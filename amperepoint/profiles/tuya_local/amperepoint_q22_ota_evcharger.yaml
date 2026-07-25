@@ -1,4 +1,4 @@
-name: EV charger
+name: Ampere Point Q22 OTA
 products:
   - id: cu111poj2mtikvls
     manufacturer: AmperePoint
