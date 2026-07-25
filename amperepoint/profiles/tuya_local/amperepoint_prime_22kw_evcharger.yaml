@@ -16,23 +16,27 @@
 #      re-renders the credentials form and never reaches profile selection).
 #   5. In the device-type step choose
 #      "Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)".
-#      The list is sorted by match quality, not alphabetically.
+#      The list is sorted by match quality, so this profile comes first.
 #
-# Design notes - why this profile is deliberately small:
+# Datapoint types below are taken from a real "LOCAL DPS:" capture logged by
+# tuya-local during the device-type step on 2026-07-25:
 #
-# tuya-local excludes a profile from the device-type list entirely when any
-# declared datapoint is missing from the device response (unless the datapoint
-# is optional) or when any declared datapoint that IS present has a different
-# type than declared - see helpers/device_config.py, TuyaDeviceConfig.matches.
-# A charger that answers with only part of its datapoints during the config
-# flow would therefore hide a profile that declares all fourteen of them.
+#   101 int, 102 str(json), 103 str(json), 106 str(json), 107 str(json),
+#   109 str, 150 int, 151 str(json), 152 int, 153 str, 154 int, 155 bool,
+#   157 int, 188 bool, 189 int
 #
-# Every datapoint below is optional so the profile always remains selectable,
-# and only the datapoints the AmperePoint integration consumes are declared,
-# so undocumented value types cannot disqualify the whole profile. The
-# remaining datapoints (103, 106, 107, 108, 151-157, 188) are documented in
-# amperepoint/docs/product-gbmxngploofmhbjc-ampere-point-prime-22kw.md and can
-# be added once their wire types are confirmed from a "LOCAL DPS:" log line.
+# Every JSON payload arrives as a quoted string, which is what tuya-local's
+# "json" type expects, and what the AmperePoint integration decodes.
+#
+# Design note - why every datapoint is optional:
+#
+# helpers/device_config.py drops a profile from the device-type list when a
+# non-optional datapoint is absent from the device response, and drops it
+# outright when any declared datapoint that IS present has a different type
+# than declared. DP108 was reported by this charger in July 2026 but was
+# absent from the 2026-07-25 capture, and declaring it as required was enough
+# to hide the whole profile from the picker. Optional datapoints keep the
+# profile selectable no matter which subset the charger answers with.
 #
 # A HACS update of tuya-local can remove files from its devices/ directory;
 # re-copy this profile and repeat steps 2-5 if the charger stops working
@@ -64,9 +68,8 @@ entities:
           - dps_val: WORKING
             value: charging
       # DP102 carries the live telemetry payload the AmperePoint integration
-      # decodes (voltage, current, power, energy, temperature, control pilot
-      # and session duration). tuya-local delivers a json datapoint as a
-      # string; the integration accepts both a JSON string and a mapping.
+      # decodes: per-phase voltage/current/power, total power, session energy,
+      # temperature, control-pilot voltage and session duration.
       - id: 102
         type: json
         optional: true
@@ -75,6 +78,14 @@ entities:
         type: integer
         optional: true
         name: state_code
+      - id: 103
+        type: json
+        optional: true
+        name: session_data
+      - id: 106
+        type: json
+        optional: true
+        name: device_information
 
   - entity: sensor
     name: Current limit
@@ -87,3 +98,65 @@ entities:
         optional: true
         name: sensor
         unit: A
+      - id: 107
+        type: json
+        optional: true
+        name: allowed_values
+      - id: 152
+        type: integer
+        optional: true
+        name: maximum_value
+      - id: 157
+        type: integer
+        optional: true
+        name: minimum_value
+
+  - entity: sensor
+    name: Schedule configuration
+    category: diagnostic
+    dps:
+      - id: 151
+        type: json
+        optional: true
+        name: sensor
+
+  - entity: sensor
+    name: Language
+    class: enum
+    category: diagnostic
+    dps:
+      - id: 153
+        type: string
+        optional: true
+        name: sensor
+
+  - entity: binary_sensor
+    name: Unknown setting
+    category: diagnostic
+    dps:
+      - id: 155
+        type: boolean
+        optional: true
+        name: sensor
+
+  - entity: sensor
+    name: Raw diagnostics
+    category: diagnostic
+    hidden: true
+    dps:
+      - id: 154
+        type: integer
+        optional: true
+        name: sensor
+      - id: 108
+        type: integer
+        optional: true
+        name: dp_108
+      - id: 188
+        type: boolean
+        optional: true
+        name: dp_188
+      - id: 189
+        type: integer
+        optional: true
+        name: dp_189

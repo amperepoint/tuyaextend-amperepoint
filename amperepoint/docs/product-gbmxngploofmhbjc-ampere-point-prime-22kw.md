@@ -135,14 +135,46 @@ extending the profile with the datapoints it does not yet declare; a single
 datapoint declared with the wrong type removes the whole profile from the
 device-type list.
 
-### Why the shipped profile declares only four datapoints
+### Confirmed wire types (capture of 2026-07-25)
+
+A `LOCAL DPS` capture taken while the charger was in `WORKING` state produced:
+
+```json
+{"101": 300, "102": "{\"L1\":[2300,0,0],\"L2\":[0,0,0],\"L3\":[0,0,0],\"t\":370,\"p\":0,\"d\":0,\"e\":0,\"cp\":60}",
+ "103": "{...}", "106": "{...}", "107": "[6,8,10,13,16,20,25,32]", "109": "WORKING",
+ "150": 7, "151": "{...}", "152": 13, "153": "en", "154": 0, "155": true,
+ "157": 6, "188": false, "189": 9}
+```
+
+| Wire type | Datapoints |
+| --- | --- |
+| integer | `101`, `150`, `152`, `154`, `157`, `189` |
+| string | `109`, `153` |
+| string containing JSON (`json` in tuya-local) | `102`, `103`, `106`, `107`, `151` |
+| boolean | `155`, `188` |
+
+Two corrections to the earlier map follow from this capture:
+
+- **every JSON payload is transported as a quoted string**, so `type: json`
+  is correct for `102`, `103`, `106`, `107` and `151`, and the AmperePoint
+  decoder receives a string;
+- **`189` is a new, undocumented datapoint** (value `9`), and **`108` was
+  absent** from this response although it was present in July. Datapoints
+  that come and go must be declared optional.
+
+### Why the shipped profile declares every datapoint as optional
 
 `TuyaDeviceConfig.matches` drops a profile when a non-optional datapoint is
 absent from the device response, and drops it for every user when any declared
-datapoint that is present has a different type than declared. The profile
-therefore marks every datapoint optional and declares only the four the
-AmperePoint integration consumes (`109`, `102`, `101`, `150`), so it stays
-selectable even when the charger answers with a partial datapoint set.
+datapoint that is present has a different type than declared. An earlier
+revision declared `108` as required; because the charger stopped reporting that
+datapoint, the profile was excluded from the device-type list entirely and the
+charger could not be paired at all. Every datapoint is therefore optional, so
+the profile stays selectable whichever subset the charger answers with.
+
+Replaying tuya-local's own matcher over the capture above scores the current
+profile at `matches=True, quality=100%`, which puts it first in the picker as
+`Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
 
 The full step-by-step procedure is documented in `INSTALL.md` /
 `INSTALL.pl.md` and in the profile's own header comment.
