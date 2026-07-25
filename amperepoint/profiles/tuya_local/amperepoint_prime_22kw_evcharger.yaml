@@ -1,8 +1,25 @@
 # Canonical tuya-local profile for Wallbox Prime 22kW.
 #
-# Install by copying this file into custom_components/tuya_local/devices/.
 # Product ID: gbmxngploofmhbjc
 # Protocol: Tuya LAN 3.5
+#
+# Installation - all five steps are required:
+#   1. Copy this file into config/custom_components/tuya_local/devices/.
+#   2. Restart Home Assistant so tuya-local loads the new profile.
+#   3. DELETE any existing tuya-local entry for this charger. tuya-local can
+#      only choose a device profile while ADDING a device; its "Configure"
+#      dialog offers local key, host, protocol and poll-only, never the
+#      device type, so an entry created with a wrong profile cannot be
+#      repointed at this one.
+#   4. Add integration -> Tuya Local -> enter device id, IP, local key and
+#      protocol version 3.5 (the connection must succeed; on failure the flow
+#      re-renders the credentials form and never reaches profile selection).
+#   5. In the device-type step choose
+#      "Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)".
+#
+# A HACS update of tuya-local can remove files from its devices/ directory;
+# re-copy this profile and repeat steps 2-5 if the charger stops working
+# after such an update.
 
 ---
 
@@ -92,9 +109,11 @@ entities:
     category: diagnostic
     hidden: true
     dps:
+      # tuya-local raises "is missing a sensor dps" unless one dps is named
+      # "sensor"; the remaining ones are exposed as attributes.
       - id: 108
         type: integer
-        name: dp_108
+        name: sensor
       - id: 154
         type: integer
         name: dp_154

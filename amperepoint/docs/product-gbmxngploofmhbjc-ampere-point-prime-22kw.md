@@ -101,3 +101,23 @@ dashboard entities:
 The DP102 session counter is used directly when no cumulative total-energy
 source is configured. These mappings depend on the local `tuya-local` entity;
 the standard Tuya cloud integration still does not provide this payload.
+
+## Installing the profile on an already-paired charger
+
+Copying the YAML into `custom_components/tuya_local/devices/` and restarting is
+not enough when the charger already has a tuya-local entry - for example the
+`avidsen_soriami400_solarinverter` entry that tuya-local auto-selected during
+the first setup. tuya-local runs its device-type step
+(`config_flow.async_step_select_type`) only while *adding* a device; the
+options flow of an existing entry exposes local key, host, protocol version and
+poll-only, and re-adding the same device aborts on the duplicate unique id. The
+existing entry must therefore be deleted and the charger added again, which is
+the only path that offers
+`Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
+
+If the credentials step keeps returning a connection error, the flow never
+reaches profile selection at all: re-read the local key, confirm the charger's
+current IP and select protocol version `3.5` explicitly instead of `auto`.
+
+The full step-by-step procedure is documented in `INSTALL.md` /
+`INSTALL.pl.md` and in the profile's own header comment.

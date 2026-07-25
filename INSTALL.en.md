@@ -193,6 +193,32 @@ chargers, but it usually requires the device local key and a working local Tuya
 setup. The first public HACS path is intentionally based on the official Tuya
 integration because it is easier for normal Home Assistant users.
 
+For chargers whose telemetry is only available locally (for example the Wallbox
+Prime 22kW and its DP102), **all** of these steps are required:
+
+1. Copy the profile from `amperepoint/profiles/tuya_local/` into
+   `config/custom_components/tuya_local/devices/`.
+2. Restart Home Assistant so tuya-local loads the new profile.
+3. **Delete the existing tuya-local entry for that charger.** tuya-local can
+   only choose a device profile while *adding* a device; the `Configure`
+   dialog of an existing entry offers local key, host, protocol version and
+   poll-only, never the device type, so an entry created with the wrong
+   profile cannot be repointed at the right one.
+4. `Add integration` -> `Tuya Local` -> enter device id, IP, local key and
+   protocol version (`3.5` for the Prime). The connection must succeed; on
+   failure the credentials form is re-rendered and the flow never reaches
+   profile selection.
+5. In the device-type step pick the charger profile, for example
+   `Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
+
+A HACS update of tuya-local can remove files from its `devices/` directory. If
+the charger stops working after such an update, copy the profile again and
+repeat steps 2-5.
+
+Once the local source is added, AmperePoint recognizes it as the same physical
+charger and backfills the telemetry mapping into the existing entry - no second
+entry and no second panel are created.
+
 ## Troubleshooting
 
 ### No charger is detected

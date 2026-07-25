@@ -196,6 +196,32 @@ konfiguracji lokalnej Tuya. Pierwsza publiczna ścieżka HACS jest celowo oparta
 na oficjalnej integracji Tuya, bo jest prostsza dla typowych użytkowników Home
 Assistant.
 
+Dla ładowarek, których telemetria jest dostępna wyłącznie lokalnie (np. Wallbox
+Prime 22kW i jej DP102), wykonaj **wszystkie** poniższe kroki:
+
+1. Skopiuj profil z `amperepoint/profiles/tuya_local/` do
+   `config/custom_components/tuya_local/devices/`.
+2. Zrestartuj Home Assistant, żeby tuya-local wczytał nowy profil.
+3. **Usuń istniejący wpis tuya-local dla tej ładowarki.** tuya-local pozwala
+   wybrać profil urządzenia wyłącznie podczas *dodawania*; okno `Konfiguruj`
+   istniejącego wpisu udostępnia tylko local key, adres IP, wersję protokołu i
+   tryb odpytywania — nigdy typu urządzenia. Wpisu utworzonego z błędnym
+   profilem nie da się przestawić na właściwy.
+4. `Dodaj integrację` → `Tuya Local` → podaj device id, IP, local key i wersję
+   protokołu (dla Prime: `3.5`). Połączenie musi się udać — przy błędzie
+   formularz danych logowania wyświetla się ponownie i kreator nigdy nie
+   dochodzi do wyboru profilu.
+5. W kroku wyboru typu urządzenia wskaż profil ładowarki, np.
+   `Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
+
+Aktualizacja tuya-local przez HACS może usunąć pliki z jego katalogu
+`devices/`. Jeśli po takiej aktualizacji ładowarka przestanie działać, skopiuj
+profil ponownie i powtórz kroki 2–5.
+
+Po poprawnym dodaniu źródła lokalnego integracja AmperePoint sama rozpozna, że
+to ta sama ładowarka, i dopisze mapowanie telemetrii do istniejącego wpisu —
+nie powstaje drugi wpis ani drugi panel.
+
 ## Rozwiązywanie problemów
 
 ### Ładowarka nie została wykryta
