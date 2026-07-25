@@ -125,10 +125,9 @@ def start_auto_adoption(hass: HomeAssistant) -> int:
     scheduled = 0
     # Richer mappings first, so when the same physical charger is visible
     # through several sources (cloud Tuya and tuya-local) the candidate with
-    # the most telemetry wins and its twins only backfill the existing entry.
-    for candidate in sorted(
-        candidates, key=lambda item: len(item.mapping), reverse=True
-    ):
+    # the most telemetry represents it and the others only contribute the
+    # source entities it is missing.
+    for candidate in _merge_twin_candidates(hass, candidates):
         candidate_physical = _physical_ids(hass, candidate.device_id)
         candidate_title = _normalized_title(getattr(candidate, "title", ""))
         match = next(
@@ -167,3 +166,39 @@ def start_auto_adoption(hass: HomeAssistant) -> int:
             }
         )
     return scheduled
+
+
+def _merge_twin_candidates(hass: HomeAssistant, candidates: list) -> list:
+    """Collapse candidates describing one physical charger into one candidate.
+
+    The cloud Tuya and tuya-local integrations register separate devices for
+    the same charger, and both carry the vendor device id in their registry
+    identifiers.  Adopting both would create two entries, two devices and two
+    rows in the panel's charger selector for one wallbox, so they are merged
+    into the candidate with the richest mapping, which then also inherits the
+    source entities only its twin provides.
+    """
+    ordered = sorted(candidates, key=lambda item: len(item.mapping), reverse=True)
+    merged: list = []
+    seen_physical: list[set[str]] = []
+
+    for candidate in ordered:
+        physical = _physical_ids(hass, candidate.device_id)
+        twin_index = next(
+            (
+                index
+                for index, known in enumerate(seen_physical)
+                if physical and known & physical
+            ),
+            None,
+        )
+        if twin_index is None:
+            merged.append(candidate)
+            seen_physical.append(set(physical))
+            continue
+
+        primary = merged[twin_index]
+        for key, value in candidate.mapping.items():
+            primary.mapping.setdefault(key, value)
+        seen_physical[twin_index] |= physical
+    return merged

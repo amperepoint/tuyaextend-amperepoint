@@ -130,7 +130,7 @@ class PrimeTelemetryDecodeTests(unittest.TestCase):
         self.assertEqual(data["cp_voltage_v"], 6.0)
         self.assertEqual(data["session_duration_s"], 1340)
         self.assertEqual(data["session_duration_min"], 22.3)
-        self.assertEqual(data["raw_dp"]["102"], CHARGING_PAYLOAD)
+        self.assertEqual(data["raw_dp"]["telemetry"], CHARGING_PAYLOAD)
 
 
 class PrimeTelemetryFallbackTests(unittest.TestCase):
@@ -148,7 +148,28 @@ class PrimeTelemetryFallbackTests(unittest.TestCase):
         self.assertEqual(result["voltage_l1"], 218.0)
         self.assertEqual(result["cp_voltage_v"], 6.0)
         self.assertEqual(result["session_duration_min"], 22.3)
-        self.assertEqual(result["raw_dp"]["102"], CHARGING_PAYLOAD)
+        self.assertEqual(result["raw_dp"]["telemetry"], CHARGING_PAYLOAD)
+
+    def test_raw_view_labels_and_decodes_the_prime_datapoints(self) -> None:
+        data = asyncio.run(_make_coordinator()._async_update_data())
+        raw = data["raw_dp"]
+        metadata = data["dp_metadata"]
+        # Codes, not bare DP numbers, and every code carries its DP id.
+        self.assertEqual(
+            set(raw),
+            {"work_state", "state_code", "telemetry", "session_data",
+             "device_information"},
+        )
+        self.assertEqual(metadata["telemetry"]["dp_id"], 102)
+        self.assertEqual(metadata["work_state"]["dp_id"], 109)
+        self.assertEqual(metadata["state_code"]["dp_id"], 101)
+        # The packed payload is rendered instead of repeated verbatim.
+        meaning = metadata["telemetry"]["meaning"]
+        self.assertIn("L1 218.0 V / 6.6 A / 1.40 kW", meaning)
+        self.assertIn("36.0 C", meaning)
+        self.assertIn("CP 6.0 V", meaning)
+        self.assertIn("22 min", meaning)
+        self.assertIn("(V9.1.0)F1.4.1", metadata["device_information"]["meaning"])
 
     def test_sleep_state_is_normalized(self) -> None:
         self.assertEqual(models.normalize_status("sleep"), "Uspiony")

@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.10";
+const AP_Q22_DASHBOARD_VERSION = "0.5.11";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -1490,6 +1490,9 @@ class AmperePointQ22Card extends HTMLElement {
           }
           if (typeof value === "boolean") decoded = value ? "true" : "false";
           if (typeof decoded === "object") decoded = JSON.stringify(decoded);
+          // A source that packs several readings into one payload supplies a
+          // rendered summary instead of repeating the raw JSON.
+          if (definition.meaning) decoded = definition.meaning;
           const unit = definition.unit ? ` ${this.escape(definition.unit)}` : "";
           const access = definition.writable ? " ↔" : "";
           return `

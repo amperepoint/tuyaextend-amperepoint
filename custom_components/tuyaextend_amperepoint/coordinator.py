@@ -460,8 +460,15 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _mapped_raw_metadata(self) -> dict[str, Any]:
         entity_id = self._config(CONF_SOURCE_RAW_DP)
         state = self.hass.states.get(entity_id) if entity_id else None
-        metadata = state.attributes.get("dp_metadata") if state else None
-        return dict(metadata) if isinstance(metadata, dict) else {}
+        if state is None:
+            fallback_id = self._config(CONF_SOURCE_STATUS)
+            state = self.hass.states.get(fallback_id) if fallback_id else None
+        if state is None:
+            return {}
+        metadata = state.attributes.get("dp_metadata")
+        if isinstance(metadata, dict):
+            return dict(metadata)
+        return _prime_raw_metadata(state.state, state.attributes)
 
     def _phase_values(
         self,
@@ -843,23 +850,93 @@ def _prime_phase(
     return value if isinstance(value, dict) else None
 
 
+# Local Wallbox Prime datapoints, keyed by the code shown in the raw-DP view.
+PRIME_DP_CODES: tuple[tuple[str, str, int], ...] = (
+    # (attribute on the source entity, code, DP id)
+    ("state_code", "state_code", 101),
+    (PRIME_TELEMETRY_ATTRIBUTE, "telemetry", 102),
+    ("session_data", "session_data", 103),
+    ("device_information", "device_information", 106),
+)
+
+
 def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
-    telemetry = attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
-    if _decode_prime_telemetry(telemetry) is None:
+    if _decode_prime_telemetry(attributes.get(PRIME_TELEMETRY_ATTRIBUTE)) is None:
         return {}
-    attr_to_dp = {
-        "state_code": "101",
-        PRIME_TELEMETRY_ATTRIBUTE: "102",
-        "session_data": "103",
-        "device_information": "106",
-    }
     values = {
-        dp_id: attributes[attr]
-        for attr, dp_id in attr_to_dp.items()
+        code: attributes[attr]
+        for attr, code, _dp_id in PRIME_DP_CODES
         if attr in attributes
     }
-    values["109"] = state
+    values["work_state"] = state
     return values
+
+
+def _prime_raw_metadata(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
+    """Describe the Prime datapoints so the raw view can label and decode them.
+
+    Without this the dashboard shows the JSON payloads verbatim in both the
+    raw and the decoded column, with no DP number.
+    """
+    telemetry = _decode_prime_telemetry(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+    if telemetry is None:
+        return {}
+
+    metadata: dict[str, Any] = {
+        code: {"dp_id": dp_id, "writable": False}
+        for attr, code, dp_id in PRIME_DP_CODES
+        if attr in attributes
+    }
+    metadata["work_state"] = {"dp_id": 109, "writable": False}
+
+    if "telemetry" in metadata:
+        metadata["telemetry"]["meaning"] = _prime_telemetry_summary(telemetry)
+    if "device_information" in metadata:
+        info = _as_json_mapping(attributes.get("device_information"))
+        parts = [str(info[key]) for key in ("fv", "r") if info.get(key)]
+        if parts:
+            metadata["device_information"]["meaning"] = " · ".join(parts)
+    if "session_data" in metadata:
+        session = _as_json_mapping(attributes.get("session_data"))
+        if session.get("t"):
+            metadata["session_data"]["meaning"] = str(session["t"])
+    return metadata
+
+
+def _prime_telemetry_summary(telemetry: dict[str, Any]) -> str:
+    """Render DP102 as a compact, unit-based line."""
+    parts: list[str] = []
+    for label in ("L1", "L2", "L3"):
+        phase = telemetry.get("phases", {}).get(label)
+        if not phase or not any(
+            value for value in phase.values() if isinstance(value, int | float)
+        ):
+            continue
+        parts.append(
+            f"{label} {phase['voltage']:.1f} V / "
+            f"{phase['current']:.1f} A / {phase['power']:.2f} kW"
+        )
+    for value, fmt in (
+        (telemetry.get("power_kw"), "{:.2f} kW"),
+        (telemetry.get("session_energy_kwh"), "{:.2f} kWh"),
+        (telemetry.get("temperature_c"), "{:.1f} C"),
+        (telemetry.get("cp_voltage_v"), "CP {:.1f} V"),
+    ):
+        if value is not None:
+            parts.append(fmt.format(value))
+    duration = telemetry.get("session_duration_s")
+    if duration is not None:
+        parts.append(f"{round(duration / 60)} min")
+    return " · ".join(parts)
+
+
+def _as_json_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _first_not_none(*values: Any) -> Any:

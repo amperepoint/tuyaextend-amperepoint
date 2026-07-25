@@ -213,6 +213,49 @@ class AutoAdoptionTests(unittest.TestCase):
         _, _, data = hass.config_entries.flow.calls[0]
         self.assertEqual(data[const.CONF_SOURCE_DEVICE_ID], "local-dev")
 
+    def test_cloud_and_local_twins_produce_one_merged_entry(self) -> None:
+        # The real registry shape: one physical charger, two registry devices
+        # (cloud "tuya" and "tuya_local"), both carrying the vendor id.
+        hass = _Hass()
+        registry = _DeviceRegistry(
+            {
+                "cloud-dev": {("tuya", "bf929f09d0e09aa9c3dr2z")},
+                "local-dev": {("tuya_local", "bf929f09d0e09aa9c3dr2z")},
+            }
+        )
+        candidates = [
+            _Candidate(
+                "cloud-dev",
+                {
+                    "source_status": "sensor.cloud_status",
+                    "source_charge_switch": "switch.cloud_charging",
+                },
+                "wallbox_stock_1",
+            ),
+            _Candidate(
+                "local-dev",
+                {
+                    "source_status": "sensor.local_status",
+                    "source_raw_dp": "sensor.local_status",
+                    "source_current_limit": "sensor.local_current_limit",
+                },
+                "Ampere Point Wallbox Prime 22kW",
+            ),
+        ]
+        with (
+            patch.object(adoption, "discover_sources", return_value=candidates),
+            patch.object(adoption.dr, "async_get", return_value=registry),
+        ):
+            self.assertEqual(adoption.start_auto_adoption(hass), 1)
+        self.assertEqual(len(hass.tasks), 1)
+        asyncio.run(hass.tasks.pop())
+        _, _, data = hass.config_entries.flow.calls[0]
+        # The local source wins because it carries the most mappings...
+        self.assertEqual(data[const.CONF_SOURCE_DEVICE_ID], "local-dev")
+        self.assertEqual(data["source_raw_dp"], "sensor.local_status")
+        # ...and inherits what only the cloud twin provides.
+        self.assertEqual(data["source_charge_switch"], "switch.cloud_charging")
+
     def test_manually_configured_charger_is_not_adopted_again(self) -> None:
         # A manual entry stores no source_device_id, only mapped entity ids.
         hass = _Hass(
