@@ -486,41 +486,25 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def _datapoint_view(
         self, packed_source: bool
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        """Combine everything known about the charger's datapoints.
+        """Return the datapoints of the source this entry actually reads.
 
-        A charger paired through both the cloud and the LAN reports a
-        different subset on each side: the cloud runtime keeps every datapoint
-        the charger has ever sent, while the LAN answer carries fewer but
-        live ones. Showing only one side loses information, so the cloud view
-        is used as the base and the mapped local entities take precedence for
-        the datapoints they cover.
+        Cloud and LAN pairings stay separate: a charger configured through
+        the official Tuya integration shows the cloud runtime's datapoints,
+        and one configured through local entities shows theirs. Blending them
+        would present two pairings of the same charger as one list and hide
+        which side a reading came from.
         """
         if self.native_source:
-            values = dict(self.native_source.values())
-            metadata = dict(self.native_source.definitions())
-        else:
-            values = self._mapped_raw_values()
-            metadata = self._mapped_raw_metadata()
+            return self.native_source.values(), self.native_source.definitions()
 
-        if packed_source:
-            # The packed payload already carries this charger's datapoints,
-            # and its numbering differs from the Q Series one.
+        values = self._mapped_raw_values()
+        metadata = self._mapped_raw_metadata()
+        if packed_source or _has_reported_values(values):
             return values, metadata
 
-        mapped = self._mapped_source_snapshot()
-        if not mapped:
-            return values, metadata
-
-        mapped_values, mapped_metadata = mapped
-        if not _has_reported_values(values):
-            return mapped_values, mapped_metadata
-
-        for code, value in mapped_values.items():
-            values[code] = value
-            # The entity state is already scaled, so the cloud definition's
-            # scale must not be applied to it a second time.
-            metadata[code] = mapped_metadata[code]
-        return values, metadata
+        # A local charger exposes one entity per datapoint instead of a
+        # raw-DP entity, so the list is rebuilt from the mapped entities.
+        return self._mapped_source_snapshot() or (values, metadata)
 
     def _mapped_source_snapshot(self) -> tuple[dict[str, Any], dict[str, Any]] | None:
         """Build a raw-DP view from the mapped source entities.

@@ -238,39 +238,37 @@ class MappedDatapointViewTests(unittest.TestCase):
         self.assertTrue(metadata["charge_cur_set"]["writable"])
         self.assertFalse(metadata["work_state"]["writable"])
 
-    def test_local_readings_win_over_the_cloud_copy(self) -> None:
-        """Cloud keeps every datapoint; LAN carries the live ones."""
+    def test_cloud_and_local_pairings_stay_separate(self) -> None:
+        """A cloud-sourced entry never mixes in local entity readings."""
         instance = self._coordinator()
 
         class _Native:
             def values(self):
-                return {
-                    "work_state": "charger_charging",
-                    "charge_cur_set": 16,
-                    "forward_energy_total": 4210,
-                    "system_version": "V1",
-                }
+                return {"work_state": "charger_charging", "charge_cur_set": 16}
 
             def definitions(self):
                 return {
                     "work_state": {"dp_id": 3},
                     "charge_cur_set": {"dp_id": 4, "scale": 0},
-                    "forward_energy_total": {"dp_id": 1, "scale": 2},
-                    "system_version": {"dp_id": 23},
                 }
 
         instance.native_source = _Native()
         values, metadata = instance._datapoint_view(False)
 
-        # Datapoints only the cloud knows are kept...
-        self.assertEqual(values["forward_energy_total"], 4210)
-        self.assertEqual(values["system_version"], "V1")
-        self.assertEqual(metadata["forward_energy_total"]["scale"], 2)
-        # ...while the LAN reading replaces the cloud copy, without the
-        # cloud's scale, because an entity state is already scaled.
-        self.assertEqual(values["charge_cur_set"], "8")
-        self.assertNotIn("scale", metadata["charge_cur_set"])
+        # Exactly the cloud runtime, even though local entities are mapped.
+        self.assertEqual(set(values), {"work_state", "charge_cur_set"})
+        self.assertEqual(values["work_state"], "charger_charging")
+        self.assertEqual(values["charge_cur_set"], 16)
+        self.assertEqual(metadata["charge_cur_set"]["scale"], 0)
+
+    def test_local_entry_lists_its_own_datapoints(self) -> None:
+        instance = self._coordinator()
+        instance._mapped_raw_values = lambda: {}
+        instance._mapped_raw_metadata = lambda: {}
+        values, metadata = instance._datapoint_view(False)
         self.assertEqual(values["work_state"], "charger_free")
+        self.assertEqual(values["charge_cur_set"], "8")
+        self.assertEqual(metadata["charge_cur_set"]["dp_id"], 4)
 
     def test_packed_source_keeps_its_own_numbering(self) -> None:
         """A Prime's DP150 must not be relabelled as the Q Series DP4."""
