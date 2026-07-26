@@ -115,3 +115,40 @@ assert.equal(limitCard._pendingCurrentLimit, null, "confirmation releases it");
 clearTimeout(limitCard._pendingCurrentLimitTimer);
 
 console.log("current limit tests passed");
+
+// The charger's switch permits charging; it is on with no vehicle attached,
+// so the button must follow the session instead of the switch.
+const btnCard = new Card();
+btnCard.setConfig({
+  entities: { switch: "switch.charging", status: "sensor.status", power: "sensor.power" },
+});
+btnCard.render = () => {};
+const calls = [];
+const btnStates = {
+  "switch.charging": { state: "on", attributes: {} },
+  "sensor.status": { state: "Gotowy", attributes: {} },
+  "sensor.power": { state: "0", attributes: {} },
+};
+btnCard._hass = {
+  states: btnStates,
+  callService: async (domain, service, data) => calls.push(`${domain}.${service}`),
+};
+
+assert.equal(btnCard.isCharging(), false, "an enabled switch is not a session");
+
+// Pressing start keeps the switch on rather than toggling it off.
+await btnCard.toggleCharging();
+assert.deepEqual(calls, ["switch.turn_on"]);
+assert.equal(btnCard._pendingCharging, true, "the requested state is held");
+
+// Once the charger reports the session, the requested state is released.
+btnStates["sensor.status"] = { state: "Ladowanie", attributes: {} };
+btnCard.hass = btnCard._hass;
+assert.equal(btnCard._pendingCharging, null);
+
+// Stopping now turns the switch off.
+await btnCard.toggleCharging();
+assert.deepEqual(calls, ["switch.turn_on", "switch.turn_off"]);
+clearTimeout(btnCard._pendingChargingTimer);
+
+console.log("charging button tests passed");

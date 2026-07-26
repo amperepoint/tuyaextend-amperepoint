@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.22";
+const AP_Q22_DASHBOARD_VERSION = "0.5.23";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -535,6 +535,13 @@ class AmperePointQ22Card extends HTMLElement {
     ) {
       this.clearPendingChargingMode();
     }
+    if (
+      this._pendingCharging !== null &&
+      this._pendingCharging !== undefined &&
+      this.isCharging() === this._pendingCharging
+    ) {
+      this.clearPendingCharging();
+    }
     const limitEntity = this.config?.entities?.currentLimit;
     if (this._pendingCurrentLimit !== null && this._pendingCurrentLimit !== undefined && limitEntity) {
       const reported = Number(hass.states?.[limitEntity]?.state);
@@ -915,17 +922,45 @@ class AmperePointQ22Card extends HTMLElement {
   }
 
   async toggleCharging() {
+    const running =
+      this._pendingCharging !== null && this._pendingCharging !== undefined
+        ? this._pendingCharging
+        : this.isCharging();
     const planner = this.stateObj(this.config.entities.planner);
     if (planner?.attributes?.enabled) {
-      await this.setPlannerOverride(this.isCharging() ? "pause" : "charge", {
+      await this.setPlannerOverride(running ? "pause" : "charge", {
         duration_minutes: 60,
       });
       return;
     }
     const entityId = this.config.entities.switch;
     if (!this.hasEntity(entityId)) return;
-    const isOn = this.state(entityId) === "on";
-    await this._hass.callService("switch", isOn ? "turn_off" : "turn_on", { entity_id: entityId });
+    // Act on what the button offers, not on the switch's own state: with the
+    // switch already permitting charging, "start" must keep it on rather than
+    // toggle it off.
+    const target = !running;
+    this._pendingCharging = target;
+    clearTimeout(this._pendingChargingTimer);
+    this._pendingChargingTimer = setTimeout(() => {
+      this.clearPendingCharging();
+      this.render();
+    }, 20_000);
+    this.render();
+    try {
+      await this._hass.callService("switch", target ? "turn_on" : "turn_off", {
+        entity_id: entityId,
+      });
+    } catch (error) {
+      this.clearPendingCharging();
+      this.render();
+      throw error;
+    }
+  }
+
+  clearPendingCharging() {
+    this._pendingCharging = null;
+    clearTimeout(this._pendingChargingTimer);
+    this._pendingChargingTimer = null;
   }
 
   async setCurrentLimit(value) {
@@ -1593,7 +1628,14 @@ class AmperePointQ22Card extends HTMLElement {
     const currentEntity = this.stateObj(e.currentLimit);
     const hasCurrentLimit = this.hasEntity(e.currentLimit);
     const hasSwitch = this.hasEntity(e.switch);
-    const chargingEnabled = hasSwitch && this.state(e.switch) === "on";
+    // The charger's switch reports whether charging is permitted, not whether
+    // a session runs: it is on with no vehicle attached. The button therefore
+    // follows the session, and shows the requested state until the charger
+    // confirms it.
+    const sessionRunning =
+      this._pendingCharging !== null && this._pendingCharging !== undefined
+        ? this._pendingCharging
+        : charging;
     const chargingModeEntity = this.stateObj(e.chargingMode);
     const hasChargingMode = this.hasEntity(e.chargingMode);
     const chargingModes = chargingModeEntity?.attributes?.options || [];
@@ -1664,9 +1706,9 @@ class AmperePointQ22Card extends HTMLElement {
             </div>
             ${
               hasSwitch
-                ? `<button class="power-button ${chargingEnabled ? "on" : ""}" type="button">
-                    ${this.icon(chargingEnabled ? "mdi:pause" : "mdi:play")}
-                    ${chargingEnabled ? this.t("stop") : this.t("charging")}
+                ? `<button class="power-button ${sessionRunning ? "on" : ""}" type="button">
+                    ${this.icon(sessionRunning ? "mdi:pause" : "mdi:play")}
+                    ${sessionRunning ? this.t("stop") : this.t("charging")}
                   </button>`
                 : ""
             }
