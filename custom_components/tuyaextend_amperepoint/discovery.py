@@ -156,7 +156,16 @@ def _match_mapping_keys(text: str, domain: str) -> Iterable[tuple[str, int]]:
             yield CONF_SOURCE_STATUS, 80
 
     if _has_any(
-        text, "connection state", "connection_state", "controlpi", "control pilot", "cp"
+        text,
+        "connection state",
+        "connection_state",
+        "vehicle connection",
+        "vehicle connected",
+        "auto podlaczone",
+        "podlaczenie auta",
+        "controlpi",
+        "control pilot",
+        "cp",
     ):
         yield CONF_SOURCE_CONNECTED, 85
 
@@ -358,6 +367,9 @@ def _looks_like_amperepoint(text: str) -> bool:
         "ev charger",
         "evse",
         "mode 3 type 2",
+        "wallbox",
+        "prime 22kw",
+        "gbmxngploofmhbjc",
     )
 
 

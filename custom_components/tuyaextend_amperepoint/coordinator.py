@@ -85,6 +85,41 @@ _LOGGER = logging.getLogger(__name__)
 STORAGE_VERSION = 1
 PRIME_TELEMETRY_ATTRIBUTE = "telemetry"
 
+# Mapped source entities for the raw view of chargers that expose one entity
+# per datapoint instead of a raw-DP entity: (config key, code, DP id, unit).
+# The phase readings share DP6/7/8, the way the charger packs them.
+MAPPED_DP_CODES: tuple[tuple[str, str, int, str | None], ...] = (
+    (CONF_SOURCE_TOTAL_ENERGY, "forward_energy_total", 1, "kWh"),
+    (CONF_SOURCE_STATUS, "work_state", 3, None),
+    (CONF_SOURCE_CURRENT_LIMIT, "charge_cur_set", 4, "A"),
+    (CONF_SOURCE_VOLTAGE_L1, "l1_voltage", 6, "V"),
+    (CONF_SOURCE_CURRENT_L1, "l1_current", 6, "A"),
+    (CONF_SOURCE_POWER_L1, "l1_power", 6, "kW"),
+    (CONF_SOURCE_VOLTAGE_L2, "l2_voltage", 7, "V"),
+    (CONF_SOURCE_CURRENT_L2, "l2_current", 7, "A"),
+    (CONF_SOURCE_POWER_L2, "l2_power", 7, "kW"),
+    (CONF_SOURCE_VOLTAGE_L3, "l3_voltage", 8, "V"),
+    (CONF_SOURCE_CURRENT_L3, "l3_current", 8, "A"),
+    (CONF_SOURCE_POWER_L3, "l3_power", 8, "kW"),
+    (CONF_SOURCE_POWER, "power_total", 9, "kW"),
+    (CONF_SOURCE_ERROR, "fault", 10, None),
+    (CONF_SOURCE_CONNECTED, "connection_state", 13, None),
+    (CONF_SOURCE_WORK_MODE, "work_mode", 14, None),
+    (CONF_SOURCE_TARGET_ENERGY, "energy_charge", 17, "kWh"),
+    (CONF_SOURCE_CHARGE_SWITCH, "switch", 18, None),
+    (CONF_SOURCE_TEMPERATURE, "temp_current", 24, "C"),
+    (CONF_SOURCE_LAST_SESSION_ENERGY, "charge_energy_once", 25, "kWh"),
+)
+
+
+def _has_reported_values(raw_dp: Any) -> bool:
+    """Whether a datapoint snapshot carries at least one real value."""
+    if not isinstance(raw_dp, dict) or not raw_dp:
+        return False
+    return any(
+        value not in (None, "", "unknown", "unavailable") for value in raw_dp.values()
+    )
+
 
 class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
@@ -115,6 +150,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._was_charging = False
         self._was_connected = False
         self._complete_candidate_since: datetime | None = None
+        # Datapoints the charger reported at least once in this run, so the
+        # raw view keeps them when the charger stops sending them.
+        self._seen_datapoints: dict[str, tuple[Any, dict[str, Any]]] = {}
 
     @callback
     def _handle_native_update(self, *_: Any) -> None:
@@ -144,9 +182,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         now = dt_util.utcnow()
-        prime_telemetry = _decode_prime_telemetry(
-            self._raw_attr(PRIME_TELEMETRY_ATTRIBUTE)
-        )
+        prime_telemetry = _decode_prime_telemetry(self._prime_telemetry_source())
 
         status = normalize_status(
             self._state_value(CONF_SOURCE_STATUS)
@@ -272,16 +308,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         switch_enabled = _as_bool(self._state_value(CONF_SOURCE_CHARGE_SWITCH))
         if switch_enabled is None:
             switch_enabled = _as_bool(self._native_value("switch"))
-        raw_dp = (
-            self.native_source.values()
-            if self.native_source
-            else self._mapped_raw_values()
-        )
-        dp_metadata = (
-            self.native_source.definitions()
-            if self.native_source
-            else self._mapped_raw_metadata()
-        )
+        raw_dp, dp_metadata = self._datapoint_view(prime_telemetry is not None)
         schedule_window = _decode_schedule_window(self._native_value("local_timer"))
 
         self._last_update = now
@@ -412,10 +439,39 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return None
         return state.attributes.get(attr_name)
 
+    def _prime_telemetry_source(self) -> Any:
+        """Return the raw DP102 payload from any mapped source entity.
+
+        The telemetry attribute lives on the tuya-local charging-status
+        sensor. Entries created while that entity was still unavailable (or
+        by older releases) have no raw-DP mapping, so the already-mapped
+        status entity doubles as a fallback and heals such entries without
+        a migration.
+        """
+        for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
+            entity_id = self._config(key)
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state is None:
+                continue
+            value = state.attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
+            if value is not None:
+                return value
+        return None
+
     def _mapped_raw_values(self) -> dict[str, Any]:
         entity_id = self._config(CONF_SOURCE_RAW_DP)
         state = self.hass.states.get(entity_id) if entity_id else None
         if state is None:
+            # Entries without a raw-DP mapping still get the Prime DP list
+            # when the status entity carries the telemetry attributes.
+            fallback_id = self._config(CONF_SOURCE_STATUS)
+            fallback = self.hass.states.get(fallback_id) if fallback_id else None
+            if fallback is not None:
+                prime_values = _prime_raw_values(fallback.state, fallback.attributes)
+                if prime_values:
+                    return prime_values
             return {}
         embedded = state.attributes.get("raw_dp")
         if isinstance(embedded, dict):
@@ -430,11 +486,84 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if key.startswith("raw_") and not key.endswith(excluded_suffixes)
         }
 
+    def _datapoint_view(
+        self, packed_source: bool
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Return the datapoints of the source this entry actually reads.
+
+        Cloud and LAN pairings stay separate: a charger configured through
+        the official Tuya integration shows the cloud runtime's datapoints,
+        and one configured through local entities shows theirs. Blending them
+        would present two pairings of the same charger as one list and hide
+        which side a reading came from.
+        """
+        if self.native_source:
+            return self.native_source.values(), self.native_source.definitions()
+
+        values = self._mapped_raw_values()
+        metadata = self._mapped_raw_metadata()
+        if packed_source or _has_reported_values(values):
+            return values, metadata
+
+        # A local charger exposes one entity per datapoint instead of a
+        # raw-DP entity, so the list is rebuilt from the mapped entities.
+        return self._mapped_source_snapshot() or (values, metadata)
+
+    def _mapped_source_snapshot(self) -> tuple[dict[str, Any], dict[str, Any]] | None:
+        """Build a raw-DP view from the mapped source entities.
+
+        Chargers reached over LAN expose one entity per datapoint instead of a
+        single raw-DP entity, so the datapoint list is reassembled from the
+        entities the config entry maps.
+
+        A charger stops reporting some datapoints outside a session, and a
+        reload starts from an empty cache, so rows would vanish from the list
+        until the charger sent them again. Datapoints seen earlier in this
+        run are therefore kept at their last reading, which is also what the
+        cloud runtime does.
+        """
+        values: dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
+        for config_key, code, dp_id, unit in MAPPED_DP_CODES:
+            entity_id = self._config(config_key)
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state is None or state.state in {None, "unknown", "unavailable"}:
+                remembered = self._seen_datapoints.get(code)
+                if remembered is not None:
+                    values[code], metadata[code] = remembered
+                continue
+            values[code] = state.state
+            definition: dict[str, Any] = {"dp_id": dp_id}
+            entity_unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) or unit
+            if entity_unit:
+                definition["unit"] = entity_unit
+            definition["writable"] = entity_id.split(".", 1)[0] in {
+                "number",
+                "input_number",
+                "select",
+                "switch",
+                "input_boolean",
+            }
+            metadata[code] = definition
+            self._seen_datapoints[code] = (state.state, definition)
+        if not values:
+            return None
+        return values, metadata
+
     def _mapped_raw_metadata(self) -> dict[str, Any]:
         entity_id = self._config(CONF_SOURCE_RAW_DP)
         state = self.hass.states.get(entity_id) if entity_id else None
-        metadata = state.attributes.get("dp_metadata") if state else None
-        return dict(metadata) if isinstance(metadata, dict) else {}
+        if state is None:
+            fallback_id = self._config(CONF_SOURCE_STATUS)
+            state = self.hass.states.get(fallback_id) if fallback_id else None
+        if state is None:
+            return {}
+        metadata = state.attributes.get("dp_metadata")
+        if isinstance(metadata, dict):
+            return dict(metadata)
+        return _prime_raw_metadata(state.state, state.attributes)
 
     def _phase_values(
         self,
@@ -816,23 +945,154 @@ def _prime_phase(
     return value if isinstance(value, dict) else None
 
 
-def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
-    telemetry = attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
-    if _decode_prime_telemetry(telemetry) is None:
+# Local Wallbox Prime datapoints, keyed by the code shown in the raw-DP view.
+PRIME_DP_CODES: tuple[tuple[str, str, int], ...] = (
+    # (attribute on the source entity, code, DP id)
+    ("state_code", "state_code", 101),
+    (PRIME_TELEMETRY_ATTRIBUTE, "telemetry", 102),
+    ("session_data", "session_data", 103),
+    ("device_information", "device_information", 106),
+)
+
+
+# DP102 fields, unpacked into one raw row each: (payload key, code, unit,
+# scale, index inside a phase array).
+PRIME_TELEMETRY_FIELDS: tuple[tuple[str, str, str, float, int | None], ...] = (
+    ("L1", "l1_voltage_v", "V", 10, 0),
+    ("L1", "l1_current_a", "A", 10, 1),
+    ("L1", "l1_power_kw", "kW", 10, 2),
+    ("L2", "l2_voltage_v", "V", 10, 0),
+    ("L2", "l2_current_a", "A", 10, 1),
+    ("L2", "l2_power_kw", "kW", 10, 2),
+    ("L3", "l3_voltage_v", "V", 10, 0),
+    ("L3", "l3_current_a", "A", 10, 1),
+    ("L3", "l3_power_kw", "kW", 10, 2),
+    ("p", "power_total_kw", "kW", 10, None),
+    ("e", "session_energy_kwh", "kWh", 10, None),
+    ("t", "temp_current_c", "C", 10, None),
+    ("cp", "cp_voltage_v", "V", 10, None),
+    ("d", "session_duration_s", "s", 1, None),
+)
+
+
+def _prime_telemetry_fields(payload: Any) -> dict[str, dict[str, Any]]:
+    """Unpack DP102 into one entry per reading.
+
+    The charger delivers all of its live measurements inside a single JSON
+    datapoint. Listing that payload as one row hides the individual values,
+    so each field is exposed separately, the way a charger with discrete
+    datapoints reports them.
+    """
+    payload = _as_json_mapping(payload)
+    if not payload:
         return {}
-    attr_to_dp = {
-        "state_code": "101",
-        PRIME_TELEMETRY_ATTRIBUTE: "102",
-        "session_data": "103",
-        "device_information": "106",
-    }
+
+    fields: dict[str, dict[str, Any]] = {}
+    for key, code, unit, scale, index in PRIME_TELEMETRY_FIELDS:
+        value = payload.get(key)
+        if index is not None:
+            if not isinstance(value, list | tuple) or len(value) <= index:
+                continue
+            value = value[index]
+        raw = _as_float(value)
+        if raw is None:
+            continue
+        fields[code] = {
+            "raw": value,
+            "scaled": raw / scale if scale else raw,
+            "unit": unit,
+        }
+    return fields
+
+
+def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
+    if _decode_prime_telemetry(attributes.get(PRIME_TELEMETRY_ATTRIBUTE)) is None:
+        return {}
     values = {
-        dp_id: attributes[attr]
-        for attr, dp_id in attr_to_dp.items()
+        code: attributes[attr]
+        for attr, code, _dp_id in PRIME_DP_CODES
         if attr in attributes
     }
-    values["109"] = state
+    values["work_state"] = state
+    fields = _prime_telemetry_fields(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+    values.update({code: field["raw"] for code, field in fields.items()})
     return values
+
+
+def _prime_raw_metadata(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
+    """Describe the Prime datapoints so the raw view can label and decode them.
+
+    Without this the dashboard shows the JSON payloads verbatim in both the
+    raw and the decoded column, with no DP number.
+    """
+    telemetry = _decode_prime_telemetry(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+    if telemetry is None:
+        return {}
+
+    metadata: dict[str, Any] = {
+        code: {"dp_id": dp_id, "writable": False}
+        for attr, code, dp_id in PRIME_DP_CODES
+        if attr in attributes
+    }
+    metadata["work_state"] = {"dp_id": 109, "writable": False}
+
+    if "telemetry" in metadata:
+        metadata["telemetry"]["meaning"] = _prime_telemetry_summary(telemetry)
+    for code, field in _prime_telemetry_fields(
+        attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
+    ).items():
+        metadata[code] = {
+            "dp_id": 102,
+            "writable": False,
+            "unit": field["unit"],
+            "meaning": f"{field['scaled']:g} {field['unit']}",
+        }
+    if "device_information" in metadata:
+        info = _as_json_mapping(attributes.get("device_information"))
+        parts = [str(info[key]) for key in ("fv", "r") if info.get(key)]
+        if parts:
+            metadata["device_information"]["meaning"] = " · ".join(parts)
+    if "session_data" in metadata:
+        session = _as_json_mapping(attributes.get("session_data"))
+        if session.get("t"):
+            metadata["session_data"]["meaning"] = str(session["t"])
+    return metadata
+
+
+def _prime_telemetry_summary(telemetry: dict[str, Any]) -> str:
+    """Render DP102 as a compact, unit-based line."""
+    parts: list[str] = []
+    for label in ("L1", "L2", "L3"):
+        phase = telemetry.get("phases", {}).get(label)
+        if not phase or not any(
+            value for value in phase.values() if isinstance(value, int | float)
+        ):
+            continue
+        parts.append(
+            f"{label} {phase['voltage']:.1f} V / "
+            f"{phase['current']:.1f} A / {phase['power']:.2f} kW"
+        )
+    for value, fmt in (
+        (telemetry.get("power_kw"), "{:.2f} kW"),
+        (telemetry.get("session_energy_kwh"), "{:.2f} kWh"),
+        (telemetry.get("temperature_c"), "{:.1f} C"),
+        (telemetry.get("cp_voltage_v"), "CP {:.1f} V"),
+    ):
+        if value is not None:
+            parts.append(fmt.format(value))
+    duration = telemetry.get("session_duration_s")
+    if duration is not None:
+        parts.append(f"{round(duration / 60)} min")
+    return " · ".join(parts)
+
+
+def _as_json_mapping(value: Any) -> dict[str, Any]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _first_not_none(*values: Any) -> Any:

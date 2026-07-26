@@ -1,0 +1,372 @@
+# Canonical tuya-local profile for Ampere Point Q11 PRO (11 kW Q Series).
+#
+# Protocol: Tuya LAN 3.5
+#
+# Installation - all five steps are required:
+#   1. Copy this file into config/custom_components/tuya_local/devices/.
+#   2. Restart Home Assistant so tuya-local loads the new profile.
+#   3. DELETE any existing tuya-local entry for this charger. tuya-local can
+#      only choose a device profile while ADDING a device; its "Configure"
+#      dialog never offers the device type, so an entry created with a wrong
+#      profile (for example the third-party aimiler_11kW_evcharger, which
+#      matches the same datapoints but names and scales them differently)
+#      cannot be repointed at this one.
+#   4. Add integration -> Tuya Local -> enter device id, IP, local key and
+#      protocol version 3.5.
+#   5. In the device-type step choose
+#      "Ampere Point Q11 PRO (amperepoint_q11_pro_evcharger)".
+#
+# Datapoint types are taken from a real "LOCAL DPS:" capture logged by
+# tuya-local during the device-type step on 2026-07-25, with the charger
+# free and idle:
+#
+#   {"3": "charger_free", "4": 8, "9": 0, "10": 0, "13": "controlpi_12v",
+#    "14": "charge_now", "18": true, "24": 25}
+#
+# The unit answered with eight datapoints only: no lifetime meter (DP1), no
+# target energy (DP17), no last-session counter (DP25) and no phase payloads
+# (DP6/7/8). Those are declared as optional so units that do report them are
+# still covered, and so a partial response can never hide this profile from
+# the device-type list - see the note in
+# amperepoint/profiles/tuya_local/amperepoint_prime_22kw_evcharger.yaml.
+
+---
+
+name: Ampere Point Q11 PRO (local)
+products:
+  - manufacturer: Ampere Point
+    model: Q11 PRO (local)
+
+entities:
+  - entity: sensor
+    name: Charging status
+    icon: "mdi:ev-station"
+    class: enum
+    dps:
+      - id: 3
+        type: string
+        optional: true
+        name: sensor
+        mapping:
+          - dps_val: charger_charging
+            value: charging
+          - dps_val: charger_free
+            value: available
+          - dps_val: charger_insert
+            value: plugged_in
+          - dps_val: charger_free_fault
+            value: fault_unplugged
+          - dps_val: charger_wait
+            value: waiting
+          - dps_val: charger_pause
+            value: paused
+          - dps_val: charger_end
+            value: charged
+          - dps_val: charger_fault
+            value: fault
+      - id: 23
+        force: true
+        type: string
+        optional: true
+        name: system_version
+
+  - entity: sensor
+    name: Vehicle connection state
+    icon: "mdi:car-electric"
+    class: enum
+    dps:
+      - id: 13
+        type: string
+        optional: true
+        name: sensor
+        mapping:
+          - dps_val: controlpi_12v
+            value: ready
+          - dps_val: controlpi_9v
+            value: vehicle_detected
+          - dps_val: controlpi_6v
+            value: ready_to_charge
+          - dps_val: controlpi_error
+            value: fault
+
+  - entity: switch
+    name: Charging
+    icon: "mdi:ev-station"
+    dps:
+      - id: 18
+        type: boolean
+        optional: true
+        name: switch
+
+  - entity: number
+    name: Charging current
+    icon: "mdi:current-ac"
+    class: current
+    category: config
+    dps:
+      - id: 4
+        type: integer
+        optional: true
+        name: value
+        unit: A
+        range:
+          min: 6
+          max: 16
+
+  - entity: select
+    name: Charging mode
+    category: config
+    dps:
+      - id: 14
+        type: string
+        optional: true
+        name: option
+        mapping:
+          - dps_val: charge_now
+            value: immediate
+          - dps_val: charge_energy
+            value: fixed_charge
+          - dps_val: charge_schedule
+            value: scheduled_charge
+
+  - entity: sensor
+    name: Power
+    class: power
+    dps:
+      # The charger reports total power in watts, the same unit the phase
+      # payload uses: 1606 W alongside L1 at 220.0 V and 7.3 A.
+      - id: 9
+        type: integer
+        optional: true
+        name: sensor
+        unit: kW
+        class: measurement
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Temperature
+    class: temperature
+    category: diagnostic
+    dps:
+      - id: 24
+        type: integer
+        optional: true
+        name: sensor
+        unit: C
+        class: measurement
+
+  - entity: sensor
+    name: Fault
+    icon: "mdi:alert-circle-outline"
+    category: diagnostic
+    class: enum
+    dps:
+      - id: 10
+        type: bitfield
+        optional: true
+        name: sensor
+
+  # Packed phase payloads. tuya-local slices the base64 bytes with "mask",
+  # so each reading becomes its own entity instead of one opaque blob.
+  - entity: sensor
+    name: Voltage L1
+    class: voltage
+    category: diagnostic
+    dps:
+      - id: 6
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: V
+        mask: "FFFF0000000000"
+        mapping:
+          - scale: 10
+
+  - entity: sensor
+    name: Current L1
+    class: current
+    category: diagnostic
+    dps:
+      - id: 6
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: A
+        mask: "0000FFFFFF0000"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Power L1
+    class: power
+    category: diagnostic
+    dps:
+      - id: 6
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: kW
+        mask: "0000000000FFFF"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Voltage L2
+    class: voltage
+    category: diagnostic
+    dps:
+      - id: 7
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: V
+        mask: "FFFF0000000000"
+        mapping:
+          - scale: 10
+
+  - entity: sensor
+    name: Current L2
+    class: current
+    category: diagnostic
+    dps:
+      - id: 7
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: A
+        mask: "0000FFFFFF0000"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Power L2
+    class: power
+    category: diagnostic
+    dps:
+      - id: 7
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: kW
+        mask: "0000000000FFFF"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Voltage L3
+    class: voltage
+    category: diagnostic
+    dps:
+      - id: 8
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: V
+        mask: "FFFF0000000000"
+        mapping:
+          - scale: 10
+
+  - entity: sensor
+    name: Current L3
+    class: current
+    category: diagnostic
+    dps:
+      - id: 8
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: A
+        mask: "0000FFFFFF0000"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Power L3
+    class: power
+    category: diagnostic
+    dps:
+      - id: 8
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+        unit: kW
+        mask: "0000000000FFFF"
+        mapping:
+          - scale: 1000
+
+  - entity: sensor
+    name: Schedule payload
+    category: diagnostic
+    hidden: true
+    dps:
+      - id: 19
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+
+  - entity: sensor
+    name: Charge mode payload
+    category: diagnostic
+    hidden: true
+    dps:
+      - id: 33
+        force: true
+        type: base64
+        optional: true
+        name: sensor
+
+  # Datapoints this unit did not report, kept for other Q Series units.
+  - entity: sensor
+    name: Total energy
+    class: energy
+    category: diagnostic
+    dps:
+      - id: 1
+        force: true
+        type: integer
+        optional: true
+        name: sensor
+        unit: kWh
+        class: total_increasing
+        mapping:
+          - scale: 100
+
+  - entity: number
+    name: Target energy
+    icon: "mdi:battery-charging-high"
+    category: config
+    dps:
+      - id: 17
+        force: true
+        type: integer
+        optional: true
+        name: value
+        unit: kWh
+        range:
+          min: 0
+          max: 200
+
+  - entity: sensor
+    name: Last session energy
+    class: energy
+    category: diagnostic
+    dps:
+      - id: 25
+        force: true
+        type: integer
+        optional: true
+        name: sensor
+        unit: kWh
+        mapping:
+          - scale: 100

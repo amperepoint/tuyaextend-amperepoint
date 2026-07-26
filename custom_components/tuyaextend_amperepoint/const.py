@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tuyaextend_amperepoint"
 NAME = "AmperePoint"
-VERSION = "0.5.5"
+VERSION = "0.5.24"
 
 PLATFORMS = [
     Platform.SENSOR,

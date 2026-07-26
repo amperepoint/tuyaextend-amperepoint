@@ -11,6 +11,7 @@ entities:
     dps:
       - id: 3
         type: string
+        optional: true
         name: sensor
         mapping:
           - dps_val: charger_charging
@@ -41,6 +42,7 @@ entities:
     dps:
       - id: 4
         type: integer
+        optional: true
         name: value
         unit: A
         range:
@@ -52,6 +54,7 @@ entities:
     dps:
       - id: 9
         type: integer
+        optional: true
         name: sensor
         unit: kW
         class: measurement
@@ -272,4 +275,5 @@ entities:
     dps:
       - id: 18
         type: boolean
+        optional: true
         name: switch

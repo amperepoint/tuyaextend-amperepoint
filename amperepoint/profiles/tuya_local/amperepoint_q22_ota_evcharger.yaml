@@ -11,6 +11,7 @@ entities:
     dps:
       - id: 3
         type: string
+        optional: true
         name: sensor
         mapping:
           - dps_val: charger_charging
@@ -38,6 +39,7 @@ entities:
     dps:
       - id: 1
         type: integer
+        optional: true
         name: sensor
         unit: kWh
         class: total_increasing
@@ -51,6 +53,7 @@ entities:
     dps:
       - id: 4
         type: integer
+        optional: true
         name: value
         unit: A
         range:
@@ -204,6 +207,7 @@ entities:
     dps:
       - id: 9
         type: integer
+        optional: true
         name: sensor
         unit: kW
         class: measurement
@@ -274,6 +278,7 @@ entities:
     dps:
       - id: 13
         type: string
+        optional: true
         name: sensor
         mapping:
           - dps_val: controlpi_12v
@@ -323,6 +328,7 @@ entities:
     dps:
       - id: 18
         type: boolean
+        optional: true
         name: switch
   - entity: sensor
     name: Schedule charging payload
@@ -339,6 +345,7 @@ entities:
     dps:
       - id: 24
         type: integer
+        optional: true
         name: sensor
         unit: C
         class: measurement

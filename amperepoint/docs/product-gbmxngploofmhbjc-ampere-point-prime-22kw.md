@@ -101,3 +101,80 @@ dashboard entities:
 The DP102 session counter is used directly when no cumulative total-energy
 source is configured. These mappings depend on the local `tuya-local` entity;
 the standard Tuya cloud integration still does not provide this payload.
+
+## Installing the profile on an already-paired charger
+
+Copying the YAML into `custom_components/tuya_local/devices/` and restarting is
+not enough when the charger already has a tuya-local entry - for example the
+`avidsen_soriami400_solarinverter` entry that tuya-local auto-selected during
+the first setup. tuya-local runs its device-type step
+(`config_flow.async_step_select_type`) only while *adding* a device; the
+options flow of an existing entry exposes local key, host, protocol version and
+poll-only, and re-adding the same device aborts on the duplicate unique id. The
+existing entry must therefore be deleted and the charger added again, which is
+the only path that offers
+`Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
+
+If the credentials step keeps returning a connection error, the flow never
+reaches profile selection at all: re-read the local key, confirm the charger's
+current IP and select protocol version `3.5` explicitly instead of `auto`.
+
+### Reading the ground truth from the Home Assistant log
+
+When the device-type step renders, tuya-local logs at WARNING level:
+
+```text
+Device matches <config> with quality of <n>%. LOCAL DPS: {...}
+```
+
+That `LOCAL DPS` dump is the authoritative record of which datapoints the
+charger returned and of their wire types - a JSON payload arriving as a quoted
+string is a `json`/`string` datapoint, while one arriving as a nested object
+cannot be declared in a tuya-local profile at all. Capture this line before
+extending the profile with the datapoints it does not yet declare; a single
+datapoint declared with the wrong type removes the whole profile from the
+device-type list.
+
+### Confirmed wire types (capture of 2026-07-25)
+
+A `LOCAL DPS` capture taken while the charger was in `WORKING` state produced:
+
+```json
+{"101": 300, "102": "{\"L1\":[2300,0,0],\"L2\":[0,0,0],\"L3\":[0,0,0],\"t\":370,\"p\":0,\"d\":0,\"e\":0,\"cp\":60}",
+ "103": "{...}", "106": "{...}", "107": "[6,8,10,13,16,20,25,32]", "109": "WORKING",
+ "150": 7, "151": "{...}", "152": 13, "153": "en", "154": 0, "155": true,
+ "157": 6, "188": false, "189": 9}
+```
+
+| Wire type | Datapoints |
+| --- | --- |
+| integer | `101`, `150`, `152`, `154`, `157`, `189` |
+| string | `109`, `153` |
+| string containing JSON (`json` in tuya-local) | `102`, `103`, `106`, `107`, `151` |
+| boolean | `155`, `188` |
+
+Two corrections to the earlier map follow from this capture:
+
+- **every JSON payload is transported as a quoted string**, so `type: json`
+  is correct for `102`, `103`, `106`, `107` and `151`, and the AmperePoint
+  decoder receives a string;
+- **`189` is a new, undocumented datapoint** (value `9`), and **`108` was
+  absent** from this response although it was present in July. Datapoints
+  that come and go must be declared optional.
+
+### Why the shipped profile declares every datapoint as optional
+
+`TuyaDeviceConfig.matches` drops a profile when a non-optional datapoint is
+absent from the device response, and drops it for every user when any declared
+datapoint that is present has a different type than declared. An earlier
+revision declared `108` as required; because the charger stopped reporting that
+datapoint, the profile was excluded from the device-type list entirely and the
+charger could not be paired at all. Every datapoint is therefore optional, so
+the profile stays selectable whichever subset the charger answers with.
+
+Replaying tuya-local's own matcher over the capture above scores the current
+profile at `matches=True, quality=100%`, which puts it first in the picker as
+`Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
+
+The full step-by-step procedure is documented in `INSTALL.md` /
+`INSTALL.pl.md` and in the profile's own header comment.

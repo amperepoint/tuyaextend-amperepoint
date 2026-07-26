@@ -25,17 +25,19 @@ class HomeAssistantError(Exception):
 
 
 class _Store:
+    """In-memory stand-in that keeps what was saved, like the real Store."""
+
     def __init__(self, *args, **kwargs) -> None:
-        pass
+        self._data = None
 
     def __class_getitem__(cls, _item):
         return cls
 
     async def async_load(self):
-        return None
+        return self._data
 
-    async def async_save(self, _data) -> None:
-        return None
+    async def async_save(self, data) -> None:
+        self._data = data
 
     def async_delay_save(self, *_args, **_kwargs) -> None:
         return None
@@ -77,6 +79,8 @@ def install_homeassistant_stubs() -> None:
     _module(
         "homeassistant.const",
         CONF_ICON="icon",
+        CONF_NAME="name",
+        EVENT_HOMEASSISTANT_STARTED="homeassistant_started",
         ATTR_UNIT_OF_MEASUREMENT="unit_of_measurement",
         PERCENTAGE="%",
         UnitOfElectricCurrent=types.SimpleNamespace(MILLIAMPERE="mA", AMPERE="A"),

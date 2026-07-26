@@ -130,7 +130,194 @@ class PrimeTelemetryDecodeTests(unittest.TestCase):
         self.assertEqual(data["cp_voltage_v"], 6.0)
         self.assertEqual(data["session_duration_s"], 1340)
         self.assertEqual(data["session_duration_min"], 22.3)
-        self.assertEqual(data["raw_dp"]["102"], CHARGING_PAYLOAD)
+        self.assertEqual(data["raw_dp"]["telemetry"], CHARGING_PAYLOAD)
+
+
+class PrimeTelemetryFallbackTests(unittest.TestCase):
+    def test_update_works_without_raw_dp_mapping(self) -> None:
+        """Entries frozen without source_raw_dp heal via the status entity."""
+        instance = _make_coordinator()
+        data = dict(instance.config_entry.data)
+        del data[const.CONF_SOURCE_RAW_DP]
+        instance.config_entry.data = data
+
+        result = asyncio.run(instance._async_update_data())
+        self.assertEqual(result["power_kw"], 1.4)
+        self.assertEqual(result["session_energy_kwh"], 0.1)
+        self.assertEqual(result["temperature_c"], 36.0)
+        self.assertEqual(result["voltage_l1"], 218.0)
+        self.assertEqual(result["cp_voltage_v"], 6.0)
+        self.assertEqual(result["session_duration_min"], 22.3)
+        self.assertEqual(result["raw_dp"]["telemetry"], CHARGING_PAYLOAD)
+
+    def test_raw_view_labels_and_decodes_the_prime_datapoints(self) -> None:
+        data = asyncio.run(_make_coordinator()._async_update_data())
+        raw = data["raw_dp"]
+        metadata = data["dp_metadata"]
+        # Codes, not bare DP numbers, and every code carries its DP id.
+        self.assertLessEqual(
+            {"work_state", "state_code", "telemetry", "session_data",
+             "device_information"},
+            set(raw),
+        )
+        self.assertEqual(metadata["telemetry"]["dp_id"], 102)
+        self.assertEqual(metadata["work_state"]["dp_id"], 109)
+        self.assertEqual(metadata["state_code"]["dp_id"], 101)
+        # The packed payload is rendered instead of repeated verbatim.
+        meaning = metadata["telemetry"]["meaning"]
+        self.assertIn("L1 218.0 V / 6.6 A / 1.40 kW", meaning)
+        self.assertIn("36.0 C", meaning)
+        self.assertIn("CP 6.0 V", meaning)
+        self.assertIn("22 min", meaning)
+        self.assertIn("(V9.1.0)F1.4.1", metadata["device_information"]["meaning"])
+
+    def test_packed_payload_is_listed_as_separate_rows(self) -> None:
+        """DP102 readings appear individually, like discrete datapoints."""
+        data = asyncio.run(_make_coordinator()._async_update_data())
+        raw = data["raw_dp"]
+        metadata = data["dp_metadata"]
+
+        # Raw values keep the payload's own encoding...
+        self.assertEqual(raw["l1_voltage_v"], 2180)
+        self.assertEqual(raw["l1_current_a"], 66)
+        self.assertEqual(raw["power_total_kw"], 14)
+        self.assertEqual(raw["session_duration_s"], 1340)
+        # ...and every row carries its DP, unit and scaled reading.
+        self.assertEqual(metadata["l1_voltage_v"]["dp_id"], 102)
+        self.assertEqual(metadata["l1_voltage_v"]["meaning"], "218 V")
+        self.assertEqual(metadata["l1_current_a"]["meaning"], "6.6 A")
+        self.assertEqual(metadata["temp_current_c"]["meaning"], "36 C")
+        self.assertEqual(metadata["cp_voltage_v"]["meaning"], "6 V")
+        # Phases the charger reports as zeroed stay listed, like a real DP.
+        self.assertEqual(raw["l2_voltage_v"], 0)
+
+    def test_sleep_state_is_normalized(self) -> None:
+        self.assertEqual(models.normalize_status("sleep"), "Uspiony")
+        self.assertEqual(models.normalize_status("SLEEP"), "Uspiony")
+
+
+class MappedDatapointViewTests(unittest.TestCase):
+    """Chargers with one entity per datapoint still get a raw-DP view."""
+
+    def _coordinator(self):
+        instance = object.__new__(coordinator.AmperePointCoordinator)
+        instance.config_entry = types.SimpleNamespace(
+            data={
+                const.CONF_MODEL: "q_series",
+                const.CONF_SOURCE_STATUS: "sensor.q11_status",
+                const.CONF_SOURCE_CURRENT_LIMIT: "number.q11_current",
+                const.CONF_SOURCE_POWER: "sensor.q11_power",
+                const.CONF_SOURCE_CONNECTED: "sensor.q11_connection",
+                const.CONF_SOURCE_TEMPERATURE: "sensor.q11_temperature",
+            },
+            options={},
+        )
+        instance.hass = types.SimpleNamespace(
+            states=_States(
+                {
+                    "sensor.q11_status": _state("charger_free"),
+                    "number.q11_current": _state("8", unit_of_measurement="A"),
+                    "sensor.q11_power": _state("0", unit_of_measurement="kW"),
+                    "sensor.q11_connection": _state("controlpi_12v"),
+                    "sensor.q11_temperature": _state("25", unit_of_measurement="C"),
+                }
+            )
+        )
+        instance.native_source = None
+        instance._seen_datapoints = {}
+        return instance
+
+    def test_snapshot_carries_codes_dp_ids_and_write_access(self) -> None:
+        values, metadata = self._coordinator()._mapped_source_snapshot()
+        self.assertEqual(values["work_state"], "charger_free")
+        self.assertEqual(values["charge_cur_set"], "8")
+        self.assertEqual(values["connection_state"], "controlpi_12v")
+        self.assertEqual(metadata["work_state"]["dp_id"], 3)
+        self.assertEqual(metadata["charge_cur_set"]["dp_id"], 4)
+        self.assertEqual(metadata["temp_current"]["dp_id"], 24)
+        # A number entity can be written back, a sensor cannot.
+        self.assertTrue(metadata["charge_cur_set"]["writable"])
+        self.assertFalse(metadata["work_state"]["writable"])
+
+    def test_cloud_and_local_pairings_stay_separate(self) -> None:
+        """A cloud-sourced entry never mixes in local entity readings."""
+        instance = self._coordinator()
+
+        class _Native:
+            def values(self):
+                return {"work_state": "charger_charging", "charge_cur_set": 16}
+
+            def definitions(self):
+                return {
+                    "work_state": {"dp_id": 3},
+                    "charge_cur_set": {"dp_id": 4, "scale": 0},
+                }
+
+        instance.native_source = _Native()
+        values, metadata = instance._datapoint_view(False)
+
+        # Exactly the cloud runtime, even though local entities are mapped.
+        self.assertEqual(set(values), {"work_state", "charge_cur_set"})
+        self.assertEqual(values["work_state"], "charger_charging")
+        self.assertEqual(values["charge_cur_set"], 16)
+        self.assertEqual(metadata["charge_cur_set"]["scale"], 0)
+
+    def test_local_entry_lists_its_own_datapoints(self) -> None:
+        instance = self._coordinator()
+        instance._mapped_raw_values = lambda: {}
+        instance._mapped_raw_metadata = lambda: {}
+        values, metadata = instance._datapoint_view(False)
+        self.assertEqual(values["work_state"], "charger_free")
+        self.assertEqual(values["charge_cur_set"], "8")
+        self.assertEqual(metadata["charge_cur_set"]["dp_id"], 4)
+
+    def test_packed_source_keeps_its_own_numbering(self) -> None:
+        """A Prime's DP150 must not be relabelled as the Q Series DP4."""
+        instance = self._coordinator()
+        instance._mapped_raw_values = lambda: {"telemetry": "{}"}
+        instance._mapped_raw_metadata = lambda: {"telemetry": {"dp_id": 102}}
+        values, metadata = instance._datapoint_view(True)
+        self.assertEqual(set(values), {"telemetry"})
+        self.assertEqual(metadata["telemetry"]["dp_id"], 102)
+
+    def test_datapoints_survive_a_charger_that_stops_reporting(self) -> None:
+        """Rows must not vanish when the charger goes quiet between sessions."""
+        instance = self._coordinator()
+        values, _ = instance._mapped_source_snapshot()
+        self.assertEqual(values["power_total"], "0")
+        self.assertEqual(values["temp_current"], "25")
+
+        # The charger stops sending power and temperature.
+        instance.hass.states._states["sensor.q11_power"] = _state("unavailable")
+        del instance.hass.states._states["sensor.q11_temperature"]
+
+        values, metadata = instance._mapped_source_snapshot()
+        self.assertEqual(values["power_total"], "0")
+        self.assertEqual(values["temp_current"], "25")
+        self.assertEqual(metadata["temp_current"]["dp_id"], 24)
+        # A datapoint never seen stays absent.
+        self.assertNotIn("forward_energy_total", values)
+
+    def test_empty_cloud_snapshot_is_replaced(self) -> None:
+        self.assertFalse(coordinator._has_reported_values({}))
+        self.assertFalse(
+            coordinator._has_reported_values({"work_state": None, "fault": ""})
+        )
+        self.assertTrue(coordinator._has_reported_values({"work_state": "charging"}))
+
+
+class PrimeDiscoveryGateTests(unittest.TestCase):
+    def test_wallbox_and_prime_names_pass_the_gate(self) -> None:
+        for text in (
+            "Wallbox Prime 22kW",
+            "wallbox_stock_1",
+            "gbmxngploofmhbjc",
+            "Ladowarka garaz Wallbox",
+        ):
+            self.assertTrue(discovery._looks_like_amperepoint(text), text)
+
+    def test_unrelated_devices_stay_filtered(self) -> None:
+        self.assertFalse(discovery._looks_like_amperepoint("Living room lamp"))
 
 
 class PrimeTelemetryDiscoveryTests(unittest.TestCase):

@@ -94,6 +94,7 @@ STATUS_MAP = {
     "standby": "Gotowy",
     "ready": "Gotowy",
     "idle": "Gotowy",
+    "sleep": "Uspiony",
     "available": "Gotowy",
     "waiting": "Gotowy",
     "charger_free": "Gotowy",

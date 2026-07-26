@@ -151,7 +151,16 @@ def _is_generated_legacy_dashboard(
         }
     ):
         return False
-    if card.get("entities", {}) != expected_entities:
+    stored_entities = card.get("entities", {})
+    if not isinstance(stored_entities, dict):
+        return False
+    # Legacy dashboards predate sensors added later (for example session
+    # duration), so the stored mapping is a subset of today's expected
+    # mapping; a renamed or foreign entity marks the dashboard as customized.
+    if any(
+        expected_entities.get(card_key) != entity_id
+        for card_key, entity_id in stored_entities.items()
+    ):
         return False
     if card.get("configEntryId", entry.entry_id) != entry.entry_id:
         return False
@@ -198,6 +207,29 @@ async def _async_remove_legacy_dashboard(
     return True
 
 
+async def _async_refresh_dashboard_version(storage: LovelaceStorage) -> None:
+    """Stamp the current version into the stored shared-panel card."""
+    try:
+        config = await storage.async_load(False)
+    except ConfigNotFound:
+        return
+    if not isinstance(config, dict):
+        return
+
+    changed = False
+    for view in config.get("views", []):
+        for card in view.get("cards", []):
+            if not isinstance(card, dict):
+                continue
+            if card.get("type") != "custom:amperepoint-q22-card":
+                continue
+            if card.get("dashboardVersion") != VERSION:
+                card["dashboardVersion"] = VERSION
+                changed = True
+    if changed:
+        await storage.async_save(config)
+
+
 async def async_create_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> str:
     """Ensure the single shared AmperePoint panel exists."""
     domain_data = hass.data.setdefault(DOMAIN, {})
@@ -208,6 +240,8 @@ async def async_create_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> str
 
         existing = hass.data[LOVELACE_DATA].dashboards.get(DASHBOARD_URL_PATH)
         if existing is not None:
+            if isinstance(existing, LovelaceStorage):
+                await _async_refresh_dashboard_version(existing)
             return DASHBOARD_URL_PATH
 
         item = {

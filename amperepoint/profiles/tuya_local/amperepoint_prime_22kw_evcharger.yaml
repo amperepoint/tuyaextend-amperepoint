@@ -1,16 +1,54 @@
 # Canonical tuya-local profile for Wallbox Prime 22kW.
 #
-# Install by copying this file into custom_components/tuya_local/devices/.
 # Product ID: gbmxngploofmhbjc
 # Protocol: Tuya LAN 3.5
+#
+# Installation - all five steps are required:
+#   1. Copy this file into config/custom_components/tuya_local/devices/.
+#   2. Restart Home Assistant so tuya-local loads the new profile.
+#   3. DELETE any existing tuya-local entry for this charger. tuya-local can
+#      only choose a device profile while ADDING a device; its "Configure"
+#      dialog offers local key, host, protocol and poll-only, never the
+#      device type, so an entry created with a wrong profile cannot be
+#      repointed at this one.
+#   4. Add integration -> Tuya Local -> enter device id, IP, local key and
+#      protocol version 3.5 (the connection must succeed; on failure the flow
+#      re-renders the credentials form and never reaches profile selection).
+#   5. In the device-type step choose
+#      "Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)".
+#      The list is sorted by match quality, so this profile comes first.
+#
+# Datapoint types below are taken from a real "LOCAL DPS:" capture logged by
+# tuya-local during the device-type step on 2026-07-25:
+#
+#   101 int, 102 str(json), 103 str(json), 106 str(json), 107 str(json),
+#   109 str, 150 int, 151 str(json), 152 int, 153 str, 154 int, 155 bool,
+#   157 int, 188 bool, 189 int
+#
+# Every JSON payload arrives as a quoted string, which is what tuya-local's
+# "json" type expects, and what the AmperePoint integration decodes.
+#
+# Design note - why every datapoint is optional:
+#
+# helpers/device_config.py drops a profile from the device-type list when a
+# non-optional datapoint is absent from the device response, and drops it
+# outright when any declared datapoint that IS present has a different type
+# than declared. DP108 was reported by this charger in July 2026 but was
+# absent from the 2026-07-25 capture, and declaring it as required was enough
+# to hide the whole profile from the picker. Optional datapoints keep the
+# profile selectable no matter which subset the charger answers with.
+#
+# A HACS update of tuya-local can remove files from its devices/ directory;
+# re-copy this profile and repeat steps 2-5 if the charger stops working
+# after such an update.
 
 ---
 
-name: EV charger
+name: Ampere Point Wallbox Prime 22kW (local)
 products:
   - id: gbmxngploofmhbjc
     manufacturer: Ampere Point
-    model: Wallbox Prime 22kW
+    model: Wallbox Prime 22kW (local)
 
 entities:
   - entity: sensor
@@ -20,6 +58,7 @@ entities:
     dps:
       - id: 109
         type: string
+        optional: true
         name: sensor
         mapping:
           - dps_val: SLEEP
@@ -28,18 +67,24 @@ entities:
             value: idle
           - dps_val: WORKING
             value: charging
-      - id: 101
-        type: integer
-        name: state_code
+      # DP102 carries the live telemetry payload the AmperePoint integration
+      # decodes: per-phase voltage/current/power, total power, session energy,
+      # temperature, control-pilot voltage and session duration.
       - id: 102
         type: json
+        optional: true
         name: telemetry
+      - id: 101
+        type: integer
+        optional: true
+        name: state_code
       - id: 103
         type: json
         optional: true
         name: session_data
       - id: 106
         type: json
+        optional: true
         name: device_information
 
   - entity: sensor
@@ -50,16 +95,20 @@ entities:
     dps:
       - id: 150
         type: integer
+        optional: true
         name: sensor
         unit: A
       - id: 107
         type: json
+        optional: true
         name: allowed_values
       - id: 152
         type: integer
+        optional: true
         name: maximum_value
       - id: 157
         type: integer
+        optional: true
         name: minimum_value
 
   - entity: sensor
@@ -68,6 +117,7 @@ entities:
     dps:
       - id: 151
         type: json
+        optional: true
         name: sensor
 
   - entity: sensor
@@ -77,6 +127,7 @@ entities:
     dps:
       - id: 153
         type: string
+        optional: true
         name: sensor
 
   - entity: binary_sensor
@@ -85,6 +136,7 @@ entities:
     dps:
       - id: 155
         type: boolean
+        optional: true
         name: sensor
 
   - entity: sensor
@@ -92,13 +144,19 @@ entities:
     category: diagnostic
     hidden: true
     dps:
-      - id: 108
-        type: integer
-        name: dp_108
       - id: 154
         type: integer
-        name: dp_154
+        optional: true
+        name: sensor
+      - id: 108
+        type: integer
+        optional: true
+        name: dp_108
       - id: 188
         type: boolean
         optional: true
         name: dp_188
+      - id: 189
+        type: integer
+        optional: true
+        name: dp_189

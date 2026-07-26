@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.5";
+const AP_Q22_DASHBOARD_VERSION = "0.5.24";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -535,6 +535,20 @@ class AmperePointQ22Card extends HTMLElement {
     ) {
       this.clearPendingChargingMode();
     }
+    if (
+      this._pendingCharging !== null &&
+      this._pendingCharging !== undefined &&
+      this.isCharging() === this._pendingCharging
+    ) {
+      this.clearPendingCharging();
+    }
+    const limitEntity = this.config?.entities?.currentLimit;
+    if (this._pendingCurrentLimit !== null && this._pendingCurrentLimit !== undefined && limitEntity) {
+      const reported = Number(hass.states?.[limitEntity]?.state);
+      if (Number.isFinite(reported) && Math.abs(reported - this._pendingCurrentLimit) < 0.51) {
+        this.clearPendingCurrentLimit();
+      }
+    }
     this.render();
   }
 
@@ -581,6 +595,7 @@ class AmperePointQ22Card extends HTMLElement {
       error: "faults",
       power: "power",
       session_energy: "sessionEnergy",
+      session_duration: "sessionDuration",
       total_energy: "totalEnergy",
       last_session_energy: "lastSessionDp25",
       temperature: "temperature",
@@ -693,7 +708,7 @@ class AmperePointQ22Card extends HTMLElement {
       faults: { domains: ["sensor", "binary_sensor"], any: [" error", "_error", " fault", "_fault", " bled", "_bled"], not: [] },
       power: { domains: ["sensor"], any: [" power", "_power", "total power", "total_power", "moc chwilowa", "moc teraz"], not: ["power_l1", "power_l2", "power_l3", "moc_l1", "moc_l2", "moc_l3", "phase", "faza"] },
       sessionEnergy: { domains: ["sensor"], any: ["session energy", "session_energy", "energia biezacej sesji", "energia_biezacej_sesji"], not: ["last", "ostatniej", "charge_energy_once"] },
-      sessionDuration: { domains: ["sensor"], any: ["session duration", "session_duration", "czas biezacej sesji", "czas_biezacej_sesji"], not: [] },
+      sessionDuration: { domains: ["sensor"], any: ["session duration", "session_duration", "czas sesji", "czas biezacej sesji", "czas_biezacej_sesji"], not: [] },
       totalEnergy: { domains: ["sensor"], any: ["total energy", "total_energy", "forward energy total", "forward_energy_total", "energia calkowita"], not: [] },
       dailyEnergy: { domains: ["sensor"], any: ["daily energy", "daily_energy", "daily total energy", "daily_total_energy", "energia dzienna"], not: [] },
       lastSessionDelta: { domains: ["sensor"], any: ["last session delta", "ostatniej sesji delta", "energia_ostatniej_sesji_delta"], not: [] },
@@ -907,23 +922,71 @@ class AmperePointQ22Card extends HTMLElement {
   }
 
   async toggleCharging() {
+    const running =
+      this._pendingCharging !== null && this._pendingCharging !== undefined
+        ? this._pendingCharging
+        : this.isCharging();
     const planner = this.stateObj(this.config.entities.planner);
     if (planner?.attributes?.enabled) {
-      await this.setPlannerOverride(this.isCharging() ? "pause" : "charge", {
+      await this.setPlannerOverride(running ? "pause" : "charge", {
         duration_minutes: 60,
       });
       return;
     }
     const entityId = this.config.entities.switch;
     if (!this.hasEntity(entityId)) return;
-    const isOn = this.state(entityId) === "on";
-    await this._hass.callService("switch", isOn ? "turn_off" : "turn_on", { entity_id: entityId });
+    // Act on what the button offers, not on the switch's own state: with the
+    // switch already permitting charging, "start" must keep it on rather than
+    // toggle it off.
+    const target = !running;
+    this._pendingCharging = target;
+    clearTimeout(this._pendingChargingTimer);
+    this._pendingChargingTimer = setTimeout(() => {
+      this.clearPendingCharging();
+      this.render();
+    }, 20_000);
+    this.render();
+    try {
+      await this._hass.callService("switch", target ? "turn_on" : "turn_off", {
+        entity_id: entityId,
+      });
+    } catch (error) {
+      this.clearPendingCharging();
+      this.render();
+      throw error;
+    }
+  }
+
+  clearPendingCharging() {
+    this._pendingCharging = null;
+    clearTimeout(this._pendingChargingTimer);
+    this._pendingChargingTimer = null;
   }
 
   async setCurrentLimit(value) {
     const entityId = this.config.entities.currentLimit;
     if (!this.hasEntity(entityId)) return;
-    await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
+    // The charger applies the new limit at once, but its entity keeps the
+    // old reading until the next poll, which would snap the slider back.
+    this._pendingCurrentLimit = Number(value);
+    clearTimeout(this._pendingCurrentLimitTimer);
+    this._pendingCurrentLimitTimer = setTimeout(() => {
+      this.clearPendingCurrentLimit();
+      this.render();
+    }, 30_000);
+    try {
+      await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
+    } catch (error) {
+      this.clearPendingCurrentLimit();
+      this.render();
+      throw error;
+    }
+  }
+
+  clearPendingCurrentLimit() {
+    this._pendingCurrentLimit = null;
+    clearTimeout(this._pendingCurrentLimitTimer);
+    this._pendingCurrentLimitTimer = null;
   }
 
   async setChargingMode(value) {
@@ -1489,7 +1552,13 @@ class AmperePointQ22Card extends HTMLElement {
           }
           if (typeof value === "boolean") decoded = value ? "true" : "false";
           if (typeof decoded === "object") decoded = JSON.stringify(decoded);
-          const unit = definition.unit ? ` ${this.escape(definition.unit)}` : "";
+          // A source that packs several readings into one payload supplies a
+          // rendered summary instead of repeating the raw JSON. It already
+          // carries its unit, so the suffix below must not be appended again.
+          const rendered = Boolean(definition.meaning);
+          if (rendered) decoded = definition.meaning;
+          const unit =
+            definition.unit && !rendered ? ` ${this.escape(definition.unit)}` : "";
           const access = definition.writable ? " ↔" : "";
           return `
             <tr>
@@ -1559,7 +1628,14 @@ class AmperePointQ22Card extends HTMLElement {
     const currentEntity = this.stateObj(e.currentLimit);
     const hasCurrentLimit = this.hasEntity(e.currentLimit);
     const hasSwitch = this.hasEntity(e.switch);
-    const chargingEnabled = hasSwitch && this.state(e.switch) === "on";
+    // The charger's switch reports whether charging is permitted, not whether
+    // a session runs: it is on with no vehicle attached. The button therefore
+    // follows the session, and shows the requested state until the charger
+    // confirms it.
+    const sessionRunning =
+      this._pendingCharging !== null && this._pendingCharging !== undefined
+        ? this._pendingCharging
+        : charging;
     const chargingModeEntity = this.stateObj(e.chargingMode);
     const hasChargingMode = this.hasEntity(e.chargingMode);
     const chargingModes = chargingModeEntity?.attributes?.options || [];
@@ -1578,7 +1654,11 @@ class AmperePointQ22Card extends HTMLElement {
     const scheduleEndTime = hasScheduleEnd ? String(this.state(scheduleEndEntity)).slice(0, 5) : "";
     const scheduleCrossesMidnight =
       hasScheduleWindow && Number(scheduleEndTime.slice(0, 2)) < Number(scheduleStartTime.slice(0, 2));
-    const current = this.num(e.currentLimit, 6);
+    const reportedCurrent = this.num(e.currentLimit, 6);
+    const current =
+      this._pendingCurrentLimit !== null && this._pendingCurrentLimit !== undefined
+        ? this._pendingCurrentLimit
+        : reportedCurrent;
     const minCurrent = Number(currentEntity?.attributes?.min ?? 6);
     const maxCurrent = Number(currentEntity?.attributes?.max ?? 32);
     const stepCurrent = Number(currentEntity?.attributes?.step ?? 1);
@@ -1626,9 +1706,9 @@ class AmperePointQ22Card extends HTMLElement {
             </div>
             ${
               hasSwitch
-                ? `<button class="power-button ${chargingEnabled ? "on" : ""}" type="button">
-                    ${this.icon(chargingEnabled ? "mdi:pause" : "mdi:play")}
-                    ${chargingEnabled ? this.t("stop") : this.t("charging")}
+                ? `<button class="power-button ${sessionRunning ? "on" : ""}" type="button">
+                    ${this.icon(sessionRunning ? "mdi:pause" : "mdi:play")}
+                    ${sessionRunning ? this.t("stop") : this.t("charging")}
                   </button>`
                 : ""
             }
@@ -1760,11 +1840,6 @@ class AmperePointQ22Card extends HTMLElement {
                           `<option value="${this.escape(option.id)}" ${option.id === selectedDeviceId ? "selected" : ""}>${this.escape(option.name)}</option>`
                       )
                       .join("")}</select></label>`
-                  : ""
-              }
-              ${
-                this.hasEntity(e.status) || charging
-                  ? `<span class="pill ${charging ? "charging" : "idle"}">${charging ? this.t("charging") : this.human(this.state(e.status))}</span>`
                   : ""
               }
               ${this.hasEntity(e.rawDp) ? `<small>${this.t("dp")}: ${this.escape(this.state(e.rawDp))}</small>` : ""}
@@ -2008,23 +2083,6 @@ class AmperePointQ22Card extends HTMLElement {
           padding: 8px 10px;
           max-width: min(260px, 60vw);
           cursor: pointer;
-        }
-        .pill {
-          display: inline-flex;
-          align-items: center;
-          min-height: 34px;
-          padding: 0 14px;
-          border-radius: 999px;
-          background: rgba(255,255,255,.06);
-          border: 1px solid var(--ap-border);
-          font-weight: 800;
-          box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
-        }
-        .pill.charging {
-          color: #171006;
-          background: linear-gradient(135deg, #ffb13b, var(--ap-orange));
-          border-color: rgba(255,151,15,.7);
-          box-shadow: 0 12px 28px rgba(255,151,15,.2);
         }
         .hero-status small {
           color: var(--ap-muted);
