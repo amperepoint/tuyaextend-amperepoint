@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.23";
+const AP_Q22_DASHBOARD_VERSION = "0.5.24";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -1842,11 +1842,6 @@ class AmperePointQ22Card extends HTMLElement {
                       .join("")}</select></label>`
                   : ""
               }
-              ${
-                this.hasEntity(e.status) || charging
-                  ? `<span class="pill ${charging ? "charging" : "idle"}">${charging ? this.t("charging") : this.human(this.state(e.status))}</span>`
-                  : ""
-              }
               ${this.hasEntity(e.rawDp) ? `<small>${this.t("dp")}: ${this.escape(this.state(e.rawDp))}</small>` : ""}
             </div>
           </section>
@@ -2088,23 +2083,6 @@ class AmperePointQ22Card extends HTMLElement {
           padding: 8px 10px;
           max-width: min(260px, 60vw);
           cursor: pointer;
-        }
-        .pill {
-          display: inline-flex;
-          align-items: center;
-          min-height: 34px;
-          padding: 0 14px;
-          border-radius: 999px;
-          background: rgba(255,255,255,.06);
-          border: 1px solid var(--ap-border);
-          font-weight: 800;
-          box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
-        }
-        .pill.charging {
-          color: #171006;
-          background: linear-gradient(135deg, #ffb13b, var(--ap-orange));
-          border-color: rgba(255,151,15,.7);
-          box-shadow: 0 12px 28px rgba(255,151,15,.2);
         }
         .hero-status small {
           color: var(--ap-muted);
