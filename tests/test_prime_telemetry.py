@@ -274,6 +274,17 @@ class MappedDatapointViewTests(unittest.TestCase):
     def test_packed_source_keeps_its_own_numbering(self) -> None:
         """A Prime's DP150 must not be relabelled as the Q Series DP4."""
         instance = self._coordinator()
+
+        class _Native:
+            def values(self):
+                return {"work_state": "cloud-only"}
+
+            def definitions(self):
+                return {"work_state": {"dp_id": 3}}
+
+        # This is the migration path for existing users: a cloud entry is
+        # enriched with a local DP102 mapping after tuya-local is paired.
+        instance.native_source = _Native()
         instance._mapped_raw_values = lambda: {"telemetry": "{}"}
         instance._mapped_raw_metadata = lambda: {"telemetry": {"dp_id": 102}}
         values, metadata = instance._datapoint_view(True)

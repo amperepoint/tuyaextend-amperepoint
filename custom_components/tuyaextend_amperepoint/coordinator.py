@@ -491,18 +491,25 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Return the datapoints of the source this entry actually reads.
 
-        Cloud and LAN pairings stay separate: a charger configured through
-        the official Tuya integration shows the cloud runtime's datapoints,
-        and one configured through local entities shows theirs. Blending them
-        would present two pairings of the same charger as one list and hide
-        which side a reading came from.
+        An explicitly mapped packed LAN source takes precedence because it is
+        the source used for Prime telemetry, including on an older cloud entry
+        enriched during adoption. Other cloud entries keep the native Tuya
+        snapshot, while local entries without a packed source are rebuilt from
+        their mapped entities.
         """
+        values = self._mapped_raw_values()
+        metadata = self._mapped_raw_metadata()
+        # An existing cloud entry may be enriched later with a tuya-local
+        # Prime source. Prefer the explicitly mapped packed source in that
+        # case; otherwise the native-source shortcut would hide DP102 and all
+        # of its decoded local measurements.
+        if packed_source and _has_reported_values(values):
+            return values, metadata
+
         if self.native_source:
             return self.native_source.values(), self.native_source.definitions()
 
-        values = self._mapped_raw_values()
-        metadata = self._mapped_raw_metadata()
-        if packed_source or _has_reported_values(values):
+        if _has_reported_values(values):
             return values, metadata
 
         # A local charger exposes one entity per datapoint instead of a

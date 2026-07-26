@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
 
 from homeassistant.config_entries import SOURCE_INTEGRATION_DISCOVERY
-from homeassistant.const import CONF_NAME, EVENT_HOMEASSISTANT_STARTED
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 
-from .const import CONF_SOURCE_DEVICE_ID, CONF_SOURCE_NAME, DOMAIN
+from .const import CONF_SOURCE_DEVICE_ID, DOMAIN
 from .discovery import discover_sources
+
+_LOGGER = logging.getLogger(__name__)
 
 _AUTO_ADOPTION_STARTED = "auto_adoption_started"
 _ADOPTION_STORE = "adoption_store"
@@ -59,24 +62,11 @@ def _live_entity(hass: HomeAssistant, value: object) -> bool:
     return registry.async_get(value) is not None
 
 
-def _normalized_title(value: object) -> str:
-    return str(value or "").strip().casefold()
-
-
 def _entry_infos(hass: HomeAssistant) -> list[dict[str, Any]]:
     infos: list[dict[str, Any]] = []
     for config_entry in hass.config_entries.async_entries(DOMAIN):
         merged = {**config_entry.data, **config_entry.options}
         source_device_id = str(merged.get(CONF_SOURCE_DEVICE_ID, ""))
-        titles = {
-            title
-            for title in (
-                _normalized_title(getattr(config_entry, "title", None)),
-                _normalized_title(merged.get(CONF_NAME)),
-                _normalized_title(merged.get(CONF_SOURCE_NAME)),
-            )
-            if title
-        }
         entities = {
             value
             for value in merged.values()
@@ -89,7 +79,6 @@ def _entry_infos(hass: HomeAssistant) -> list[dict[str, Any]]:
                 "physical": (
                     _physical_ids(hass, source_device_id) if source_device_id else set()
                 ),
-                "titles": titles,
                 "entities": entities,
             }
         )
@@ -166,7 +155,6 @@ async def async_start_auto_adoption(hass: HomeAssistant) -> int:
     # source entities it is missing.
     for candidate in _merge_twin_candidates(hass, candidates):
         candidate_physical = _physical_ids(hass, candidate.device_id)
-        candidate_title = _normalized_title(getattr(candidate, "title", ""))
         match = next(
             (
                 info
@@ -177,7 +165,6 @@ async def async_start_auto_adoption(hass: HomeAssistant) -> int:
                     entity_id in info["entities"]
                     for entity_id in candidate.mapping.values()
                 )
-                or (candidate_title and candidate_title in info["titles"])
             ),
             None,
         )
@@ -191,13 +178,26 @@ async def async_start_auto_adoption(hass: HomeAssistant) -> int:
             # Adopted before and no longer configured: the user removed it.
             continue
 
-        hass.async_create_task(
-            hass.config_entries.flow.async_init(
+        try:
+            result = await hass.config_entries.flow.async_init(
                 DOMAIN,
                 context={"source": SOURCE_INTEGRATION_DISCOVERY},
                 data=candidate.as_config_data(),
             )
-        )
+        except Exception:  # pragma: no cover - Home Assistant flow boundary
+            _LOGGER.exception(
+                "Automatic adoption failed for %s", candidate.device_id
+            )
+            continue
+        result_type = result.get("type") if isinstance(result, dict) else None
+        if getattr(result_type, "value", result_type) != "create_entry":
+            _LOGGER.warning(
+                "Automatic adoption did not create an entry for %s: %s",
+                candidate.device_id,
+                result,
+            )
+            continue
+
         scheduled += 1
         known.add(candidate.device_id)
         known |= candidate_physical
@@ -206,7 +206,6 @@ async def async_start_auto_adoption(hass: HomeAssistant) -> int:
                 "entry": None,
                 "device_id": candidate.device_id,
                 "physical": candidate_physical,
-                "titles": {candidate_title} if candidate_title else set(),
                 "entities": set(candidate.mapping.values()),
             }
         )

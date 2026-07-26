@@ -130,22 +130,53 @@ class TuyaLocalProfileTests(unittest.TestCase):
                 for product in config.get("products", []):
                     self.assertIn("(local)", product["model"])
 
-    def test_every_datapoint_is_optional(self) -> None:
-        """A missing datapoint must not hide a profile from the picker.
-
-        helpers/device_config.py excludes a config whose non-optional
-        datapoints are absent from the device response. Both the Prime (DP108)
-        and the Q11 (DP1/17/25) stopped reporting datapoints the profiles
-        declared as required, which made the chargers unpairable.
-        """
+    def test_profiles_without_product_ids_have_a_required_signature(self) -> None:
+        """A profile without a PID must not match every unrelated Tuya device."""
         for filename, config in self.profiles:
+            product_ids = [
+                product.get("id")
+                for product in config.get("products", [])
+                if product.get("id")
+            ]
+            if product_ids:
+                continue
+            required = {
+                dps["id"]
+                for entity in config["entities"]
+                for dps in entity["dps"]
+                if not dps.get("optional")
+            }
+            with self.subTest(filename):
+                self.assertTrue(
+                    required,
+                    "profile has neither a product id nor a required DP signature",
+                )
+
+    def test_q11_uses_stable_dps_as_its_signature(self) -> None:
+        """DP3 and DP4 were present in the measured idle status response."""
+        config = self.maintained["amperepoint_q11_pro_evcharger.yaml"]
+        required = {
+            dps["id"]
+            for entity in config["entities"]
+            for dps in entity["dps"]
+            if not dps.get("optional")
+        }
+        self.assertEqual(required, {3, 4})
+
+    def test_intermittent_datapoints_remain_optional(self) -> None:
+        """Datapoints absent from hardware captures must not hide a profile."""
+        intermittent = {
+            "amperepoint_prime_22kw_evcharger.yaml": {108},
+            "amperepoint_q11_pro_evcharger.yaml": {1, 6, 7, 8, 17, 19, 23, 25, 33},
+        }
+        for filename, ids in intermittent.items():
+            config = self.maintained[filename]
             for entity in config["entities"]:
                 for dps in entity["dps"]:
-                    with self.subTest(f"{filename}/{entity.get('name')}/{dps['id']}"):
-                        self.assertTrue(
-                            dps.get("optional"),
-                            f"dps {dps['id']} must be optional",
-                        )
+                    if dps["id"] not in ids:
+                        continue
+                    with self.subTest(f"{filename}/{dps['id']}"):
+                        self.assertTrue(dps.get("optional"))
 
     def test_prime_profile_exposes_the_telemetry_datapoint(self) -> None:
         """The AmperePoint coordinator decodes DP102 from this attribute."""

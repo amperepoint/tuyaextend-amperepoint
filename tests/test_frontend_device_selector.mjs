@@ -93,6 +93,15 @@ assert.equal(card.config.title, "Driveway");
 assert.equal(card._plannerDraft, null);
 assert.equal(card._plannerError, null);
 
+// Optimistic command state belongs to the charger that received the command.
+// It must not be rendered on another charger after a device switch.
+card._pendingCharging = true;
+card._pendingCurrentLimit = 16;
+card.selectDevice("garage");
+assert.equal(card._pendingCharging, null);
+assert.equal(card._pendingCurrentLimit, null);
+assert.equal(card.apSelectedDeviceId(), "garage");
+
 console.log("frontend device selector tests passed");
 
 // A charger applies a new current limit before its entity reports it, so the
