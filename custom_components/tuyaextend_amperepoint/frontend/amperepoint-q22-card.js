@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.21";
+const AP_Q22_DASHBOARD_VERSION = "0.5.22";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -535,6 +535,13 @@ class AmperePointQ22Card extends HTMLElement {
     ) {
       this.clearPendingChargingMode();
     }
+    const limitEntity = this.config?.entities?.currentLimit;
+    if (this._pendingCurrentLimit !== null && this._pendingCurrentLimit !== undefined && limitEntity) {
+      const reported = Number(hass.states?.[limitEntity]?.state);
+      if (Number.isFinite(reported) && Math.abs(reported - this._pendingCurrentLimit) < 0.51) {
+        this.clearPendingCurrentLimit();
+      }
+    }
     this.render();
   }
 
@@ -924,7 +931,27 @@ class AmperePointQ22Card extends HTMLElement {
   async setCurrentLimit(value) {
     const entityId = this.config.entities.currentLimit;
     if (!this.hasEntity(entityId)) return;
-    await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
+    // The charger applies the new limit at once, but its entity keeps the
+    // old reading until the next poll, which would snap the slider back.
+    this._pendingCurrentLimit = Number(value);
+    clearTimeout(this._pendingCurrentLimitTimer);
+    this._pendingCurrentLimitTimer = setTimeout(() => {
+      this.clearPendingCurrentLimit();
+      this.render();
+    }, 30_000);
+    try {
+      await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
+    } catch (error) {
+      this.clearPendingCurrentLimit();
+      this.render();
+      throw error;
+    }
+  }
+
+  clearPendingCurrentLimit() {
+    this._pendingCurrentLimit = null;
+    clearTimeout(this._pendingCurrentLimitTimer);
+    this._pendingCurrentLimitTimer = null;
   }
 
   async setChargingMode(value) {
@@ -1585,7 +1612,11 @@ class AmperePointQ22Card extends HTMLElement {
     const scheduleEndTime = hasScheduleEnd ? String(this.state(scheduleEndEntity)).slice(0, 5) : "";
     const scheduleCrossesMidnight =
       hasScheduleWindow && Number(scheduleEndTime.slice(0, 2)) < Number(scheduleStartTime.slice(0, 2));
-    const current = this.num(e.currentLimit, 6);
+    const reportedCurrent = this.num(e.currentLimit, 6);
+    const current =
+      this._pendingCurrentLimit !== null && this._pendingCurrentLimit !== undefined
+        ? this._pendingCurrentLimit
+        : reportedCurrent;
     const minCurrent = Number(currentEntity?.attributes?.min ?? 6);
     const maxCurrent = Number(currentEntity?.attributes?.max ?? 32);
     const stepCurrent = Number(currentEntity?.attributes?.step ?? 1);

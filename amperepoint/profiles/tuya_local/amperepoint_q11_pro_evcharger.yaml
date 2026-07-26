@@ -133,6 +133,8 @@ entities:
     name: Power
     class: power
     dps:
+      # The charger reports total power in watts, the same unit the phase
+      # payload uses: 1606 W alongside L1 at 220.0 V and 7.3 A.
       - id: 9
         type: integer
         optional: true
@@ -140,7 +142,7 @@ entities:
         unit: kW
         class: measurement
         mapping:
-          - scale: 10
+          - scale: 1000
 
   - entity: sensor
     name: Temperature

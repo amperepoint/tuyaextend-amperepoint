@@ -94,3 +94,24 @@ assert.equal(card._plannerDraft, null);
 assert.equal(card._plannerError, null);
 
 console.log("frontend device selector tests passed");
+
+// A charger applies a new current limit before its entity reports it, so the
+// card holds the requested value instead of snapping the slider back.
+const limitCard = new Card();
+limitCard.setConfig({ entities: { currentLimit: "number.limit" } });
+limitCard.render = () => {};
+const limitStates = { "number.limit": { state: "6", attributes: { min: 6, max: 16 } } };
+limitCard._hass = { states: limitStates, callService: async () => {} };
+
+await limitCard.setCurrentLimit(16);
+assert.equal(limitCard._pendingCurrentLimit, 16);
+
+limitCard.hass = { states: limitStates, callService: async () => {} };
+assert.equal(limitCard._pendingCurrentLimit, 16, "a stale reading must not clear it");
+
+limitStates["number.limit"] = { state: "16", attributes: { min: 6, max: 16 } };
+limitCard.hass = { states: limitStates, callService: async () => {} };
+assert.equal(limitCard._pendingCurrentLimit, null, "confirmation releases it");
+clearTimeout(limitCard._pendingCurrentLimitTimer);
+
+console.log("current limit tests passed");
