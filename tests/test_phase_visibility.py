@@ -18,6 +18,31 @@ def _phase(voltage, current, power):
     return {"voltage": voltage, "current": current, "power": power}
 
 
+class ModelPhaseLimitTests(unittest.TestCase):
+    """Phases the hardware does not have are dropped whatever they report."""
+
+    def test_single_phase_charger_drops_l2_and_l3(self) -> None:
+        # The Q37 is 3.7 kW single-phase but answers on DP7/DP8 like the
+        # rest of the series, sometimes with a residual reading.
+        phases = [
+            _phase(220.0, 7.3, 1.54),
+            _phase(0.0, 0.0, 0.0),
+            _phase(228.0, 3.0, 0.68),
+        ]
+        self.assertEqual(
+            coordinator._filter_loaded_phases(phases, 1),
+            [_phase(220.0, 7.3, 1.54), HIDDEN, HIDDEN],
+        )
+
+    def test_three_phase_charger_keeps_loaded_phases(self) -> None:
+        phases = [
+            _phase(230.0, 16.0, 3.68),
+            _phase(229.0, 15.8, 3.62),
+            _phase(228.0, 15.9, 3.63),
+        ]
+        self.assertEqual(coordinator._filter_loaded_phases(phases, 3), phases)
+
+
 class FilterLoadedPhasesTests(unittest.TestCase):
     def test_idle_charger_hides_all_phases(self) -> None:
         phases = [

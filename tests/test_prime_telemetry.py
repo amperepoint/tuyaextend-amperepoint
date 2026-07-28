@@ -199,33 +199,55 @@ class PrimeTelemetryFallbackTests(unittest.TestCase):
 class MappedDatapointViewTests(unittest.TestCase):
     """Chargers with one entity per datapoint still get a raw-DP view."""
 
-    def _coordinator(self):
+    def _coordinator(self, model_key: str = "q_series", phase_sources=False):
+        data = {
+            const.CONF_MODEL: model_key,
+            const.CONF_SOURCE_STATUS: "sensor.q11_status",
+            const.CONF_SOURCE_CURRENT_LIMIT: "number.q11_current",
+            const.CONF_SOURCE_POWER: "sensor.q11_power",
+            const.CONF_SOURCE_CONNECTED: "sensor.q11_connection",
+            const.CONF_SOURCE_TEMPERATURE: "sensor.q11_temperature",
+        }
+        states = {
+            "sensor.q11_status": _state("charger_free"),
+            "number.q11_current": _state("8", unit_of_measurement="A"),
+            "sensor.q11_power": _state("0", unit_of_measurement="kW"),
+            "sensor.q11_connection": _state("controlpi_12v"),
+            "sensor.q11_temperature": _state("25", unit_of_measurement="C"),
+        }
+        if phase_sources:
+            # The whole Q Series shares one datapoint layout, so even a
+            # single-phase charger maps entities for DP7 and DP8.
+            for key, entity_id, value in (
+                (const.CONF_SOURCE_CURRENT_L1, "sensor.q11_l1_current", "7.3"),
+                (const.CONF_SOURCE_CURRENT_L2, "sensor.q11_l2_current", "0.0"),
+                (const.CONF_SOURCE_CURRENT_L3, "sensor.q11_l3_current", "0.0"),
+            ):
+                data[key] = entity_id
+                states[entity_id] = _state(value, unit_of_measurement="A")
+
         instance = object.__new__(coordinator.AmperePointCoordinator)
-        instance.config_entry = types.SimpleNamespace(
-            data={
-                const.CONF_MODEL: "q_series",
-                const.CONF_SOURCE_STATUS: "sensor.q11_status",
-                const.CONF_SOURCE_CURRENT_LIMIT: "number.q11_current",
-                const.CONF_SOURCE_POWER: "sensor.q11_power",
-                const.CONF_SOURCE_CONNECTED: "sensor.q11_connection",
-                const.CONF_SOURCE_TEMPERATURE: "sensor.q11_temperature",
-            },
-            options={},
-        )
-        instance.hass = types.SimpleNamespace(
-            states=_States(
-                {
-                    "sensor.q11_status": _state("charger_free"),
-                    "number.q11_current": _state("8", unit_of_measurement="A"),
-                    "sensor.q11_power": _state("0", unit_of_measurement="kW"),
-                    "sensor.q11_connection": _state("controlpi_12v"),
-                    "sensor.q11_temperature": _state("25", unit_of_measurement="C"),
-                }
-            )
-        )
+        instance.config_entry = types.SimpleNamespace(data=data, options={})
+        instance.hass = types.SimpleNamespace(states=_States(states))
         instance.native_source = None
         instance._seen_datapoints = {}
+        instance.model = models.get_model(model_key)
         return instance
+
+    def test_single_phase_charger_lists_only_l1(self) -> None:
+        # A Q37 is a 3.7 kW single-phase unit; DP7 and DP8 answer anyway.
+        values, metadata = self._coordinator(
+            "q37", phase_sources=True
+        )._mapped_source_snapshot()
+        self.assertEqual(values["l1_current"], "7.3")
+        for code in ("l2_current", "l3_current"):
+            self.assertNotIn(code, values)
+            self.assertNotIn(code, metadata)
+
+    def test_three_phase_charger_lists_every_phase(self) -> None:
+        values, _ = self._coordinator("q11", phase_sources=True)._mapped_source_snapshot()
+        for code in ("l1_current", "l2_current", "l3_current"):
+            self.assertIn(code, values)
 
     def test_snapshot_carries_codes_dp_ids_and_write_access(self) -> None:
         values, metadata = self._coordinator()._mapped_source_snapshot()

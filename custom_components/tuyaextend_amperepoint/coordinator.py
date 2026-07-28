@@ -278,7 +278,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _prime_phase(prime_telemetry, "L3"),
             ),
         ]
-        phases = _filter_loaded_phases(phases)
+        phases = _filter_loaded_phases(phases, self.model.phases)
         phase_voltages = [phase.get("voltage") for phase in phases]
         phase_currents = [phase.get("current") for phase in phases]
         phase_powers = [phase.get("power") for phase in phases]
@@ -532,6 +532,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         values: dict[str, Any] = {}
         metadata: dict[str, Any] = {}
         for config_key, code, dp_id, unit in MAPPED_DP_CODES:
+            if _phase_of_code(code) > self.model.phases:
+                continue
             entity_id = self._config(config_key)
             if not entity_id:
                 continue
@@ -1151,8 +1153,19 @@ PHASE_MIN_CURRENT_A = 1.0
 PHASE_MIN_POWER_KW = 0.23
 
 
+def _phase_of_code(code: str) -> int:
+    """Return which phase a datapoint code belongs to, or 0 if none.
+
+    The codes for the packed phase payloads are named l1_*, l2_* and l3_*.
+    """
+    if len(code) > 2 and code[0] == "l" and code[1].isdigit() and code[2] == "_":
+        return int(code[1])
+    return 0
+
+
 def _filter_loaded_phases(
     phases: list[dict[str, float | None]],
+    max_phases: int = 3,
 ) -> list[dict[str, float | None]]:
     """Expose only phases that carry real load.
 
@@ -1163,9 +1176,17 @@ def _filter_loaded_phases(
     session. Either trustworthy measurement (current or power) establishes
     load on its own, so a genuinely loaded low-current phase is never hidden
     by the state of the other phases.
+
+    A charger the model says is single-phase, such as the 3.7 kW Q37, still
+    answers on DP7 and DP8 because the whole series shares one datapoint
+    layout. Those phases do not exist on the hardware, so they are dropped
+    regardless of what they report.
     """
     filtered: list[dict[str, float | None]] = []
-    for phase in phases:
+    for index, phase in enumerate(phases, start=1):
+        if index > max_phases:
+            filtered.append({"voltage": None, "current": None, "power": None})
+            continue
         current = phase.get("current")
         power = phase.get("power")
         current_loaded = current is not None and current >= PHASE_MIN_CURRENT_A
