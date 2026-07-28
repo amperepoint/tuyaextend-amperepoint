@@ -29,6 +29,11 @@
 # still covered, and so a partial response can never hide this profile from
 # the device-type list - see the note in
 # amperepoint/profiles/tuya_local/amperepoint_prime_22kw_evcharger.yaml.
+#
+# This profile has no confirmed product id, so the two datapoints present in
+# every measured idle response (status DP3 and current setting DP4) are kept
+# required. Without that small signature an all-optional profile would match
+# unrelated Tuya devices that share none of the charger's datapoints.
 
 ---
 
@@ -45,7 +50,6 @@ entities:
     dps:
       - id: 3
         type: string
-        optional: true
         name: sensor
         mapping:
           - dps_val: charger_charging
@@ -106,7 +110,6 @@ entities:
     dps:
       - id: 4
         type: integer
-        optional: true
         name: value
         unit: A
         range:

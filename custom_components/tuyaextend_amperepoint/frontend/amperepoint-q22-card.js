@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.24";
+const AP_Q22_DASHBOARD_VERSION = "0.5.25";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -665,6 +665,8 @@ class AmperePointQ22Card extends HTMLElement {
   }
 
   resetDeviceTransientState() {
+    this.clearPendingCharging();
+    this.clearPendingCurrentLimit();
     this.clearPendingChargingMode();
     this._plannerDirty = false;
     this._plannerSaved = false;

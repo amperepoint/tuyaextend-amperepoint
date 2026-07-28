@@ -44,9 +44,14 @@ class _DeviceRegistry:
 class _Flow:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict, dict]] = []
+        self.result: dict = {"type": "create_entry"}
+        self.error: Exception | None = None
 
-    async def async_init(self, domain: str, *, context: dict, data: dict) -> None:
+    async def async_init(self, domain: str, *, context: dict, data: dict) -> dict:
         self.calls.append((domain, context, data))
+        if self.error is not None:
+            raise self.error
+        return dict(self.result)
 
 
 class _ConfigEntries:
@@ -109,15 +114,12 @@ class AutoAdoptionTests(unittest.TestCase):
     def test_schedules_only_unconfigured_devices_once(self) -> None:
         hass = _Hass(("configured",))
         candidates = [_Candidate("configured"), _Candidate("new")]
-        try:
-            with patch.object(adoption, "discover_sources", return_value=candidates):
-                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
-                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
+        with patch.object(adoption, "discover_sources", return_value=candidates):
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
 
-            self.assertEqual(len(hass.tasks), 1)
-            self.assertTrue(hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED])
-        finally:
-            hass.close_tasks()
+        self.assertEqual(len(hass.config_entries.flow.calls), 1)
+        self.assertTrue(hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED])
 
     def test_empty_discovery_can_be_retried_later(self) -> None:
         hass = _Hass()
@@ -127,13 +129,10 @@ class AutoAdoptionTests(unittest.TestCase):
         self.assertNotIn(
             adoption._AUTO_ADOPTION_STARTED, hass.data.get(const.DOMAIN, {})
         )
-        try:
-            with patch.object(
-                adoption, "discover_sources", return_value=[_Candidate("new")]
-            ):
-                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
-        finally:
-            hass.close_tasks()
+        with patch.object(
+            adoption, "discover_sources", return_value=[_Candidate("new")]
+        ):
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
 
 
     def test_adoption_is_deferred_until_home_assistant_started(self) -> None:
@@ -150,14 +149,11 @@ class AutoAdoptionTests(unittest.TestCase):
 
         # The startup listener re-runs the scan once states are live.
         hass.is_running = True
-        try:
-            with patch.object(
-                adoption, "discover_sources", return_value=[_Candidate("new")]
-            ):
-                hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
-                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
-        finally:
-            hass.close_tasks()
+        with patch.object(
+            adoption, "discover_sources", return_value=[_Candidate("new")]
+        ):
+            hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
 
     def test_mapping_to_a_deleted_entity_is_replaced(self) -> None:
         """Re-pairing a charger must overwrite mappings left pointing at ghosts."""
@@ -201,18 +197,59 @@ class AutoAdoptionTests(unittest.TestCase):
             self.assertEqual(
                 asyncio.run(adoption.async_start_auto_adoption(hass)), 1
             )
-        hass.close_tasks()
 
         # The user deletes the entry, so no config entry references it; the
         # next restart re-runs discovery with the same candidate.
         hass.config_entries._entries.clear()
-        hass.tasks.clear()
         hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
         with patch.object(adoption, "discover_sources", return_value=[candidate]):
             self.assertEqual(
                 asyncio.run(adoption.async_start_auto_adoption(hass)), 0
             )
-        self.assertEqual(len(hass.tasks), 0)
+        self.assertEqual(len(hass.config_entries.flow.calls), 1)
+
+    def test_failed_flow_is_retried_after_restart(self) -> None:
+        """A failed config flow must not permanently suppress the charger."""
+        hass = _Hass()
+        candidate = _Candidate("dev-1", {"source_status": "sensor.a"}, "Charger")
+        hass.config_entries.flow.result = {
+            "type": "abort",
+            "reason": "simulated_failure",
+        }
+        with (
+            patch.object(adoption, "discover_sources", return_value=[candidate]),
+            patch.object(adoption._LOGGER, "warning"),
+        ):
+            self.assertEqual(
+                asyncio.run(adoption.async_start_auto_adoption(hass)), 0
+            )
+
+        hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
+        hass.config_entries.flow.result = {"type": "create_entry"}
+        with patch.object(adoption, "discover_sources", return_value=[candidate]):
+            self.assertEqual(
+                asyncio.run(adoption.async_start_auto_adoption(hass)), 1
+            )
+        self.assertEqual(len(hass.config_entries.flow.calls), 2)
+
+    def test_flow_exception_does_not_break_setup_or_suppress_retry(self) -> None:
+        hass = _Hass()
+        candidate = _Candidate("dev-1", {"source_status": "sensor.a"}, "Charger")
+        hass.config_entries.flow.error = RuntimeError("simulated failure")
+        with (
+            patch.object(adoption, "discover_sources", return_value=[candidate]),
+            patch.object(adoption._LOGGER, "exception"),
+        ):
+            self.assertEqual(
+                asyncio.run(adoption.async_start_auto_adoption(hass)), 0
+            )
+
+        hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
+        hass.config_entries.flow.error = None
+        with patch.object(adoption, "discover_sources", return_value=[candidate]):
+            self.assertEqual(
+                asyncio.run(adoption.async_start_auto_adoption(hass)), 1
+            )
 
     def test_physical_twin_backfills_the_existing_entry(self) -> None:
         # Cloud Tuya entry exists; the tuya-local twin of the same charger
@@ -235,23 +272,19 @@ class AutoAdoptionTests(unittest.TestCase):
                 },
             )
         ]
-        try:
-            with (
-                patch.object(adoption, "discover_sources", return_value=candidates),
-                patch.object(adoption.dr, "async_get", return_value=registry),
-            ):
-                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
-            entry = hass.config_entries.async_entries(const.DOMAIN)[0]
-            self.assertEqual(
-                entry.options["source_raw_dp"], "sensor.local_status"
-            )
-        finally:
-            hass.close_tasks()
+        with (
+            patch.object(adoption, "discover_sources", return_value=candidates),
+            patch.object(adoption.dr, "async_get", return_value=registry),
+        ):
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 0)
+        entry = hass.config_entries.async_entries(const.DOMAIN)[0]
+        self.assertEqual(
+            entry.options["source_raw_dp"], "sensor.local_status"
+        )
 
-    def test_duplicate_title_is_adopted_once_with_richest_mapping(self) -> None:
-        # The same charger seen through two sources with unrelated registry
-        # identifiers still dedupes by name, and the candidate with the most
-        # telemetry wins.
+    def test_duplicate_titles_do_not_merge_distinct_chargers(self) -> None:
+        # User-visible names are not stable physical identifiers. Two chargers
+        # called "wallbox_stock_1" must remain two separate entries.
         hass = _Hass()
         candidates = [
             _Candidate("cloud-dev", {"source_status": "sensor.a"}, "wallbox_stock_1"),
@@ -262,11 +295,12 @@ class AutoAdoptionTests(unittest.TestCase):
             ),
         ]
         with patch.object(adoption, "discover_sources", return_value=candidates):
-            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
-        self.assertEqual(len(hass.tasks), 1)
-        asyncio.run(hass.tasks.pop())
-        _, _, data = hass.config_entries.flow.calls[0]
-        self.assertEqual(data[const.CONF_SOURCE_DEVICE_ID], "local-dev")
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 2)
+        adopted_ids = {
+            data[const.CONF_SOURCE_DEVICE_ID]
+            for _, _, data in hass.config_entries.flow.calls
+        }
+        self.assertEqual(adopted_ids, {"cloud-dev", "local-dev"})
 
     def test_cloud_and_local_twins_produce_one_merged_entry(self) -> None:
         # The real registry shape: one physical charger, two registry devices
@@ -302,8 +336,6 @@ class AutoAdoptionTests(unittest.TestCase):
             patch.object(adoption.dr, "async_get", return_value=registry),
         ):
             self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
-        self.assertEqual(len(hass.tasks), 1)
-        asyncio.run(hass.tasks.pop())
         _, _, data = hass.config_entries.flow.calls[0]
         # The local source wins because it carries the most mappings...
         self.assertEqual(data[const.CONF_SOURCE_DEVICE_ID], "local-dev")
@@ -328,12 +360,9 @@ class AutoAdoptionTests(unittest.TestCase):
             ),
             _Candidate("other-device", {"source_status": "sensor.other_status"}),
         ]
-        try:
-            with patch.object(adoption, "discover_sources", return_value=candidates):
-                self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
-            self.assertEqual(len(hass.tasks), 1)
-        finally:
-            hass.close_tasks()
+        with patch.object(adoption, "discover_sources", return_value=candidates):
+            self.assertEqual(asyncio.run(adoption.async_start_auto_adoption(hass)), 1)
+        self.assertEqual(len(hass.config_entries.flow.calls), 1)
 
 
 if __name__ == "__main__":
