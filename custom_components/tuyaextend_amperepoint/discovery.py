@@ -113,7 +113,7 @@ def discover_sources(hass: HomeAssistant) -> list[SourceCandidate]:
             SourceCandidate(
                 device_id=device_id,
                 title=title,
-                model_key=detect_model_key(device_text),
+                model_key=_detect_model(device, device_text),
                 source_integration=source_platform,
                 mapping=map_source_entities(entries, hass),
             )
@@ -324,6 +324,21 @@ def _first_state_name(
         if state and (name := state.attributes.get("friendly_name")):
             return str(name)
     return None
+
+
+def _detect_model(device: dr.DeviceEntry, device_text: str) -> str:
+    """Let the name the user gave the charger outrank everything else.
+
+    A profile covering the whole series cannot say which model a charger is,
+    and its name lands in the same text as the user's. Reading the given name
+    on its own first means a charger called "Q22" is a Q22 even when the
+    profile behind it mentions the series as a whole.
+    """
+    given = _normalize(str(device.name_by_user or device.name or ""))
+    from_name = detect_model_key(given) if given else DEFAULT_MODEL
+    if from_name != DEFAULT_MODEL:
+        return from_name
+    return detect_model_key(device_text)
 
 
 def _device_text(device: dr.DeviceEntry, entries: Iterable[er.RegistryEntry]) -> str:

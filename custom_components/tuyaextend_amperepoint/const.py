@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tuyaextend_amperepoint"
 NAME = "AmperePoint"
-VERSION = "0.5.25"
+VERSION = "0.5.33"
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -25,6 +25,9 @@ DEFAULT_COMPLETE_IDLE_MINUTES = 3
 
 CONF_MODEL = "model"
 CONF_SOURCE_DEVICE_ID = "source_device_id"
+# Vendor ids of the charger this entry was adopted from, remembered so the
+# entry can still be recognised after its source device is deleted.
+CONF_SOURCE_PHYSICAL_IDS = "source_physical_ids"
 CONF_SOURCE_INTEGRATION = "source_integration"
 CONF_SOURCE_NAME = "source_name"
 CONF_AUTO_DISCOVERED = "auto_discovered"

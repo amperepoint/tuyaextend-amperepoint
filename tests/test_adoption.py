@@ -367,3 +367,101 @@ class AutoAdoptionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RepairedAfterRepairingTests(unittest.TestCase):
+    """Pairing a charger again must not orphan the entry that adopted it."""
+
+    def test_entry_follows_the_charger_to_its_new_pairing(self) -> None:
+        # Deleting a tuya-local pairing takes its device and entities with
+        # it, so the entry loses every way of being recognised except the
+        # vendor id remembered while the device was still there.
+        entry_data = {
+            const.CONF_SOURCE_DEVICE_ID: "old-dev",
+            "source_status": "sensor.old_status",
+        }
+        hass = _Hass(entry_data=(entry_data,))
+        entry = hass.config_entries._entries[0]
+
+        first_registry = _DeviceRegistry({"old-dev": {("tuya_local", "vendor-1")}})
+        with patch.object(adoption.dr, "async_get", return_value=first_registry):
+            with patch.object(
+                adoption,
+                "discover_sources",
+                return_value=[
+                    _Candidate("old-dev", {"source_status": "sensor.old_status"})
+                ],
+            ):
+                asyncio.run(adoption.async_start_auto_adoption(hass))
+
+        self.assertEqual(
+            entry.data[const.CONF_SOURCE_PHYSICAL_IDS],
+            ["vendor-1"],
+            "the vendor id has to be recorded while the device still exists",
+        )
+
+        # The charger is paired again: new device, new entities, old ones gone.
+        second_registry = _DeviceRegistry({"new-dev": {("tuya_local", "vendor-1")}})
+
+        class _EntityRegistry:
+            def async_get(self, entity_id):
+                return object() if entity_id == "sensor.new_status" else None
+
+        hass.data[const.DOMAIN][adoption._AUTO_ADOPTION_STARTED] = False
+        with patch.object(adoption.dr, "async_get", return_value=second_registry):
+            with patch.object(
+                adoption.er, "async_get", return_value=_EntityRegistry()
+            ):
+                with patch.object(
+                    adoption,
+                    "discover_sources",
+                    return_value=[
+                        _Candidate("new-dev", {"source_status": "sensor.new_status"})
+                    ],
+                ):
+                    scheduled = asyncio.run(
+                        adoption.async_start_auto_adoption(hass)
+                    )
+
+        self.assertEqual(scheduled, 0, "no duplicate entry may be created")
+        self.assertEqual(entry.options["source_status"], "sensor.new_status")
+        self.assertEqual(entry.data[const.CONF_SOURCE_DEVICE_ID], "new-dev")
+
+
+class RememberAfterMatchTests(unittest.TestCase):
+    """An entry matched through its entities must record the vendor ids too."""
+
+    def test_entry_without_remembered_ids_records_them_on_match(self) -> None:
+        # The state a charger is left in when it was re-paired before vendor
+        # ids were ever stored: the entry works, because the new entities
+        # happen to carry the old ids, but its source device is gone.
+        entry_data = {
+            const.CONF_SOURCE_DEVICE_ID: "deleted-dev",
+            "source_status": "sensor.q22_status",
+        }
+        hass = _Hass(entry_data=(entry_data,))
+        entry = hass.config_entries._entries[0]
+        registry = _DeviceRegistry({"new-dev": {("tuya_local", "vendor-9")}})
+
+        class _EntityRegistry:
+            def async_get(self, entity_id):
+                return object()
+
+        with patch.object(adoption.dr, "async_get", return_value=registry):
+            with patch.object(
+                adoption.er, "async_get", return_value=_EntityRegistry()
+            ):
+                with patch.object(
+                    adoption,
+                    "discover_sources",
+                    return_value=[
+                        _Candidate("new-dev", {"source_status": "sensor.q22_status"})
+                    ],
+                ):
+                    scheduled = asyncio.run(
+                        adoption.async_start_auto_adoption(hass)
+                    )
+
+        self.assertEqual(scheduled, 0)
+        self.assertEqual(entry.data[const.CONF_SOURCE_PHYSICAL_IDS], ["vendor-9"])
+        self.assertEqual(entry.data[const.CONF_SOURCE_DEVICE_ID], "new-dev")

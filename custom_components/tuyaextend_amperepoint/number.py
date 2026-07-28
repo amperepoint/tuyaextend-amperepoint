@@ -61,23 +61,31 @@ class AmperePointCurrentLimitNumber(AmperePointEntity, NumberEntity):
 
     @property
     def native_min_value(self) -> float:
+        model_min = float(self.coordinator.model_limits.min_current_a)
         if value := _mapped_number_attribute(
             self.coordinator, CONF_SOURCE_CURRENT_LIMIT, "min"
         ):
-            return value
+            return max(value, model_min)
         if value := self.coordinator.dp_definition("charge_cur_set").get("min"):
-            return float(value)
-        return float(self.coordinator.model_limits.min_current_a)
+            return max(float(value), model_min)
+        return model_min
 
     @property
     def native_max_value(self) -> float:
+        # One tuya-local profile serves the whole Q Series, so its range is
+        # the union of every generation: 6-32 A. The charger publishes no
+        # datapoint saying which one it is, so the detected model is what
+        # narrows the slider back to what this unit really allows - 16 A on a
+        # Q11 or Q37, 32 A on a Q22 or Q74. Narrowing only ever reduces the
+        # source bound, so a wrong detection cannot raise it.
+        model_max = float(self.coordinator.model_limits.max_current_a)
         if value := _mapped_number_attribute(
             self.coordinator, CONF_SOURCE_CURRENT_LIMIT, "max"
         ):
-            return value
+            return min(value, model_max)
         if value := self.coordinator.dp_definition("charge_cur_set").get("max"):
-            return float(value)
-        return float(self.coordinator.model_limits.max_current_a)
+            return min(float(value), model_max)
+        return model_max
 
     @property
     def native_step(self) -> float:

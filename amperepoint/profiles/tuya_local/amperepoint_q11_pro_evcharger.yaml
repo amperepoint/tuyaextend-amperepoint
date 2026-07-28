@@ -23,24 +23,81 @@
 #   {"3": "charger_free", "4": 8, "9": 0, "10": 0, "13": "controlpi_12v",
 #    "14": "charge_now", "18": true, "24": 25}
 #
-# The unit answered with eight datapoints only: no lifetime meter (DP1), no
+# The unit answered with eight datapoints only: no session meter (DP1), no
 # target energy (DP17), no last-session counter (DP25) and no phase payloads
 # (DP6/7/8). Those are declared as optional so units that do report them are
 # still covered, and so a partial response can never hide this profile from
 # the device-type list - see the note in
 # amperepoint/profiles/tuya_local/amperepoint_prime_22kw_evcharger.yaml.
 #
-# This profile has no confirmed product id, so the two datapoints present in
-# every measured idle response (status DP3 and current setting DP4) are kept
-# required. Without that small signature an all-optional profile would match
-# unrelated Tuya devices that share none of the charger's datapoints.
+# A Q37 (product id fdfjiphjxtc9qyhd, 3.7 kW, single-phase, 16 A) was
+# captured on 2026-07-26 while paired with this profile and answered
+# identically:
+#
+#   {"3": "charger_free", "4": 16, "9": 0, "10": 0, "13": "controlpi_12v",
+#    "14": "charge_now", "18": true, "24": 28}
+#
+# Charging added DP1, DP6, DP7 and DP8 and confirmed two things that decide
+# whether one profile can serve the whole series:
+#   - DP9 is watts here too (1533 W next to L1 219.0 V x 7.2 A), so the
+#     scale below holds across generations.
+#   - DP1 carries energy, but not the same energy on every generation. On
+#     the Q37 it restarts from zero for each session, with DP25 taking the
+#     value the ended session finished with. On the Q11 it read 42.10 kWh
+#     with the charger idle and no session running, which is a lifetime
+#     meter. total_increasing is correct either way: it is the class meant
+#     for a counter that may reset, and Home Assistant accumulates the
+#     long-term statistic across the resets.
+# See amperepoint/docs/device-q37-ve-lan-capture.md for the full log.
+#
+# A Q22 (22 kW, 32 A, three-phase) was captured on 2026-07-26 and answered
+# with the same eight datapoints again, and with the same product id as the
+# Q37:
+#
+#   {"3": "charger_free", "4": 6, "9": 0, "10": 0, "13": "controlpi_12v",
+#    "14": "charge_now", "18": true, "24": 23}
+#
+# That settles the question of whether one profile can pick the current range
+# on its own: it cannot. tuya-local can vary a range through a `maximum` dps
+# or a mapping condition, but both need a datapoint whose value differs
+# between generations, and there is none - not even the product id, which a
+# 16 A single-phase Q37 and a 32 A three-phase Q22 share. The range below is
+# therefore the union, narrowed by the integration from the detected model.
+#
+# The Q11 has no confirmed product id and is matched on its datapoints
+# alone. So the two datapoints present in every measured response of every
+# unit so far (status DP3 and current setting DP4) are kept required.
+# Without that small signature an all-optional profile also matches unrelated
+# Tuya devices that share none of the charger's datapoints - a thermostat and
+# a temperature sensor both came back as matches while it was fully optional.
+# Any further generation added here has to report DP3 and DP4 as well.
 
 ---
 
-name: Ampere Point Q11 PRO (local)
+name: Ampere Point EV Charger (local)
 products:
-  - manufacturer: Ampere Point
-    model: Q11 PRO (local)
+  # One entry only, so the device-type list shows one row for the series
+  # instead of one per model. tuya-local builds that row from manufacturer +
+  # model, and writes the same model string into the device - which the
+  # integration reads to decide phase count and current limit. Naming models
+  # here ("Q37, Q74, Q11, Q22") would therefore make every charger detect as
+  # whichever one is checked first. The row says what it covers without
+  # spelling out numbers that double as model aliases.
+  #
+  # Two Tuya products so far. Both entries carry the same manufacturer and
+  # model, and tuya-local shows distinct pairs only, so the list still has a
+  # single row. A product id that no profile declares makes tuya-local fall
+  # back to the `name:` field for every row in the list, which is why these
+  # ids matter for presentation and not only for match quality.
+  #
+  # fdfjiphjxtc9qyhd covers both the Q37 and the Q22 - Tuya sells them as one
+  # product. jhlyzpk5nfk28nrh is the Q11 PRO.
+  - id: fdfjiphjxtc9qyhd
+    manufacturer: Ampere Point
+    model: Q Series - all models (local)
+  - id: jhlyzpk5nfk28nrh
+    manufacturer: Ampere Point
+    model: Q Series - all models (local)
 
 entities:
   - entity: sensor
@@ -83,9 +140,14 @@ entities:
         type: string
         optional: true
         name: sensor
+        # Measured by stepping a test rig through every Control Pilot state:
+        # controlpi_6v is reported both at full load and with the charge
+        # stopped at 0 A, so it means the vehicle signals state C, not that
+        # energy is flowing. DP3 and DP18 say whether it flows. No _pwm
+        # variant appeared in any state on this generation.
         mapping:
           - dps_val: controlpi_12v
-            value: ready
+            value: standby
           - dps_val: controlpi_9v
             value: vehicle_detected
           - dps_val: controlpi_6v
@@ -108,13 +170,24 @@ entities:
     class: current
     category: config
     dps:
+      # The series names are kilowatts, not amperes, and the current limit
+      # splits the range in two: Q11 and Q37 stop at 16 A, Q22 and Q74 go to
+      # 32 A. Nothing in the LAN response tells them apart - a Q22 answers
+      # with the same eight datapoints as a Q37 and reports the same product
+      # id - so this range is the union of the series, 6-32 A.
+      #
+      # The AmperePoint integration narrows its own slider to the limits of
+      # the detected model, so a 16 A charger still stops at 16 A. The
+      # narrowing can only ever reduce this bound, never raise it, so the
+      # worst case of a failed detection is 32 A offered on the series
+      # maximum rather than an out-of-range value.
       - id: 4
         type: integer
         name: value
         unit: A
         range:
           min: 6
-          max: 16
+          max: 32
 
   - entity: select
     name: Charging mode
@@ -329,7 +402,10 @@ entities:
         optional: true
         name: sensor
 
-  # Datapoints this unit did not report, kept for other Q Series units.
+  # Datapoints absent from the first captures, kept for other Q Series units.
+  # DP1 turned out to hold the current session rather than a lifetime total;
+  # the entity name is left alone for now so existing installations keep
+  # their entity ids.
   - entity: sensor
     name: Total energy
     class: energy

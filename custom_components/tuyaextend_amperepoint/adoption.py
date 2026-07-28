@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 
-from .const import CONF_SOURCE_DEVICE_ID, DOMAIN
+from .const import CONF_SOURCE_DEVICE_ID, CONF_SOURCE_PHYSICAL_IDS, DOMAIN
 from .discovery import discover_sources
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,17 +72,41 @@ def _entry_infos(hass: HomeAssistant) -> list[dict[str, Any]]:
             for value in merged.values()
             if isinstance(value, str) and _ENTITY_ID_PATTERN.match(value)
         }
+        # Pairing a charger again gives it a new device registry id and new
+        # entities, and deletes the old device the live lookup reads from.
+        # The remembered vendor ids are then the only thing still tying this
+        # entry to the charger it was adopted from.
+        live = _physical_ids(hass, source_device_id) if source_device_id else set()
+        remembered = {
+            str(value) for value in merged.get(CONF_SOURCE_PHYSICAL_IDS, []) or []
+        }
         infos.append(
             {
                 "entry": config_entry,
                 "device_id": source_device_id,
-                "physical": (
-                    _physical_ids(hass, source_device_id) if source_device_id else set()
-                ),
+                "physical": live | remembered,
+                "live_physical": live,
+                "remembered_physical": remembered,
                 "entities": entities,
             }
         )
     return infos
+
+
+def _async_remember_physical_ids(hass: HomeAssistant, info: dict[str, Any]) -> None:
+    """Persist the vendor ids of an entry's source while it still exists."""
+    entry = info.get("entry")
+    live = info.get("live_physical") or set()
+    if entry is None or not live:
+        return
+    remembered = info.get("remembered_physical") or set()
+    if live <= remembered:
+        return
+    merged = sorted(remembered | live)
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_SOURCE_PHYSICAL_IDS: merged}
+    )
+    info["remembered_physical"] = set(merged)
 
 
 def _async_backfill_mapping(
@@ -104,6 +128,19 @@ def _async_backfill_mapping(
         for key, value in candidate.mapping.items()
         if not _live_entity(hass, merged.get(key))
     }
+    # The charger was paired again: its old device is gone from the registry
+    # and the entry has to follow the replacement, or every later pass would
+    # keep matching on remembered vendor ids alone.
+    previous_device_id = info.get("device_id")
+    if (
+        previous_device_id
+        and not info.get("live_physical")
+        and candidate.device_id != previous_device_id
+    ):
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_SOURCE_DEVICE_ID: candidate.device_id}
+        )
+        info["device_id"] = candidate.device_id
     if not missing:
         return
     hass.config_entries.async_update_entry(
@@ -147,6 +184,11 @@ async def async_start_auto_adoption(hass: HomeAssistant) -> int:
     # deleted on purpose would come back on the next restart.
     known: set[str] = set(stored.get("adopted", []))
     infos = _entry_infos(hass)
+    # Record the vendor ids now, while the source devices are still in the
+    # registry. Once a charger is paired again the old device is gone, and
+    # this is what lets the entry be recognised as the same charger.
+    for info in infos:
+        _async_remember_physical_ids(hass, info)
 
     scheduled = 0
     # Richer mappings first, so when the same physical charger is visible
@@ -170,6 +212,14 @@ async def async_start_auto_adoption(hass: HomeAssistant) -> int:
         )
         if match is not None:
             _async_backfill_mapping(hass, match, candidate)
+            # Remember the ids of the charger that actually matched. The pass
+            # above only covers entries whose source device still exists, so
+            # without this an entry that was matched through its entities -
+            # after its device had already been deleted - would never record
+            # anything and would be orphaned by the next re-pairing.
+            if candidate_physical:
+                match["live_physical"] = candidate_physical
+                _async_remember_physical_ids(hass, match)
             known.add(candidate.device_id)
             known |= candidate_physical
             continue
