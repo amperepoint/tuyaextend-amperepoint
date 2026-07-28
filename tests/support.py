@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import types
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -41,6 +42,26 @@ class _Store:
 
     def async_delay_save(self, *_args, **_kwargs) -> None:
         return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class _EntityDescription:
+    """Stub of homeassistant.helpers.entity.EntityDescription."""
+
+    key: str
+    translation_key: str | None = None
+    icon: str | None = None
+    device_class: str | None = None
+    entity_category: str | None = None
+    native_unit_of_measurement: str | None = None
+
+
+class _CoordinatorEntity:
+    def __init__(self, coordinator) -> None:
+        self.coordinator = coordinator
+
+    def __class_getitem__(cls, _item):
+        return cls
 
 
 class _DataUpdateCoordinator:
@@ -98,7 +119,15 @@ def install_homeassistant_stubs() -> None:
     )
     helpers = _module("homeassistant.helpers")
     helpers.device_registry = _module(
-        "homeassistant.helpers.device_registry", async_get=lambda _hass: None
+        "homeassistant.helpers.device_registry",
+        async_get=lambda _hass: None,
+        DeviceInfo=dict,
+    )
+    helpers.entity = _module(
+        "homeassistant.helpers.entity", EntityDescription=_EntityDescription
+    )
+    helpers.entity_platform = _module(
+        "homeassistant.helpers.entity_platform", AddEntitiesCallback=object
     )
     helpers.entity_registry = _module(
         "homeassistant.helpers.entity_registry", async_get=lambda _hass: None
@@ -115,6 +144,7 @@ def install_homeassistant_stubs() -> None:
     helpers.update_coordinator = _module(
         "homeassistant.helpers.update_coordinator",
         DataUpdateCoordinator=_DataUpdateCoordinator,
+        CoordinatorEntity=_CoordinatorEntity,
     )
     ha.helpers = helpers
 
@@ -128,6 +158,11 @@ def install_homeassistant_stubs() -> None:
     ha.util = util
 
     components = _module("homeassistant.components")
+    components.number = _module(
+        "homeassistant.components.number",
+        NumberEntity=object,
+        NumberMode=types.SimpleNamespace(SLIDER="slider", BOX="box"),
+    )
     components.frontend = _module(
         "homeassistant.components.frontend",
         async_register_built_in_panel=lambda *_args, **_kwargs: None,

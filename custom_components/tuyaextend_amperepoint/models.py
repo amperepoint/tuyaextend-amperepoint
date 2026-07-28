@@ -23,19 +23,29 @@ MODELS: dict[str, AmperePointModel] = {
         min_current_a=6,
         max_current_a=48,
     ),
+    # The Q Series names are kilowatts, not amperes: amperepoint.pl lists the
+    # Q11 as 11 kW three-phase and the Q37 as 3.7 kW single-phase, and both
+    # adjust 6-16 A in 1 A steps.
     "q11": AmperePointModel(
         key="q11",
         name="AmperePoint Q Series Q11",
-        phases=1,
+        phases=3,
         min_current_a=6,
         max_current_a=16,
     ),
     "q37": AmperePointModel(
         key="q37",
         name="AmperePoint Q Series VE",
-        phases=3,
+        phases=1,
         min_current_a=6,
-        max_current_a=48,
+        max_current_a=16,
+    ),
+    "q74": AmperePointModel(
+        key="q74",
+        name="AmperePoint Q Series Q74",
+        phases=1,
+        min_current_a=6,
+        max_current_a=32,
     ),
     "q22": AmperePointModel(
         key="q22",
@@ -75,7 +85,13 @@ MODEL_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("wallbox prime", "prime 22kw", "gbmxngploofmhbjc"),
     ),
     ("q22_ota", ("q22 ota", "q22_ota", "cu111poj2mtikvls")),
-    ("q37", ("q37", "ev charger ve", "fdfjiphjxtc9qyhd")),
+    # "ev charger ve" and the product id fdfjiphjxtc9qyhd are NOT listed for
+    # the Q37: Tuya sells several models under that one product, and a Q22
+    # was captured reporting the same id while being named "Q22 - EV Charger
+    # VE". Matching on either would label every one of them a Q37, which is
+    # 1 phase and 16 A. Only the model number itself identifies a Q37.
+    ("q37", ("q37",)),
+    ("q74", ("q74", "7.4kw", "7,4kw")),
     ("q22", ("q22",)),
     ("q11", ("q11", "11kw")),
     ("s22", ("s22",)),
@@ -160,13 +176,23 @@ def get_model(key: str | None) -> AmperePointModel:
 
 
 def detect_model_key(value: Any) -> str:
+    """Identify a charger from text, refusing to guess when it is ambiguous.
+
+    One profile serves the whole series, so its name reaches this text and
+    can mention several models at once. Picking the first alias that hits
+    would then label every charger the same, which is how a 32 A Q22 once
+    became a 16 A single-phase Q37. Text naming more than one model
+    identifies none of them.
+    """
     raw = _normalize_text(value)
-    for model_key, aliases in MODEL_ALIASES:
-        if any(alias in raw for alias in aliases):
-            return model_key
-    if "q series" in raw or "ev charger" in raw or "evse" in raw:
+    matched = {
+        model_key
+        for model_key, aliases in MODEL_ALIASES
+        if any(alias in raw for alias in aliases)
+    }
+    if len(matched) != 1:
         return DEFAULT_MODEL
-    return DEFAULT_MODEL
+    return matched.pop()
 
 
 def normalize_status(value: Any) -> str:
