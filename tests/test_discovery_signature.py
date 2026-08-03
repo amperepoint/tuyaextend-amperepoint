@@ -53,6 +53,11 @@ SMART_PLUG_ENTITIES = [
     _entry("sensor.plug_current", "Current"),
 ]
 
+BATTERY_CHARGER_MEASUREMENTS = [
+    _entry("sensor.battery_charging_current", "Charging current"),
+    _entry("switch.battery_charging", "Charging"),
+]
+
 
 class ChargerSignatureTests(unittest.TestCase):
     def test_q74_is_recognised_without_a_known_name(self) -> None:
@@ -69,6 +74,15 @@ class ChargerSignatureTests(unittest.TestCase):
         self.assertNotIn(const.CONF_SOURCE_CURRENT_LIMIT, mapping)
         self.assertFalse(discovery._has_charger_signature(mapping))
 
+    def test_a_current_measurement_is_not_an_adjustable_limit(self) -> None:
+        mapping = discovery.map_source_entities(BATTERY_CHARGER_MEASUREMENTS)
+        self.assertEqual(
+            mapping[const.CONF_SOURCE_CURRENT_LIMIT],
+            "sensor.battery_charging_current",
+            "precondition: the semantic mapper sees the charging-current text",
+        )
+        self.assertFalse(discovery._has_charger_signature(mapping))
+
     def test_a_current_limit_alone_is_not_enough(self) -> None:
         # One stray match may not carry the recognition on its own.
         self.assertFalse(
@@ -82,6 +96,11 @@ class ChargerSignatureTests(unittest.TestCase):
         self.assertTrue(
             discovery._looks_like_amperepoint("Ampere Point Q11 PRO Tuya")
         )
+
+    def test_generic_cloud_ev_charging_station_name_still_works(self) -> None:
+        # The Q74 cloud twin exposes only one switch, so the model name has to
+        # carry discovery when no local capability signature can be built.
+        self.assertTrue(discovery._looks_like_amperepoint("EV Charging Station"))
 
 
 if __name__ == "__main__":

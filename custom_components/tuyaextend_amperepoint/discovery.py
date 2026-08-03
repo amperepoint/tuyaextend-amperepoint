@@ -383,7 +383,12 @@ def _has_charger_signature(mapping: dict[str, str]) -> bool:
     exposes, so it carries the recognition, with a second charger key to keep
     a stray match from being enough on its own.
     """
-    if CONF_SOURCE_CURRENT_LIMIT not in mapping:
+    current_limit = mapping.get(CONF_SOURCE_CURRENT_LIMIT, "")
+    # A measurement sensor named "Charging current" is not an adjustable
+    # limit. Requiring a controllable number entity prevents a battery sensor
+    # plus a generic charging switch/status from being auto-adopted as an
+    # EVSE. input_number remains supported for manually assembled sources.
+    if current_limit.partition(".")[0] not in {"number", "input_number"}:
         return False
     return any(
         key in mapping
@@ -408,6 +413,7 @@ def _looks_like_amperepoint(text: str) -> bool:
         "q37",
         "q series",
         "ev charger",
+        "ev charging station",
         "evse",
         "mode 3 type 2",
         "wallbox",
