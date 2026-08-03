@@ -99,7 +99,10 @@ def discover_sources(hass: HomeAssistant) -> list[SourceCandidate]:
             continue
 
         device_text = _device_text(device, entries)
-        if not _looks_like_amperepoint(device_text):
+        mapping = map_source_entities(entries, hass)
+        if not _looks_like_amperepoint(device_text) and not _has_charger_signature(
+            mapping
+        ):
             continue
 
         title = (
@@ -115,7 +118,7 @@ def discover_sources(hass: HomeAssistant) -> list[SourceCandidate]:
                 title=title,
                 model_key=_detect_model(device, device_text),
                 source_integration=source_platform,
-                mapping=map_source_entities(entries, hass),
+                mapping=mapping,
             )
         )
 
@@ -368,6 +371,36 @@ def _entity_text(entry: er.RegistryEntry) -> str:
     )
 
 
+def _has_charger_signature(mapping: dict[str, str]) -> bool:
+    """Whether the mapped entities describe a charger, whatever it is called.
+
+    Recognising chargers by name alone misses any unit whose text carries no
+    known model: a Q74 paired through tuya-local arrives as "Q74" with the
+    manufacturer "Tuya" and no model at all, because the profile it matched
+    declares no product id for it, so nothing writes a brand into the device.
+
+    An adjustable charging-current limit is what no other kind of Tuya device
+    exposes, so it carries the recognition, with a second charger key to keep
+    a stray match from being enough on its own.
+    """
+    current_limit = mapping.get(CONF_SOURCE_CURRENT_LIMIT, "")
+    # A measurement sensor named "Charging current" is not an adjustable
+    # limit. Requiring a controllable number entity prevents a battery sensor
+    # plus a generic charging switch/status from being auto-adopted as an
+    # EVSE. input_number remains supported for manually assembled sources.
+    if current_limit.partition(".")[0] not in {"number", "input_number"}:
+        return False
+    return any(
+        key in mapping
+        for key in (
+            CONF_SOURCE_STATUS,
+            CONF_SOURCE_CHARGE_SWITCH,
+            CONF_SOURCE_CONNECTED,
+            CONF_SOURCE_WORK_MODE,
+        )
+    )
+
+
 def _looks_like_amperepoint(text: str) -> bool:
     normalized = _normalize(text)
     return _has_any(
@@ -380,6 +413,7 @@ def _looks_like_amperepoint(text: str) -> bool:
         "q37",
         "q series",
         "ev charger",
+        "ev charging station",
         "evse",
         "mode 3 type 2",
         "wallbox",
