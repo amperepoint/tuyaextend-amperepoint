@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.34";
+const AP_Q22_DASHBOARD_VERSION = "0.5.35";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -522,11 +522,34 @@ class AmperePointQ22Card extends HTMLElement {
       ...config,
       entities: { ...(config.entities || {}) },
     };
+    this._autoEntityCacheKey = null;
+    this._autoEntityRegistryRef = null;
+    this._autoDeviceRegistryRef = null;
+    this._autoStateCount = -1;
+    this._hacsUpdateEntityId = null;
+    this._hacsUpdateEntityResolved = false;
+    this._lastHassRenderSignature = null;
+    if (this._hass) {
+      this.refreshAutoEntities(true);
+      this._lastHassRenderSignature = this.hassRenderSignature();
+      this.requestRender();
+    }
   }
 
   set hass(hass) {
     this._hass = hass;
-    this.applyAutoEntities();
+    const entitiesChanged = this.refreshAutoEntities();
+    const pendingChanged = this.reconcilePendingState(hass);
+    const signature = this.hassRenderSignature();
+    if (!entitiesChanged && !pendingChanged && signature === this._lastHassRenderSignature) {
+      return;
+    }
+    this._lastHassRenderSignature = signature;
+    this.requestRender();
+  }
+
+  reconcilePendingState(hass) {
+    let changed = false;
     const modeEntity = this.config?.entities?.chargingMode;
     if (
       this._pendingChargingMode &&
@@ -534,6 +557,7 @@ class AmperePointQ22Card extends HTMLElement {
       hass.states?.[modeEntity]?.state === this._pendingChargingMode
     ) {
       this.clearPendingChargingMode();
+      changed = true;
     }
     if (
       this._pendingCharging !== null &&
@@ -541,15 +565,118 @@ class AmperePointQ22Card extends HTMLElement {
       this.isCharging() === this._pendingCharging
     ) {
       this.clearPendingCharging();
+      changed = true;
     }
     const limitEntity = this.config?.entities?.currentLimit;
     if (this._pendingCurrentLimit !== null && this._pendingCurrentLimit !== undefined && limitEntity) {
       const reported = Number(hass.states?.[limitEntity]?.state);
       if (Number.isFinite(reported) && Math.abs(reported - this._pendingCurrentLimit) < 0.51) {
         this.clearPendingCurrentLimit();
+        changed = true;
       }
     }
-    this.render();
+    return changed;
+  }
+
+  refreshAutoEntities(force = false) {
+    const entities = this._hass?.entities || null;
+    const devices = this._hass?.devices || null;
+    const stateCount = Object.keys(this._hass?.states || {}).length;
+    const stateCountChanged = stateCount !== this._autoStateCount;
+    if (stateCountChanged) {
+      // HACS can finish creating its update entity after the card's first
+      // Home Assistant update. Give the cached lookup another chance when
+      // entities are added or removed, even if charger discovery is stable.
+      this._hacsUpdateEntityId = null;
+      this._hacsUpdateEntityResolved = false;
+    }
+    if (
+      !force &&
+      this._autoEntityCacheKey !== null &&
+      entities === this._autoEntityRegistryRef &&
+      devices === this._autoDeviceRegistryRef &&
+      stateCount === this._autoStateCount &&
+      !this._autoDiscoveryUsesStateIds
+    ) {
+      return false;
+    }
+
+    this._autoEntityRegistryRef = entities;
+    this._autoDeviceRegistryRef = devices;
+    this._autoStateCount = stateCount;
+    const cacheKey = this.autoEntityCacheKey();
+    if (!force && cacheKey === this._autoEntityCacheKey) return false;
+
+    this._autoEntityCacheKey = cacheKey;
+    this._hacsUpdateEntityId = null;
+    this._hacsUpdateEntityResolved = false;
+    this.applyAutoEntities();
+    return true;
+  }
+
+  autoEntityCacheKey() {
+    const configuredEntityIds = new Set(Object.values(this.config?.entities || {}));
+    const registryRows = Object.entries(this._hass?.entities || {})
+      .filter(
+        ([entityId, meta]) =>
+          meta?.platform === AP_Q22_INTEGRATION_DOMAIN ||
+          configuredEntityIds.has(entityId)
+      )
+      .map(([entityId, meta]) => [
+        entityId,
+        meta?.platform || "",
+        meta?.device_id || "",
+        meta?.translation_key || "",
+      ])
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    const deviceIds = new Set(registryRows.map((row) => row[2]).filter(Boolean));
+    const deviceRows = [...deviceIds]
+      .map((deviceId) => {
+        const device = this._hass?.devices?.[deviceId] || {};
+        return [deviceId, device.name_by_user || "", device.name || ""];
+      })
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    const fallbackStateIds = registryRows.length
+      ? []
+      : Object.keys(this._hass?.states || {}).sort();
+    this._autoDiscoveryUsesStateIds = fallbackStateIds.length > 0;
+    return JSON.stringify([registryRows, deviceRows, fallbackStateIds]);
+  }
+
+  hassRenderSignature() {
+    const entityIds = new Set(
+      Object.values(this.config?.entities || {}).filter(
+        (entityId) => typeof entityId === "string" && entityId.includes(".")
+      )
+    );
+    const updateEntity = this.hacsUpdateEntity();
+    if (updateEntity?.entity_id) entityIds.add(updateEntity.entity_id);
+    const states = [...entityIds]
+      .sort()
+      .map((entityId) => {
+        const state = this._hass?.states?.[entityId];
+        return [
+          entityId,
+          state?.state ?? null,
+          state?.attributes ?? null,
+        ];
+      });
+    try {
+      return JSON.stringify([
+        this.config?.title || "",
+        this.config?.subtitle || "",
+        this.config?.language || "auto",
+        this._hass?.language || this._hass?.locale?.language || "",
+        this._deviceOverride || "",
+        Object.entries(this.config?.entities || {}).sort(([a], [b]) => a.localeCompare(b)),
+        states,
+      ]);
+    } catch (_error) {
+      // Home Assistant state attributes are JSON data. If a custom entity
+      // violates that contract, its state object identity is still enough to
+      // avoid suppressing a potentially relevant render.
+      return `${Date.now()}:${states.map((row) => String(this._hass?.states?.[row[0]])).join("|")}`;
+    }
   }
 
   getCardSize() {
@@ -683,7 +810,7 @@ class AmperePointQ22Card extends HTMLElement {
   selectDevice(deviceId) {
     if (!deviceId || deviceId === this.apSelectedDeviceId()) return;
     if (this.deviceSelectionLocked()) {
-      this.render();
+      this.requestRender();
       return;
     }
     this.resetDeviceTransientState();
@@ -693,7 +820,8 @@ class AmperePointQ22Card extends HTMLElement {
     const device = this._hass?.devices?.[deviceId];
     this.config.title =
       device?.name_by_user || device?.name || detected.title || this.config.title;
-    this.render();
+    this._lastHassRenderSignature = null;
+    this.requestRender();
   }
 
   detectEntities(deviceId = null) {
@@ -945,16 +1073,16 @@ class AmperePointQ22Card extends HTMLElement {
     clearTimeout(this._pendingChargingTimer);
     this._pendingChargingTimer = setTimeout(() => {
       this.clearPendingCharging();
-      this.render();
+      this.requestRender();
     }, 20_000);
-    this.render();
+    this.requestRender();
     try {
       await this._hass.callService("switch", target ? "turn_on" : "turn_off", {
         entity_id: entityId,
       });
     } catch (error) {
       this.clearPendingCharging();
-      this.render();
+      this.requestRender();
       throw error;
     }
   }
@@ -974,13 +1102,13 @@ class AmperePointQ22Card extends HTMLElement {
     clearTimeout(this._pendingCurrentLimitTimer);
     this._pendingCurrentLimitTimer = setTimeout(() => {
       this.clearPendingCurrentLimit();
-      this.render();
+      this.requestRender();
     }, 30_000);
     try {
       await this._hass.callService("number", "set_value", { entity_id: entityId, value: Number(value) });
     } catch (error) {
       this.clearPendingCurrentLimit();
-      this.render();
+      this.requestRender();
       throw error;
     }
   }
@@ -998,14 +1126,14 @@ class AmperePointQ22Card extends HTMLElement {
     clearTimeout(this._pendingChargingModeTimer);
     this._pendingChargingModeTimer = setTimeout(() => {
       this.clearPendingChargingMode();
-      this.render();
+      this.requestRender();
     }, 30_000);
-    this.render();
+    this.requestRender();
     try {
       await this._hass.callService("select", "select_option", { entity_id: entityId, option: value });
     } catch (error) {
       this.clearPendingChargingMode();
-      this.render();
+      this.requestRender();
       throw error;
     }
   }
@@ -1051,13 +1179,20 @@ class AmperePointQ22Card extends HTMLElement {
   }
 
   hacsUpdateEntity() {
-    if (this.config.updateEntity && this.stateObj(this.config.updateEntity)) {
+    if (this.config?.updateEntity && this.stateObj(this.config.updateEntity)) {
+      this._hacsUpdateEntityId = this.config.updateEntity;
+      this._hacsUpdateEntityResolved = true;
       return this.stateObj(this.config.updateEntity);
     }
     if (this.stateObj("update.tuyaextend_amperepoint_update")) {
+      this._hacsUpdateEntityId = "update.tuyaextend_amperepoint_update";
+      this._hacsUpdateEntityResolved = true;
       return this.stateObj("update.tuyaextend_amperepoint_update");
     }
-    return Object.values(this._hass?.states || {}).find((entity) => {
+    if (this._hacsUpdateEntityResolved) {
+      return this.stateObj(this._hacsUpdateEntityId);
+    }
+    const found = Object.values(this._hass?.states || {}).find((entity) => {
       if (!entity.entity_id?.startsWith("update.")) return false;
       const haystack = [
         entity.entity_id,
@@ -1070,6 +1205,9 @@ class AmperePointQ22Card extends HTMLElement {
         .toLowerCase();
       return haystack.includes("tuyaextend_amperepoint") || haystack.includes("tuyaextend-amperepoint");
     });
+    this._hacsUpdateEntityId = found?.entity_id || null;
+    this._hacsUpdateEntityResolved = true;
+    return found;
   }
 
   dashboardVersionInfo() {
@@ -1100,12 +1238,12 @@ class AmperePointQ22Card extends HTMLElement {
     const { min, max } = this.plannerCurrentBounds();
     this._plannerValidation = this.validatePlannerDraft(this._plannerDraft, min, max);
     if (this._plannerValidation.hasErrors) {
-      this.render();
+      this.requestRender();
       return;
     }
     this._plannerSaving = true;
     this._plannerError = null;
-    this.render();
+    this.requestRender();
     try {
       await this._hass.callService("tuyaextend_amperepoint", "set_planner", {
         config_entry_id: configEntryId,
@@ -1119,7 +1257,7 @@ class AmperePointQ22Card extends HTMLElement {
       this._plannerError = this.tt("plannerSaveFailed", { error: error?.message || error });
     } finally {
       this._plannerSaving = false;
-      this.render();
+      this.requestRender();
     }
   }
 
@@ -1128,7 +1266,7 @@ class AmperePointQ22Card extends HTMLElement {
     if (!configEntryId) return;
     this._plannerActionPending = mode;
     this._plannerError = null;
-    this.render();
+    this.requestRender();
     try {
       await this._hass.callService("tuyaextend_amperepoint", "set_planner_override", {
         config_entry_id: configEntryId,
@@ -1139,7 +1277,7 @@ class AmperePointQ22Card extends HTMLElement {
       this._plannerError = this.tt("plannerOverrideFailed", { error: error?.message || error });
     } finally {
       this._plannerActionPending = null;
-      this.render();
+      this.requestRender();
     }
   }
 
@@ -1192,7 +1330,7 @@ class AmperePointQ22Card extends HTMLElement {
     this._plannerValidation = null;
     this._plannerError = null;
     this.syncPlannerDraft(this.stateObj(this.config.entities.planner)?.attributes || {});
-    this.render();
+    this.requestRender();
   }
 
   undoPlannerRemove() {
@@ -1200,7 +1338,7 @@ class AmperePointQ22Card extends HTMLElement {
     this._plannerDraft.windows.splice(this._plannerUndo.index, 0, this._plannerUndo.window);
     this._plannerUndo = null;
     this.markPlannerDirty();
-    this.render();
+    this.requestRender();
   }
 
   addPlannerWindow() {
@@ -1215,7 +1353,7 @@ class AmperePointQ22Card extends HTMLElement {
     });
     this.markPlannerDirty();
     this._plannerEditorOpen = true;
-    this.render();
+    this.requestRender();
   }
 
   plannerStateLabel(value) {
@@ -1360,16 +1498,16 @@ class AmperePointQ22Card extends HTMLElement {
             <div class="planner-days" aria-label="${this.t("plannerDays")}">
               ${dayKeys
                 .map(
-                  (key, day) => `<button class="day-chip ${window.days?.includes(day) ? "selected" : ""}" type="button" data-planner-day="${day}" aria-pressed="${window.days?.includes(day) ? "true" : "false"}">
+                  (key, day) => `<button class="day-chip ${window.days?.includes(day) ? "selected" : ""}" type="button" data-planner-day="${day}" data-render-key="planner-${index}-day-${day}" aria-pressed="${window.days?.includes(day) ? "true" : "false"}">
                     <span class="day-check">${window.days?.includes(day) ? "✓" : ""}</span>${this.t(key)}
                   </button>`
                 )
                 .join("")}
             </div>
-            <label class="planner-field"><span>${this.t("plannerStart")}</span><input data-planner-field="start" type="time" step="60" value="${this.escape(window.start)}" /></label>
-            <label class="planner-field"><span>${this.t("plannerEnd")}</span><input data-planner-field="end" type="time" step="60" value="${this.escape(window.end)}" /></label>
-            <label class="planner-field"><span>${this.t("plannerCurrent")}</span><div class="planner-number"><input data-planner-field="current_a" type="number" min="${minCurrent}" max="${maxCurrent}" step="1" value="${this.escape(window.current_a)}" /><b>A</b></div></label>
-            <button class="planner-remove" type="button" aria-label="${this.t("plannerRemove")}">${this.icon("mdi:trash-can-outline")}<span>${this.t("plannerRemove")}</span></button>
+            <label class="planner-field"><span>${this.t("plannerStart")}</span><input data-planner-field="start" data-render-key="planner-${index}-start" type="time" step="60" value="${this.escape(window.start)}" /></label>
+            <label class="planner-field"><span>${this.t("plannerEnd")}</span><input data-planner-field="end" data-render-key="planner-${index}-end" type="time" step="60" value="${this.escape(window.end)}" /></label>
+            <label class="planner-field"><span>${this.t("plannerCurrent")}</span><div class="planner-number"><input data-planner-field="current_a" data-render-key="planner-${index}-current" type="number" min="${minCurrent}" max="${maxCurrent}" step="1" value="${this.escape(window.current_a)}" /><b>A</b></div></label>
+            <button class="planner-remove" data-render-key="planner-${index}-remove" type="button" aria-label="${this.t("plannerRemove")}">${this.icon("mdi:trash-can-outline")}<span>${this.t("plannerRemove")}</span></button>
             ${validation.rowErrors[index] ? `<div class="planner-row-error" role="alert">${validation.rowErrors[index].map((error) => `<span>${this.icon("mdi:alert-circle-outline")} ${this.escape(error)}</span>`).join("")}</div>` : ""}
           </div>`
       )
@@ -1389,37 +1527,37 @@ class AmperePointQ22Card extends HTMLElement {
           <div>${this.icon(attributes.command_status === "pending" ? "mdi:cloud-sync-outline" : attributes.command_status === "failed" ? "mdi:cloud-alert" : "mdi:cloud-check-outline")}<span><small>${this.t("plannerCommand")}</small><b>${this.plannerCommandLabel(attributes.command_status)}</b>${commandDetail ? `<em>${commandDetail}</em>` : ""}</span></div>
         </div>
         <label class="planner-master">
-          <input class="planner-enabled" type="checkbox" role="switch" ${draft.enabled ? "checked" : ""} aria-label="${draft.enabled ? this.t("plannerDraftOn") : this.t("plannerDraftOff")}" />
+          <input class="planner-enabled" data-render-key="planner-enabled" type="checkbox" role="switch" ${draft.enabled ? "checked" : ""} aria-label="${draft.enabled ? this.t("plannerDraftOn") : this.t("plannerDraftOff")}" />
           <span class="switch-track"><span></span></span>
           <span class="switch-copy"><strong>${draft.enabled ? this.t("plannerDraftOn") : this.t("plannerDraftOff")}</strong>${draft.enabled !== actualEnabled ? `<small>${this.t("plannerChangeAfterSave")}</small>` : ""}</span>
         </label>
         ${this._plannerError ? `<div class="planner-feedback error" role="alert">${this.icon("mdi:alert-circle-outline")}<span>${this.escape(this._plannerError)}</span></div>` : ""}
         ${validation.globalErrors.map((error) => `<div class="planner-feedback error" role="alert">${this.icon("mdi:alert-circle-outline")}<span>${this.escape(error)}</span></div>`).join("")}
-        ${this._plannerUndo ? `<div class="planner-feedback undo" role="status"><span>${this.t("plannerDeleted")}</span><button class="planner-undo" type="button">${this.t("plannerUndo")}</button></div>` : ""}
+        ${this._plannerUndo ? `<div class="planner-feedback undo" role="status"><span>${this.t("plannerDeleted")}</span><button class="planner-undo" data-render-key="planner-undo" type="button">${this.t("plannerUndo")}</button></div>` : ""}
         ${
           this._plannerDirty || this._plannerSaved || this._plannerSaving
             ? `<div class="planner-savebar ${this._plannerDirty ? "dirty" : ""}">
                 <span>${this._plannerSaving ? this.t("plannerSaving") : this._plannerDirty ? this.t("plannerDirty") : this._plannerSaved ? this.t("plannerSaved") : ""}</span>
-                <button class="planner-discard" type="button" ${this._plannerDirty && !this._plannerSaving ? "" : "disabled"}>${this.t("plannerDiscard")}</button>
-                <button class="planner-save" type="button" ${this._plannerDirty && !validation.hasErrors && !this._plannerSaving ? "" : "disabled"}>${this.icon(this._plannerSaving ? "mdi:loading" : "mdi:content-save-outline")} ${this._plannerSaving ? this.t("plannerSaving") : this.t("plannerSave")}</button>
+                <button class="planner-discard" data-render-key="planner-discard" type="button" ${this._plannerDirty && !this._plannerSaving ? "" : "disabled"}>${this.t("plannerDiscard")}</button>
+                <button class="planner-save" data-render-key="planner-save" type="button" ${this._plannerDirty && !validation.hasErrors && !this._plannerSaving ? "" : "disabled"}>${this.icon(this._plannerSaving ? "mdi:loading" : "mdi:content-save-outline")} ${this._plannerSaving ? this.t("plannerSaving") : this.t("plannerSave")}</button>
               </div>`
             : ""
         }
         <div class="planner-override">
           ${this.plannerOverrideBanner(override)}
           <div class="override-actions">
-            <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 30 ? "active" : ""}" type="button" data-planner-override="charge" data-duration="30" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 30}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge30")}</button>
-            <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 60 ? "active" : ""}" type="button" data-planner-override="charge" data-duration="60" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 60}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge60")}</button>
-            <div class="planner-energy"><input class="planner-energy-value" type="number" min="0.1" max="200" step="0.1" value="${this.escape(this._plannerEnergyValue || override?.target_kwh || 10)}" aria-label="${this.t("plannerEnergyPlaceholder")}" /><b>kWh</b><button class="${overrideMode === "energy" ? "active" : ""}" type="button" data-planner-override="energy" aria-pressed="${overrideMode === "energy"}">${this._plannerActionPending === "energy" ? this.icon("mdi:loading") : ""}${this.t("plannerAddEnergy")}</button></div>
-            <button class="${overrideMode === "pause" ? "active" : ""}" type="button" data-planner-override="pause" aria-pressed="${overrideMode === "pause"}">${this._plannerActionPending === "pause" ? this.icon("mdi:loading") : ""}${this.t("plannerPause")}</button>
-            <button type="button" data-planner-override="clear" ${override ? "" : "disabled"}>${this._plannerActionPending === "clear" ? this.icon("mdi:loading") : ""}${this.t("plannerClear")}</button>
+            <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 30 ? "active" : ""}" data-render-key="planner-charge-30" type="button" data-planner-override="charge" data-duration="30" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 30}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge30")}</button>
+            <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 60 ? "active" : ""}" data-render-key="planner-charge-60" type="button" data-planner-override="charge" data-duration="60" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 60}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge60")}</button>
+            <div class="planner-energy"><input class="planner-energy-value" data-render-key="planner-energy" type="number" min="0.1" max="200" step="0.1" value="${this.escape(this._plannerEnergyValue || override?.target_kwh || 10)}" aria-label="${this.t("plannerEnergyPlaceholder")}" /><b>kWh</b><button class="${overrideMode === "energy" ? "active" : ""}" data-render-key="planner-energy-submit" type="button" data-planner-override="energy" aria-pressed="${overrideMode === "energy"}">${this._plannerActionPending === "energy" ? this.icon("mdi:loading") : ""}${this.t("plannerAddEnergy")}</button></div>
+            <button class="${overrideMode === "pause" ? "active" : ""}" data-render-key="planner-pause" type="button" data-planner-override="pause" aria-pressed="${overrideMode === "pause"}">${this._plannerActionPending === "pause" ? this.icon("mdi:loading") : ""}${this.t("plannerPause")}</button>
+            <button data-render-key="planner-clear" type="button" data-planner-override="clear" ${override ? "" : "disabled"}>${this._plannerActionPending === "clear" ? this.icon("mdi:loading") : ""}${this.t("plannerClear")}</button>
           </div>
         </div>
-        <details class="planner-editor" ${this._plannerEditorOpen ? "open" : ""}>
+        <details class="planner-editor" data-render-key="planner-editor" ${this._plannerEditorOpen ? "open" : ""}>
           <summary>${this.icon("mdi:calendar-edit")}<span><strong>${this.t("plannerEdit")}</strong><small>${draft.windows.length} · ${this.t("plannerAddWindow")}</small></span>${this.icon("mdi:chevron-down")}</summary>
           <div class="planner-editor-body">
             <div class="planner-windows">${rows || `<div class="planner-empty">${this.t("plannerNoWindows")}</div>`}</div>
-            <div class="planner-actions"><button class="planner-add" type="button">${this.icon("mdi:plus")} ${this.t("plannerAddWindow")}</button></div>
+            <div class="planner-actions"><button class="planner-add" data-render-key="planner-add" type="button">${this.icon("mdi:plus")} ${this.t("plannerAddWindow")}</button></div>
           </div>
         </details>
       </section>`;
@@ -1615,6 +1753,217 @@ class AmperePointQ22Card extends HTMLElement {
     return `${voltage ?? "-"} V / ${current ?? "-"} A / ${power ?? "-"} kW`;
   }
 
+  animationFrame(callback) {
+    const owner = globalThis.window || globalThis;
+    const schedule = globalThis.requestAnimationFrame || owner?.requestAnimationFrame;
+    return typeof schedule === "function" ? schedule.call(owner, callback) : null;
+  }
+
+  cancelAnimationFrame(frame) {
+    if (frame === null || frame === undefined) return;
+    const owner = globalThis.window || globalThis;
+    const cancel = globalThis.cancelAnimationFrame || owner?.cancelAnimationFrame;
+    if (typeof cancel === "function") cancel.call(owner, frame);
+  }
+
+  requestRender() {
+    if (this._renderQueued) return;
+    this._renderQueued = true;
+    let callbackRan = false;
+    const frame = this.animationFrame(() => {
+      callbackRan = true;
+      this._renderQueued = false;
+      this._renderFrame = null;
+      this.render();
+    });
+    if (frame === null) {
+      this._renderQueued = false;
+      this.render();
+      return;
+    }
+    // Browser requestAnimationFrame is asynchronous, but this also keeps the
+    // scheduler correct under synchronous test/polyfill implementations.
+    if (!callbackRan) this._renderFrame = frame;
+  }
+
+  deepActiveElement() {
+    let active = globalThis.document?.activeElement || null;
+    while (active?.shadowRoot?.activeElement) {
+      active = active.shadowRoot.activeElement;
+    }
+    return active;
+  }
+
+  scrollContainers() {
+    const containers = [];
+    const seen = new Set();
+    const add = (node) => {
+      if (!node || seen.has(node)) return;
+      seen.add(node);
+      if (typeof node.scrollTop === "number" || typeof node.scrollLeft === "number") {
+        containers.push(node);
+      }
+    };
+
+    add(globalThis.document?.scrollingElement);
+    let node = this;
+    while (node && !seen.has(node)) {
+      add(node);
+      if (node.parentNode) {
+        node = node.parentNode;
+      } else if (node.host) {
+        node = node.host;
+      } else {
+        const root = node.getRootNode?.();
+        node = root && root !== node ? root.host || null : null;
+      }
+    }
+    return containers;
+  }
+
+  captureRenderState() {
+    const scroll = this.scrollContainers().map((node) => ({
+      node,
+      top: Number(node.scrollTop || 0),
+      left: Number(node.scrollLeft || 0),
+    }));
+    const elementScroll = [...(this.querySelectorAll?.("[data-render-key]") || [])]
+      .filter((element) => Number(element.scrollTop || 0) || Number(element.scrollLeft || 0))
+      .map((element) => ({
+        key: element.dataset.renderKey,
+        top: Number(element.scrollTop || 0),
+        left: Number(element.scrollLeft || 0),
+      }));
+    const details = [...(this.querySelectorAll?.("details[data-render-key]") || [])].map(
+      (element) => ({ key: element.dataset.renderKey, open: Boolean(element.open) })
+    );
+    const active = this.deepActiveElement();
+    let focus = null;
+    if (
+      active &&
+      typeof this.contains === "function" &&
+      this.contains(active) &&
+      active.dataset?.renderKey
+    ) {
+      focus = {
+        key: active.dataset.renderKey,
+        value: "value" in active ? active.value : undefined,
+        checked: "checked" in active ? Boolean(active.checked) : undefined,
+        selectionStart:
+          typeof active.selectionStart === "number" ? active.selectionStart : null,
+        selectionEnd: typeof active.selectionEnd === "number" ? active.selectionEnd : null,
+        selectionDirection: active.selectionDirection || "none",
+      };
+    }
+    return { scroll, elementScroll, details, focus };
+  }
+
+  renderStateElement(key) {
+    if (!key) return null;
+    return [...(this.querySelectorAll?.("[data-render-key]") || [])].find(
+      (element) => element.dataset?.renderKey === key
+    );
+  }
+
+  restoreScroll(snapshot) {
+    for (const position of snapshot?.scroll || []) {
+      if (!position.node) continue;
+      if (typeof position.node.scrollTop === "number") position.node.scrollTop = position.top;
+      if (typeof position.node.scrollLeft === "number") position.node.scrollLeft = position.left;
+    }
+    for (const position of snapshot?.elementScroll || []) {
+      const element = this.renderStateElement(position.key);
+      if (!element) continue;
+      if (typeof element.scrollTop === "number") element.scrollTop = position.top;
+      if (typeof element.scrollLeft === "number") element.scrollLeft = position.left;
+    }
+  }
+
+  restoreRenderState(snapshot, restoreFocus = true) {
+    for (const detail of snapshot?.details || []) {
+      const element = this.renderStateElement(detail.key);
+      if (element && "open" in element) element.open = detail.open;
+    }
+    this.restoreScroll(snapshot);
+    if (!restoreFocus || !snapshot?.focus) return;
+
+    const element = this.renderStateElement(snapshot.focus.key);
+    if (!element) return;
+    if (snapshot.focus.value !== undefined && "value" in element) {
+      element.value = snapshot.focus.value;
+    }
+    if (snapshot.focus.checked !== undefined && "checked" in element) {
+      element.checked = snapshot.focus.checked;
+    }
+    try {
+      element.focus?.({ preventScroll: true });
+    } catch (_error) {
+      element.focus?.();
+    }
+    if (
+      snapshot.focus.selectionStart !== null &&
+      snapshot.focus.selectionEnd !== null &&
+      typeof element.setSelectionRange === "function"
+    ) {
+      try {
+        element.setSelectionRange(
+          snapshot.focus.selectionStart,
+          snapshot.focus.selectionEnd,
+          snapshot.focus.selectionDirection
+        );
+      } catch (_error) {
+        // Range inputs and some Home Assistant controls do not expose text
+        // selection even though they provide selection-like properties.
+      }
+    }
+    // focus() can move the page before preventScroll is supported. Restore
+    // the captured containers once more after focus has been returned.
+    this.restoreScroll(snapshot);
+  }
+
+  beginDomReplacement() {
+    this.finishDomReplacement();
+    const snapshot = this.captureRenderState();
+    if (this.style && Number(this.offsetHeight) > 0) {
+      this._renderPreviousMinHeight = this.style.minHeight;
+      this.style.minHeight = `${this.offsetHeight}px`;
+    }
+    return snapshot;
+  }
+
+  completeDomReplacement(snapshot) {
+    this.restoreRenderState(snapshot);
+    const release = () => {
+      this._renderRestoreFrame = null;
+      this.restoreScroll(snapshot);
+      if (this.style && this._renderPreviousMinHeight !== undefined) {
+        this.style.minHeight = this._renderPreviousMinHeight;
+      }
+      this._renderPreviousMinHeight = undefined;
+    };
+    let callbackRan = false;
+    const frame = this.animationFrame(() => {
+      callbackRan = true;
+      release();
+    });
+    if (frame === null) {
+      release();
+    } else if (!callbackRan) {
+      this._renderRestoreFrame = frame;
+    }
+  }
+
+  finishDomReplacement() {
+    if (this._renderRestoreFrame !== null && this._renderRestoreFrame !== undefined) {
+      this.cancelAnimationFrame(this._renderRestoreFrame);
+      this._renderRestoreFrame = null;
+    }
+    if (this.style && this._renderPreviousMinHeight !== undefined) {
+      this.style.minHeight = this._renderPreviousMinHeight;
+    }
+    this._renderPreviousMinHeight = undefined;
+  }
+
   render() {
     if (!this.config || !this._hass) return;
 
@@ -1708,7 +2057,7 @@ class AmperePointQ22Card extends HTMLElement {
             </div>
             ${
               hasSwitch
-                ? `<button class="power-button ${sessionRunning ? "on" : ""}" type="button">
+                ? `<button class="power-button ${sessionRunning ? "on" : ""}" data-render-key="charging-toggle" type="button">
                     ${this.icon(sessionRunning ? "mdi:pause" : "mdi:play")}
                     ${sessionRunning ? this.t("stop") : this.t("charging")}
                   </button>`
@@ -1722,7 +2071,7 @@ class AmperePointQ22Card extends HTMLElement {
                   <span>${this.t("currentLimit")}</span>
                   <b>${current} A</b>
                 </label>
-                <input class="current-slider" type="range" min="${minCurrent}" max="${maxCurrent}" step="${stepCurrent}" value="${current}" />
+                <input class="current-slider" data-render-key="current-limit" type="range" min="${minCurrent}" max="${maxCurrent}" step="${stepCurrent}" value="${current}" />
                 <div class="slider-scale"><span>${minCurrent} A</span><span>${maxCurrent} A</span></div>
               `
               : ""
@@ -1730,14 +2079,14 @@ class AmperePointQ22Card extends HTMLElement {
           <div class="control-fields ${showTargetEnergy ? "" : "single"}">
             ${
               hasChargingMode
-                ? `<label><span>${this.t("chargingMode")}</span><select class="charging-mode" ${this._pendingChargingMode ? "disabled" : ""}>${chargingModes
+                ? `<label><span>${this.t("chargingMode")}</span><select class="charging-mode" data-render-key="charging-mode" ${this._pendingChargingMode ? "disabled" : ""}>${chargingModes
                     .map((option) => `<option value="${this.escape(option)}" ${option === chargingMode ? "selected" : ""}>${this.escape(this.chargingModeLabel(option))}</option>`)
                     .join("")}</select></label>`
                 : ""
             }
             ${
               showTargetEnergy
-                ? `<label><span>${this.t("targetEnergy")}</span><div class="number-field"><input class="target-energy" type="number" min="${targetEnergyEntity?.attributes?.min ?? 0}" max="${targetEnergyEntity?.attributes?.max ?? 200}" step="${targetEnergyEntity?.attributes?.step ?? 1}" value="${this.escape(this.state(e.targetEnergy))}" /><b>kWh</b></div></label>`
+                ? `<label><span>${this.t("targetEnergy")}</span><div class="number-field"><input class="target-energy" data-render-key="target-energy" type="number" min="${targetEnergyEntity?.attributes?.min ?? 0}" max="${targetEnergyEntity?.attributes?.max ?? 200}" step="${targetEnergyEntity?.attributes?.step ?? 1}" value="${this.escape(this.state(e.targetEnergy))}" /><b>kWh</b></div></label>`
                 : ""
             }
           </div>
@@ -1751,8 +2100,8 @@ class AmperePointQ22Card extends HTMLElement {
                     ${
                       hasScheduleWindow
                         ? `<div class="schedule-window">
-                            <label><span>${this.t("scheduleStartTime")}</span><input class="schedule-start-time" type="time" step="3600" value="${this.escape(scheduleStartTime)}" /></label>
-                            <label><span>${this.t("scheduleEndTime")}</span><input class="schedule-end-time" type="time" step="3600" value="${this.escape(scheduleEndTime)}" /></label>
+                            <label><span>${this.t("scheduleStartTime")}</span><input class="schedule-start-time" data-render-key="schedule-start" type="time" step="3600" value="${this.escape(scheduleStartTime)}" /></label>
+                            <label><span>${this.t("scheduleEndTime")}</span><input class="schedule-end-time" data-render-key="schedule-end" type="time" step="3600" value="${this.escape(scheduleEndTime)}" /></label>
                           </div>
                           <span>${this.t("scheduleWholeHours")}</span>
                           ${scheduleCrossesMidnight ? `<span class="schedule-overnight">${this.t("scheduleOvernight")}</span>` : ""}`
@@ -1823,6 +2172,7 @@ class AmperePointQ22Card extends HTMLElement {
     const hasAnyData = powerCard || controlCard || plannerCard || metrics || contentPanels.length || hasRaw;
     const versionInfo = this.dashboardVersionInfo();
     const settingsPath = this.integrationSettingsPath();
+    const renderState = this.beginDomReplacement();
 
     this.innerHTML = `
       <ha-card>
@@ -1836,7 +2186,7 @@ class AmperePointQ22Card extends HTMLElement {
             <div class="hero-status">
               ${
                 deviceOptions.length > 1
-                  ? `<label class="device-select-wrap"><span>${this.t("deviceSelect")}</span><select class="device-select" ${deviceSelectionLocked ? "disabled" : ""} title="${deviceSelectionLocked ? this.escape(this.t("deviceSwitchBlocked")) : ""}">${deviceOptions
+                  ? `<label class="device-select-wrap"><span>${this.t("deviceSelect")}</span><select class="device-select" data-render-key="device-select" ${deviceSelectionLocked ? "disabled" : ""} title="${deviceSelectionLocked ? this.escape(this.t("deviceSwitchBlocked")) : ""}">${deviceOptions
                       .map(
                         (option) =>
                           `<option value="${this.escape(option.id)}" ${option.id === selectedDeviceId ? "selected" : ""}>${this.escape(option.name)}</option>`
@@ -1860,12 +2210,12 @@ class AmperePointQ22Card extends HTMLElement {
                 ${contentPanels.length ? `<section class="content-grid ${contentPanels.length === 1 ? "single" : ""}">${contentPanels.join("")}</section>` : ""}
                 ${
                   hasRaw
-                    ? `<details class="diagnostics" open>
+                    ? `<details class="diagnostics" data-render-key="diagnostics" open>
                         <summary>
                           <span>${this.icon("mdi:database-search")} ${this.t("rawDp")}</span>
                           <small>${this.t("rawHint")}</small>
                         </summary>
-                        <div class="table-wrap">
+                        <div class="table-wrap" data-render-key="raw-table-scroll">
                           <table>
                             <thead>
                               <tr><th>${this.t("dp")}</th><th>${this.t("code")}</th><th>${this.t("rawApi")}</th><th>${this.t("scaledMeaning")}</th></tr>
@@ -1880,12 +2230,13 @@ class AmperePointQ22Card extends HTMLElement {
               : `<div class="empty-state">${this.icon("mdi:database-off")} ${this.t("noData")}</div>`
           }
           <footer class="card-footer">
-            <a class="footer-link" data-navigate href="${this.escape(settingsPath)}">
+            <a class="footer-link" data-render-key="settings-link" data-navigate href="${this.escape(settingsPath)}">
               ${this.icon("mdi:cog-outline")}
               <span>${this.t("dashboardSettings")}</span>
             </a>
             <a
               class="version-flag ${versionInfo.state}"
+              data-render-key="version-link"
               data-navigate
               href="${AP_Q22_HACS_PATH}"
               title="${this.escape(versionInfo.status)}"
@@ -1932,7 +2283,7 @@ class AmperePointQ22Card extends HTMLElement {
     this.querySelector(".planner-enabled")?.addEventListener("change", (event) => {
       this._plannerDraft.enabled = event.target.checked;
       this.markPlannerDirty();
-      this.render();
+      this.requestRender();
     });
     this.querySelector(".planner-add")?.addEventListener("click", () => this.addPlannerWindow());
     this.querySelector(".planner-save")?.addEventListener("click", () => this.savePlanner());
@@ -1947,7 +2298,7 @@ class AmperePointQ22Card extends HTMLElement {
         const [window] = this._plannerDraft.windows.splice(index, 1);
         this._plannerUndo = { window, index };
         this.markPlannerDirty();
-        this.render();
+        this.requestRender();
       });
       row.querySelectorAll("[data-planner-day]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -1956,7 +2307,7 @@ class AmperePointQ22Card extends HTMLElement {
           days.has(day) ? days.delete(day) : days.add(day);
           this._plannerDraft.windows[index].days = [...days].sort();
           this.markPlannerDirty();
-          this.render();
+          this.requestRender();
         });
       });
       row.querySelectorAll("[data-planner-field]").forEach((input) => {
@@ -1964,7 +2315,7 @@ class AmperePointQ22Card extends HTMLElement {
           const field = input.dataset.plannerField;
           this._plannerDraft.windows[index][field] = field === "current_a" ? Number(input.value) : input.value;
           this.markPlannerDirty();
-          this.render();
+          this.requestRender();
         });
       });
     });
@@ -1982,6 +2333,7 @@ class AmperePointQ22Card extends HTMLElement {
         this.setPlannerOverride(mode, values);
       });
     });
+    this.completeDomReplacement(renderState);
   }
 
   connectedCallback() {
@@ -3190,6 +3542,23 @@ class AmperePointQ22Card extends HTMLElement {
       `;
       this.appendChild(this._style);
     }
+    if (this._hass && this.config && !this.querySelector?.("ha-card")) {
+      this.requestRender();
+    }
+  }
+
+  disconnectedCallback() {
+    if (this._renderFrame !== null && this._renderFrame !== undefined) {
+      this.cancelAnimationFrame(this._renderFrame);
+    }
+    this._renderFrame = null;
+    this._renderQueued = false;
+    this.finishDomReplacement();
+    // A disconnected card cannot display timeout feedback. Drop transient
+    // optimistic values so reconnecting always starts from actual HA state.
+    this.clearPendingCharging();
+    this.clearPendingCurrentLimit();
+    this.clearPendingChargingMode();
   }
 }
 
