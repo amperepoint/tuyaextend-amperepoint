@@ -74,7 +74,7 @@ from .models import (
     COMPLETE_STATUSES,
     AmperePointModel,
     get_model,
-    normalize_connected,
+    normalize_connected_state,
     normalize_error,
     normalize_status,
 )
@@ -230,14 +230,19 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         is_charging = status in CHARGING_STATUSES or power_kw > threshold_kw
         is_complete_from_status = status in COMPLETE_STATUSES
         connected_fallback = is_charging or power_kw > 0
-        if prime_telemetry and prime_telemetry.get("vehicle_connected") is not None:
-            connected_fallback = bool(prime_telemetry["vehicle_connected"])
-        connected = normalize_connected(
+        connected_state = normalize_connected_state(
             self._state_value(CONF_SOURCE_CONNECTED)
             or self._raw_attr("raw_connection_state")
             or self._native_value("connection_state"),
-            fallback=connected_fallback,
         )
+        if (
+            connected_state is None
+            and prime_telemetry
+            and prime_telemetry.get("vehicle_connected") is not None
+        ):
+            connected_state = bool(prime_telemetry["vehicle_connected"])
+        connection_known = connected_state is not None
+        connected = connected_fallback if connected_state is None else connected_state
 
         session_energy_kwh = self._calculate_session_energy(
             now=now,
@@ -320,6 +325,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "model": self.model.name,
             "status": status,
             "vehicle_connected": connected,
+            "vehicle_connection_known": connection_known,
             "charging": is_charging,
             "switch_enabled": switch_enabled,
             "charging_complete": charging_complete,
