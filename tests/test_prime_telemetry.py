@@ -118,6 +118,7 @@ class PrimeTelemetryDecodeTests(unittest.TestCase):
         self.assertEqual(data["model"], "Ampere Point Wallbox Prime 22kW")
         self.assertEqual(data["status"], "Ladowanie")
         self.assertIs(data["vehicle_connected"], True)
+        self.assertIs(data["vehicle_connection_known"], True)
         self.assertEqual(data["power_kw"], 1.4)
         self.assertEqual(data["session_energy_kwh"], 0.1)
         self.assertEqual(data["temperature_c"], 36.0)
@@ -131,6 +132,35 @@ class PrimeTelemetryDecodeTests(unittest.TestCase):
         self.assertEqual(data["session_duration_s"], 1340)
         self.assertEqual(data["session_duration_min"], 22.3)
         self.assertEqual(data["raw_dp"]["telemetry"], CHARGING_PAYLOAD)
+
+
+class ConnectionNormalizationTests(unittest.TestCase):
+    def test_control_pilot_12v_is_confirmed_disconnected(self) -> None:
+        self.assertIs(models.normalize_connected_state("controlpi_12v"), False)
+        self.assertIs(models.normalize_connected_state("controlpi_12v_pwm"), False)
+
+    def test_connected_control_pilot_states_are_confirmed(self) -> None:
+        self.assertIs(models.normalize_connected_state("controlpi_9v"), True)
+        self.assertIs(models.normalize_connected_state("controlpi_6v_pwm"), True)
+
+    def test_unknown_source_remains_unknown(self) -> None:
+        self.assertIsNone(models.normalize_connected_state(None))
+        self.assertIsNone(models.normalize_connected_state("unavailable"))
+        self.assertTrue(models.normalize_connected("unavailable", fallback=True))
+
+    def test_full_update_marks_explicit_12v_state_as_known(self) -> None:
+        instance = _make_coordinator()
+        data = dict(instance.config_entry.data)
+        data[const.CONF_SOURCE_CONNECTED] = "sensor.prime_connection"
+        instance.config_entry.data = data
+        instance.hass.states._states["sensor.prime_connection"] = _state(
+            "controlpi_12v"
+        )
+
+        result = asyncio.run(instance._async_update_data())
+
+        self.assertIs(result["vehicle_connected"], False)
+        self.assertIs(result["vehicle_connection_known"], True)
 
 
 class PrimeTelemetryFallbackTests(unittest.TestCase):

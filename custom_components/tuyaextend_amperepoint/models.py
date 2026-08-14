@@ -213,9 +213,10 @@ def normalize_error(value: Any) -> str:
     return ERROR_MAP.get(raw.lower(), raw)
 
 
-def normalize_connected(value: Any, fallback: bool = False) -> bool:
+def normalize_connected_state(value: Any) -> bool | None:
+    """Return an explicit vehicle connection state, if the source provides one."""
     if value is None:
-        return fallback
+        return None
     raw = str(value).strip().lower()
     if raw in {
         "1",
@@ -238,9 +239,26 @@ def normalize_connected(value: Any, fallback: bool = False) -> bool:
         "podlaczone",
     }:
         return True
-    if raw in {"0", "false", "off", "no", "disconnected", "unplugged", "odlaczone"}:
+    if raw in {
+        "0",
+        "false",
+        "off",
+        "no",
+        "disconnected",
+        "unplugged",
+        "controlpi_12v",
+        "controlpi_12v_pwm",
+        "odlaczone",
+    }:
         return False
-    return fallback
+    return None
+
+
+def normalize_connected(value: Any, fallback: bool = False) -> bool:
+    connected = normalize_connected_state(value)
+    if connected is None:
+        return fallback
+    return connected
 
 
 def _normalize_text(value: Any) -> str:

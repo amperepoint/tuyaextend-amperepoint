@@ -234,10 +234,17 @@ class AmperePointPlanner:
                 self._notify()
                 return
 
+            stop_is_settled = (
+                not desired["charging"]
+                and self._vehicle_is_confirmed_disconnected()
+            )
+            settled_failed_stop = False
             if self.retry_after and now < self.retry_after:
-                self._state = "failed"
-                self._notify()
-                return
+                if not stop_is_settled:
+                    self._state = "failed"
+                    self._notify()
+                    return
+                settled_failed_stop = True
             self.retry_after = None
 
             self._state = desired["state"]
@@ -271,7 +278,10 @@ class AmperePointPlanner:
                         True,
                     )
                     return
-            elif self.coordinator.data.get("switch_enabled") is True:
+            elif (
+                self.coordinator.data.get("switch_enabled") is True
+                and not stop_is_settled
+            ):
                 await self._async_send(
                     "stop",
                     {"switch_enabled": False},
@@ -280,15 +290,31 @@ class AmperePointPlanner:
                 )
                 return
 
+            should_save = settled_failed_stop
             if not desired["charging"] and self.managed_charging:
                 self.managed_charging = False
-                await self._async_save()
+                should_save = True
+
+            if (
+                stop_is_settled
+                and self.command_status == "failed"
+                and self.last_confirmation
+                and self.last_confirmation.get("action") == "stop"
+            ):
+                self.last_confirmation = {
+                    "action": "stop",
+                    "settled_at": now.isoformat(),
+                    "reason": "vehicle_disconnected",
+                }
+                should_save = True
 
             # The desired state is satisfied and nothing is in flight; the
             # command channel returns to idle instead of showing the last
             # confirmation forever. last_confirmation keeps the history for
             # the detail line.
             self.command_status = "idle"
+            if should_save:
+                await self._async_save()
             self._notify()
 
     async def _async_confirm_pending(self, now: datetime) -> bool:
@@ -305,6 +331,22 @@ class AmperePointPlanner:
             self._notify()
             return False
 
+        if (
+            self.pending.get("action") == "stop"
+            and self._vehicle_is_confirmed_disconnected()
+        ):
+            self.last_confirmation = {
+                "action": "stop",
+                "settled_at": now.isoformat(),
+                "reason": "vehicle_disconnected",
+            }
+            self.pending = None
+            self.retry_after = None
+            self.command_status = "idle"
+            await self._async_save()
+            self._notify()
+            return False
+
         requested_at = _as_datetime(self.pending.get("requested_at")) or now
         if now - requested_at >= COMMAND_TIMEOUT:
             self.command_status = "failed"
@@ -314,6 +356,13 @@ class AmperePointPlanner:
             await self._async_save()
             self._notify()
         return True
+
+    def _vehicle_is_confirmed_disconnected(self) -> bool:
+        """Return true only when the source explicitly reports no vehicle."""
+        return (
+            self.coordinator.data.get("vehicle_connection_known") is True
+            and self.coordinator.data.get("vehicle_connected") is False
+        )
 
     async def _async_desired(self, now: datetime) -> dict[str, Any] | None:
         if self.override:
