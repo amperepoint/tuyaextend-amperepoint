@@ -111,5 +111,156 @@
         "name": "Schedule ends"
       }
     }
+  },
+  "config": {
+    "step": {
+      "user": {
+        "title": "Welcome to AmperePoint",
+        "description": "{count} compatible Tuya charger(s) were detected. Choose automatic setup, or map entities manually.",
+        "menu_options": {
+          "automatic": "Set up a detected charger",
+          "manual": "Configure entity mapping manually",
+          "prime_profile": "Add Wallbox Prime profile (Tuya Local)"
+        }
+      },
+      "automatic": {
+        "title": "Choose your charger",
+        "description": "Select the Tuya charger that TuyaExtend should normalize for Home Assistant.",
+        "data": {
+          "source_device_id": "Detected Tuya charger",
+          "name": "Display name"
+        }
+      },
+      "settings": {
+        "title": "Finish setup",
+        "description": "Set the charging tariff and session-completion settings. A shared AmperePoint dashboard is created automatically.",
+        "data": {
+          "tariff_value": "Energy tariff",
+          "currency": "Currency",
+          "complete_power_threshold_kw": "Complete detection threshold",
+          "complete_idle_minutes": "Complete detection idle minutes"
+        },
+        "data_description": {}
+      },
+      "manual": {
+        "title": "AmperePoint",
+        "description": "Select a charger model and map the available source entities. Fields for unavailable datapoints may be left empty.",
+        "data": {
+          "source_device_id": "Detected Tuya charger",
+          "model": "AmperePoint model",
+          "name": "Display name",
+          "source_raw_dp": "Raw DP entity",
+          "source_status": "Tuya status entity",
+          "source_connected": "Vehicle connected entity",
+          "source_power": "Power entity",
+          "source_session_energy": "Session energy entity",
+          "source_total_energy": "Total energy entity",
+          "source_last_session_energy": "Last session energy entity",
+          "session_energy_mode": "Session energy mode",
+          "source_current_limit": "Current limit entity",
+          "source_charge_switch": "Start/stop switch entity",
+          "source_work_mode": "Charging mode entity",
+          "source_target_energy": "Target energy entity",
+          "source_error": "Error entity",
+          "source_temperature": "Temperature entity",
+          "tariff_value": "Energy tariff",
+          "tariff_entity": "Dynamic tariff entity",
+          "currency": "Currency",
+          "complete_power_threshold_kw": "Complete detection threshold",
+          "complete_idle_minutes": "Complete detection idle minutes",
+          "source_voltage_l1": "Voltage L1 entity",
+          "source_voltage_l2": "Voltage L2 entity",
+          "source_voltage_l3": "Voltage L3 entity",
+          "source_current_l1": "Current L1 entity",
+          "source_current_l2": "Current L2 entity",
+          "source_current_l3": "Current L3 entity",
+          "source_power_l1": "Power L1 entity",
+          "source_power_l2": "Power L2 entity",
+          "source_power_l3": "Power L3 entity",
+          "source_phase_a": "Raw phase A entity",
+          "source_phase_b": "Raw phase B entity",
+          "source_phase_c": "Raw phase C entity"
+        }
+      },
+      "prime_profile": {
+        "title": "Add Wallbox Prime profile (Tuya Local)",
+        "description": "Install Tuya Local through HACS first. Submit to add the Wallbox Prime 22 kW profile (PID gbmxngploofmhbjc) to Tuya Local. It supports reading power, session energy, temperature, phases and vehicle connection. Start/stop, current control and the planner are not yet supported. An existing profile with different contents will not be overwritten."
+      }
+    },
+    "error": {
+      "device_not_found": "The selected Tuya charger was not found. Reload Home Assistant and try again.",
+      "prime_tuya_local_missing": "Tuya Local was not found. Install it through HACS, restart HA and try again.",
+      "prime_profile_path_error": "The Tuya Local directory uses a redirected path. Install the profile manually using the repository instructions.",
+      "prime_profile_conflict": "The profile file already exists with different contents and was preserved. Compare it with the repository profile before updating it manually.",
+      "prime_profile_write_error": "Could not write the profile. Check Tuya Local directory permissions and the Home Assistant log."
+    },
+    "abort": {
+      "already_configured": "This AmperePoint source is already configured.",
+      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select Ampere Point Wallbox Prime 22kW (local). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "AmperePoint settings",
+        "menu_options": {
+          "settings": "Model, entities and tariff",
+          "prime_profile": "Add Wallbox Prime profile (Tuya Local)"
+        }
+      },
+      "settings": {
+        "title": "AmperePoint options",
+        "description": "Update model, source entity mapping and tariff settings.",
+        "data": {
+          "source_device_id": "Detected Tuya charger",
+          "model": "AmperePoint model",
+          "name": "Display name",
+          "source_raw_dp": "Raw DP entity",
+          "source_status": "Tuya status entity",
+          "source_connected": "Vehicle connected entity",
+          "source_power": "Power entity",
+          "source_session_energy": "Session energy entity",
+          "source_total_energy": "Total energy entity",
+          "source_last_session_energy": "Last session energy entity",
+          "session_energy_mode": "Session energy mode",
+          "source_current_limit": "Current limit entity",
+          "source_charge_switch": "Start/stop switch entity",
+          "source_work_mode": "Charging mode entity",
+          "source_target_energy": "Target energy entity",
+          "source_error": "Error entity",
+          "source_temperature": "Temperature entity",
+          "tariff_value": "Energy tariff",
+          "tariff_entity": "Dynamic tariff entity",
+          "currency": "Currency",
+          "complete_power_threshold_kw": "Complete detection threshold",
+          "complete_idle_minutes": "Complete detection idle minutes",
+          "source_voltage_l1": "Voltage L1 entity",
+          "source_voltage_l2": "Voltage L2 entity",
+          "source_voltage_l3": "Voltage L3 entity",
+          "source_current_l1": "Current L1 entity",
+          "source_current_l2": "Current L2 entity",
+          "source_current_l3": "Current L3 entity",
+          "source_power_l1": "Power L1 entity",
+          "source_power_l2": "Power L2 entity",
+          "source_power_l3": "Power L3 entity",
+          "source_phase_a": "Raw phase A entity",
+          "source_phase_b": "Raw phase B entity",
+          "source_phase_c": "Raw phase C entity"
+        }
+      },
+      "prime_profile": {
+        "title": "Add Wallbox Prime profile (Tuya Local)",
+        "description": "Install Tuya Local through HACS first. Submit to add the Wallbox Prime 22 kW profile (PID gbmxngploofmhbjc) to Tuya Local. It supports reading power, session energy, temperature, phases and vehicle connection. Start/stop, current control and the planner are not yet supported. An existing profile with different contents will not be overwritten."
+      }
+    },
+    "error": {
+      "prime_tuya_local_missing": "Tuya Local was not found. Install it through HACS, restart HA and try again.",
+      "prime_profile_path_error": "The Tuya Local directory uses a redirected path. Install the profile manually using the repository instructions.",
+      "prime_profile_conflict": "The profile file already exists with different contents and was preserved. Compare it with the repository profile before updating it manually.",
+      "prime_profile_write_error": "Could not write the profile. Check Tuya Local directory permissions and the Home Assistant log."
+    },
+    "abort": {
+      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select Ampere Point Wallbox Prime 22kW (local). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
+    }
   }
 }

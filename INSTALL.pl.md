@@ -1,5 +1,22 @@
 # Instalacja
 
+## Wallbox Prime: instalator profilu w aplikacji
+
+Dla **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`**, zainstaluj Tuya Local
+przez HACS, a następnie wybierz **Dodaj integrację → AmperePoint → Dodaj profil
+Wallbox Prime (Tuya Local)**. Instalator jest także w menu **Konfiguruj**
+istniejącej integracji AmperePoint. Zatwierdź instalację i uruchom ponownie HA.
+
+Dodaj ładowarkę w Tuya Local, używając jej ID, IP, local key i protokołu 3.5.
+Wybierz profil **Ampere Point Wallbox Prime 22kW (local)**, a potem automatyczną
+konfigurację wykrytej ładowarki w AmperePoint. Przy błędnym dotychczasowym profilu
+zachowaj dane połączenia przed ponownym dodaniem wpisu ładowarki w Tuya Local.
+
+Na tym etapie dostępny jest odczyt telemetrii; start/stop, zmiana prądu i planer
+wymagają jeszcze testów komend Prime. Oficjalna integracja chmurowa Tuya nie
+udostępnia tych danych Prime. Instalator nie nadpisuje innych wersji profilu.
+Jeśli aktualizacja Tuya Local usunie plik, uruchom instalator ponownie.
+
 TuyaExtend AmperePoint to integracja Home Assistant dla ładowarek AmperePoint EV.
 Może korzystać bezpośrednio z oficjalnej integracji Tuya albo z encji Xtend Tuya,
 `tuya-local` i LocalTuya. Xtend Tuya jest opcjonalny.

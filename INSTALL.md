@@ -7,6 +7,11 @@ Choose a language:
 
 ## Important
 
+Wallbox Prime 22 kW uses **Tuya Local** for read-only telemetry. AmperePoint
+includes a profile installer in its setup and options menus; see the language
+manuals above. The cloud setup below applies to chargers exposing their data
+through the official Tuya integration.
+
 TuyaExtend AmperePoint does not replace Tuya pairing. Initialize the charger in
 Tuya first and configure the official Home Assistant Tuya integration before
 installing this HACS integration.

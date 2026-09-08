@@ -1,5 +1,22 @@
 # Installation
 
+## Wallbox Prime profile installer
+
+For **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`**, install Tuya Local through
+HACS, then choose **Add integration → AmperePoint → Add Wallbox Prime profile
+(Tuya Local)**. The installer is also available in **Configure** for an existing
+AmperePoint integration. Submit the form and restart Home Assistant.
+
+Pair the charger in Tuya Local with its device ID, IP, local key and protocol
+3.5. Choose **Ampere Point Wallbox Prime 22kW (local)**, then use automatic setup
+in AmperePoint for the detected charger. Preserve connection details before
+replacing an existing Tuya Local entry with an incorrect profile.
+
+This provides read-only telemetry. Start/stop, current changes and planner
+control still require Prime command validation. Standard Tuya cloud does not
+provide this telemetry. Existing different profiles are preserved. Run the
+installer again if a Tuya Local update removes the profile.
+
 AmperePoint is a Home Assistant integration for AmperePoint EV
 chargers. It can use the official Tuya integration directly or consume entities
 from Xtend Tuya, `tuya-local` and LocalTuya. Xtend Tuya is optional.

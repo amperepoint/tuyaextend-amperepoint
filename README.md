@@ -27,6 +27,30 @@ Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 
 Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](INSTALL.pl.md).
 
+## Wallbox Prime setup through AmperePoint
+
+For **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`**, install Tuya Local
+through HACS first, then open **Add integration → AmperePoint → Add Wallbox
+Prime profile (Tuya Local)**. The same installer is available under the
+AmperePoint integration's **Configure** menu.
+
+Submit the installer, restart Home Assistant, then pair the charger in Tuya
+Local using its device ID, IP, local key and protocol 3.5. Select **Ampere Point
+Wallbox Prime 22kW (local)**. In AmperePoint, choose automatic setup for the
+detected charger to create its dashboard. If a previous Tuya Local entry uses
+the wrong profile, preserve its connection details before replacing that entry.
+
+The bundled Prime profile provides **read-only telemetry**: power, session
+energy, temperature, phase measurements, vehicle connection and session duration.
+It does **not yet provide Q Series control parity** (start/stop, current changes
+or planner control). These require confirmed Prime command mappings and device
+tests. Standard Tuya cloud does not expose this Prime telemetry.
+
+The installer preserves existing files with different contents and reports a
+conflict for manual review. If a Tuya Local update removes the profile, run the
+installer again. Removing AmperePoint does not remove a profile already in use
+by Tuya Local. For the remaining work, see the [Prime implementation plan](amperepoint/docs/prime-control-plan.md).
+
 ## Dashboard previews
 
 The values below are simulated, but the images are rendered from the bundled

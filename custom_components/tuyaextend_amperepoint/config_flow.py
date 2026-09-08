@@ -55,6 +55,7 @@ from .const import (
 )
 from .discovery import SourceCandidate, discover_sources
 from .models import DEFAULT_MODEL, MODELS
+from .profile_installer import PrimeProfileFlowMixin
 
 
 def _model_options() -> dict[str, str]:
@@ -172,7 +173,9 @@ def _automatic_schema(candidates: list[SourceCandidate]) -> vol.Schema:
     )
 
 
-class AmperePointConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class AmperePointConfigFlow(
+    PrimeProfileFlowMixin, config_entries.ConfigFlow, domain=DOMAIN
+):
     VERSION = 1
     _candidates: list[SourceCandidate]
     _candidate: SourceCandidate
@@ -198,6 +201,7 @@ class AmperePointConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         self._candidates = discover_sources(self.hass)
         menu_options = ["automatic", "manual"] if self._candidates else ["manual"]
+        menu_options.append("prime_profile")
         return self.async_show_menu(
             step_id="user",
             menu_options=menu_options,
@@ -282,11 +286,18 @@ class AmperePointConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return AmperePointOptionsFlowHandler(config_entry)
 
 
-class AmperePointOptionsFlowHandler(config_entries.OptionsFlow):
+class AmperePointOptionsFlowHandler(PrimeProfileFlowMixin, config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
 
     async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        return self.async_show_menu(
+            step_id="init", menu_options=["settings", "prime_profile"]
+        )
+
+    async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         current = {**self._config_entry.data, **self._config_entry.options}
@@ -295,6 +306,6 @@ class AmperePointOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
-            step_id="init",
+            step_id="settings",
             data_schema=_schema(current),
         )
