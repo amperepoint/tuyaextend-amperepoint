@@ -29,6 +29,11 @@ Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](
 
 ## Wallbox Prime setup through AmperePoint
 
+The family installer also includes a [split DP102/DP117 firmware profile](amperepoint/docs/prime-split-profile.md),
+displayed as **Ampere Point Wallbox PRIME (local)**. Profiles are selected by
+actual device DPS, not rated power. Both remain read-only; the split variant
+has been checked with an EVSE tester without load, not a real charging session.
+
 For **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`**, install AmperePoint and Tuya Local
 through HACS first, restart HA, then open **Add integration → AmperePoint → Add Wallbox
 Prime profile (Tuya Local)**. The same installer is available under the

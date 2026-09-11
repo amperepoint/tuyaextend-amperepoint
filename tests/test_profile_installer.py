@@ -18,6 +18,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProfileInstallerTests(unittest.TestCase):
+    def test_family_installer_includes_split_generation(self):
+        self.prepare_tuya_local()
+        self.assertEqual(installer.install_prime_profiles(str(self.root)), "prime_profile_installed")
+        for name in (installer.PROFILE_NAME, installer.SPLIT_PROFILE_NAME):
+            self.assertTrue((self.devices / name).is_file())
+            canonical = ROOT / "amperepoint/profiles/tuya_local" / name
+            self.assertEqual(canonical.read_text(encoding="utf-8"),
+                             (self.devices / name).read_text(encoding="utf-8"))
+
+    def test_old_conflict_does_not_block_new_generation(self):
+        target = self.prepare_tuya_local()
+        target.write_text("custom profile", encoding="utf-8")
+        self.assertEqual(installer.install_prime_profiles(str(self.root)), "prime_profile_conflict")
+        self.assertEqual(target.read_text(), "custom profile")
+        self.assertTrue((self.devices / installer.SPLIT_PROFILE_NAME).is_file())
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

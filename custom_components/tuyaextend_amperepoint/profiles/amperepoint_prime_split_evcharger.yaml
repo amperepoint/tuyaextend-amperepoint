@@ -1,0 +1,77 @@
+# Ampere Point Wallbox PRIME — split DP102/DP117 firmware.
+# Read-only baseline captured with an EVSE tester, no load (2026-09-11).
+# Keep separate from the earlier PRIME profile: DP154 is boolean here.
+# No controls and no RFID/card datapoints are exposed.
+name: Ampere Point Wallbox PRIME (local)
+products:
+  - id: 3tajnmwugclfmotb
+    manufacturer: Ampere Point
+    model: Wallbox PRIME (local)
+entities:
+  - entity: sensor
+    name: Charging status
+    icon: "mdi:ev-station"
+    dps:
+      - id: 109
+        type: string
+        name: sensor
+        # Preserve firmware status verbatim; STATE_C is not proof of power draw.
+      - id: 102
+        type: json
+        name: telemetry
+      - id: 117
+        type: json
+        optional: true
+        name: electrical_measurements
+      - id: 101
+        type: integer
+        optional: true
+        name: state_code
+      - id: 106
+        type: json
+        optional: true
+        name: device_information
+  - entity: sensor
+    name: Current setting reported
+    category: diagnostic
+    dps:
+      - id: 150
+        type: integer
+        optional: true
+        name: sensor
+      - id: 107
+        type: json
+        optional: true
+        name: allowed_values
+      - id: 152
+        type: integer
+        optional: true
+        name: raw_dp152
+      - id: 157
+        type: integer
+        optional: true
+        name: raw_dp157
+  - entity: sensor
+    name: Schedule configuration
+    category: diagnostic
+    dps:
+      - id: 151
+        type: json
+        optional: true
+        name: sensor
+  - entity: sensor
+    name: Language
+    category: diagnostic
+    dps:
+      - id: 153
+        type: string
+        optional: true
+        name: sensor
+  - entity: binary_sensor
+    name: Diagnostic flag DP154
+    category: diagnostic
+    dps:
+      - id: 154
+        type: boolean
+        optional: true
+        name: sensor

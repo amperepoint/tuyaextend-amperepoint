@@ -463,6 +463,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 continue
             value = state.attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
             if value is not None:
+                electrical = state.attributes.get("electrical_measurements")
+                if electrical is not None:
+                    payload = _as_json_mapping(value)
+                    if payload:
+                        return {**payload, "_electrical_measurements": electrical}
                 return value
         return None
 
@@ -914,8 +919,10 @@ def _decode_prime_phase(value: Any) -> dict[str, float | None] | None:
     return {"voltage": voltage, "current": current, "power": power}
 
 
-def _decode_prime_telemetry(value: Any) -> dict[str, Any] | None:
-    """Decode the Wallbox Prime 22kW JSON payload exposed by tuya-local."""
+def _decode_prime_telemetry(
+    value: Any, electrical_measurements: Any = None
+) -> dict[str, Any] | None:
+    """Decode known PRIME telemetry shapes without inventing missing phase data."""
     payload = value
     if isinstance(payload, str):
         try:
@@ -931,7 +938,16 @@ def _decode_prime_telemetry(value: Any) -> dict[str, Any] | None:
         phase: _decode_prime_phase(payload.get(phase))
         for phase in ("L1", "L2", "L3")
     }
-    cp_voltage_v = _scaled_number(payload.get("cp"))
+    electrical = _as_json_mapping(
+        electrical_measurements if electrical_measurements is not None
+        else payload.get("_electrical_measurements")
+    )
+    # Split firmware reports control pilot in DP117, not DP102. Its two-item
+    # phase arrays and aggregate L field are not the older three-item payload.
+    # Keep phase load readings unknown until their scaling is measured under load.
+    cp_voltage_v = _scaled_number(
+        payload.get("cp") if payload.get("cp") is not None else electrical.get("cp")
+    )
     vehicle_connected: bool | None = None
     if cp_voltage_v is not None:
         if 2.0 <= cp_voltage_v < 11.0:
@@ -967,6 +983,7 @@ PRIME_DP_CODES: tuple[tuple[str, str, int], ...] = (
     (PRIME_TELEMETRY_ATTRIBUTE, "telemetry", 102),
     ("session_data", "session_data", 103),
     ("device_information", "device_information", 106),
+    ("electrical_measurements", "electrical_measurements", 117),
 )
 
 
@@ -1031,6 +1048,9 @@ def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
     values["work_state"] = state
     fields = _prime_telemetry_fields(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
     values.update({code: field["raw"] for code, field in fields.items()})
+    electrical = _as_json_mapping(attributes.get("electrical_measurements"))
+    if "cp_voltage_v" not in values and _scaled_number(electrical.get("cp")) is not None:
+        values["cp_voltage_v"] = electrical["cp"]
     return values
 
 
@@ -1040,7 +1060,9 @@ def _prime_raw_metadata(state: Any, attributes: dict[str, Any]) -> dict[str, Any
     Without this the dashboard shows the JSON payloads verbatim in both the
     raw and the decoded column, with no DP number.
     """
-    telemetry = _decode_prime_telemetry(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+    telemetry = _decode_prime_telemetry(
+        attributes.get(PRIME_TELEMETRY_ATTRIBUTE), attributes.get("electrical_measurements")
+    )
     if telemetry is None:
         return {}
 
@@ -1061,6 +1083,13 @@ def _prime_raw_metadata(state: Any, attributes: dict[str, Any]) -> dict[str, Any
             "writable": False,
             "unit": field["unit"],
             "meaning": f"{field['scaled']:g} {field['unit']}",
+        }
+    electrical = _as_json_mapping(attributes.get("electrical_measurements"))
+    cp_voltage = _scaled_number(electrical.get("cp"))
+    if "cp_voltage_v" not in metadata and cp_voltage is not None:
+        metadata["cp_voltage_v"] = {
+            "dp_id": 117, "writable": False, "unit": "V",
+            "meaning": f"{cp_voltage:g} V",
         }
     if "device_information" in metadata:
         info = _as_json_mapping(attributes.get("device_information"))

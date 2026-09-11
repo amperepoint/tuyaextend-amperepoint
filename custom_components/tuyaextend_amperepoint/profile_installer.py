@@ -13,14 +13,17 @@ import voluptuous as vol
 _LOGGER = logging.getLogger(__name__)
 PROFILE_NAME = "amperepoint_prime_22kw_evcharger.yaml"
 BUNDLED_PROFILE = Path(__file__).parent / "profiles" / PROFILE_NAME
+SPLIT_PROFILE_NAME = "amperepoint_prime_split_evcharger.yaml"
 
 
-def install_prime_profile(config_dir: str) -> str:
+def install_prime_profile(config_dir: str, profile_name: str = PROFILE_NAME) -> str:
     """Publish a complete profile without replacing user or upstream files.
 
     Runs in an executor. A hard link makes publication atomic and exclusive:
     concurrent installers cannot overwrite each other or expose a partial YAML.
     """
+    if profile_name not in (PROFILE_NAME, SPLIT_PROFILE_NAME):
+        raise ValueError("Unknown bundled PRIME profile")
     root = Path(config_dir).resolve()
     integration = root / "custom_components" / "tuya_local"
     devices = integration / "devices"
@@ -28,8 +31,8 @@ def install_prime_profile(config_dir: str) -> str:
         return "prime_tuya_local_missing"
     if devices.resolve() != devices:
         return "prime_profile_path_error"
-    target = devices / PROFILE_NAME
-    content = BUNDLED_PROFILE.read_bytes()
+    target = devices / profile_name
+    content = (BUNDLED_PROFILE.parent / profile_name).read_bytes()
 
     def existing_result() -> str:
         if target.is_symlink() or not target.is_file():
@@ -58,6 +61,18 @@ def install_prime_profile(config_dir: str) -> str:
     return "prime_profile_installed"
 
 
+def install_prime_profiles(config_dir: str) -> str:
+    """Install each generation independently, preserving all conflicting files.
+
+    A conflict in one generation must not prevent the other from being installed.
+    Report the conflict so the user can review the preserved file; retry is safe.
+    """
+    results = [install_prime_profile(config_dir, name)
+               for name in (PROFILE_NAME, SPLIT_PROFILE_NAME)]
+    return next((result for result in results if result != "prime_profile_installed"),
+                "prime_profile_installed")
+
+
 class PrimeProfileFlowMixin:
     """Shared opt-in installer for the add-integration and options menus."""
 
@@ -68,7 +83,7 @@ class PrimeProfileFlowMixin:
         if user_input is not None:
             try:
                 result = await self.hass.async_add_executor_job(
-                    install_prime_profile, self.hass.config.path()
+                    install_prime_profiles, self.hass.config.path()
                 )
             except OSError:
                 _LOGGER.exception("Unable to install the bundled Wallbox Prime profile")
