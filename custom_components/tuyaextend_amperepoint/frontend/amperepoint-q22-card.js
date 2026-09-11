@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.38b4";
+const AP_Q22_DASHBOARD_VERSION = "0.5.38b5";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -1427,6 +1427,9 @@ class AmperePointQ22Card extends HTMLElement {
 
   plannerEffectiveNext(attributes) {
     const override = attributes.override;
+    if (override?.reason === "energy_ready") {
+      return {label: this.t("plannerEffectiveNext"), text: this.lang() === "pl" ? "Doładowanie po naciśnięciu Start" : "Energy charging when you press Start"};
+    }
     if (override?.mode === "charge") {
       return {
         label: this.t("plannerEffectiveNext"),
@@ -1447,7 +1450,7 @@ class AmperePointQ22Card extends HTMLElement {
           : this.t("plannerOverridePauseIndefinite"),
       };
     }
-    const next = attributes.next_action;
+    const next = attributes.enabled ? attributes.next_action : null;
     return {
       label: this.t("plannerWeeklyNext"),
       text: next ? `${this.plannerNextActionText(next)} · ${this.formatPlannerDate(next.at)}` : this.t("plannerNoNext"),
@@ -1463,9 +1466,10 @@ class AmperePointQ22Card extends HTMLElement {
     return this.t("plannerStopAction");
   }
 
-  plannerOverrideBanner(override) {
+  plannerOverrideBanner(override, attributes = {}) {
     if (!override) {
-      return `<div class="override-banner weekly">${this.icon("mdi:calendar-check")}<div><small>${this.t("plannerControlSource")}</small><strong>${this.t("plannerWeeklyActive")}</strong></div></div>`;
+      const title = attributes.enabled ? this.t("plannerWeeklyActive") : (this.lang() === "pl" ? "Sterowanie ręczne · planer wyłączony" : "Manual control · planner disabled");
+      return `<div class="override-banner weekly">${this.icon(attributes.enabled ? "mdi:calendar-check" : "mdi:gesture-tap-button")}<div><small>${this.t("plannerControlSource")}</small><strong>${title}</strong></div></div>`;
     }
     let title = this.t("plannerOverrideActive");
     let detail = "";
@@ -1479,6 +1483,14 @@ class AmperePointQ22Card extends HTMLElement {
       detail = override.until
         ? `${this.t("plannerOverridePauseUntil")} ${this.formatPlannerDate(override.until)}`
         : this.t("plannerOverridePauseIndefinite");
+      if (override.reason === "energy_ready") {
+        title = this.lang() === "pl" ? "Gotowe do doładowania" : "Ready for energy charging";
+        detail = this.lang() === "pl" ? "Ustaw cel kWh i naciśnij Start w sekcji sterowania." : "Set the kWh target and press Start in the controls.";
+      } else if (override.reason === "energy_target_reached") {
+        title = this.lang() === "pl" ? "Cel energii osiągnięty" : "Energy target reached";
+      } else if (override.reason === "energy_meter_unavailable") {
+        title = this.lang() === "pl" ? "Wstrzymano: brak odczytu energii" : "Paused: energy reading unavailable";
+      }
     }
     return `<div class="override-banner active">${this.icon("mdi:gesture-tap-button")}<div><small>${this.t("plannerControlSource")}</small><strong>${title}</strong>${detail ? `<span>${detail}</span>` : ""}</div></div>`;
   }
@@ -1492,7 +1504,7 @@ class AmperePointQ22Card extends HTMLElement {
     const validation = this._plannerValidation || this.validatePlannerDraft(draft, minCurrent, maxCurrent);
     const effectiveNext = this.plannerEffectiveNext(attributes);
     const override = attributes.override;
-    const overrideMode = override?.mode || null;
+    const overrideMode = override?.reason === "energy_ready" ? null : override?.mode || null;
     const commandDetail = this.plannerCommandDetail(attributes);
     if (this._plannerEditorOpen === undefined) {
       const width = this.getBoundingClientRect().width;
@@ -1551,7 +1563,7 @@ class AmperePointQ22Card extends HTMLElement {
             : ""
         }
         <div class="planner-override">
-          ${this.plannerOverrideBanner(override)}
+          ${this.plannerOverrideBanner(override, attributes)}
           <div class="override-actions">
             <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 30 ? "active" : ""}" data-render-key="planner-charge-30" type="button" data-planner-override="charge" data-duration="30" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 30}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge30")}</button>
             <button class="${overrideMode === "charge" && Number(override.duration_minutes) === 60 ? "active" : ""}" data-render-key="planner-charge-60" type="button" data-planner-override="charge" data-duration="60" aria-pressed="${overrideMode === "charge" && Number(override.duration_minutes) === 60}">${this._plannerActionPending === "charge" ? this.icon("mdi:loading") : ""}${this.t("plannerCharge60")}</button>
@@ -2015,6 +2027,12 @@ class AmperePointQ22Card extends HTMLElement {
     const e = this.config.entities;
     const localAttrs = this._hass?.states?.[e.rawDp]?.attributes || {};
     const nativeLocal = localAttrs.source_type === "amperepoint_local";
+    const nativeStatus = localAttrs.local_diagnostics?.find((row) => row.dp === "101")?.display;
+    const statusText = nativeLocal && nativeStatus ? this.escape(nativeStatus[this.lang()] || nativeStatus.en) : this.human(this.state(e.status));
+    const cpState = this.state(e.cp);
+    const cpText = nativeLocal && ["on", "off"].includes(cpState)
+      ? (this.lang() === "pl" ? (cpState === "on" ? "Podłączone" : "Odłączone") : (cpState === "on" ? "Connected" : "Disconnected"))
+      : this.human(cpState);
     const powerAvailable = this.hasEntity(e.power);
     const power = this.num(e.power);
     const powerPct = powerAvailable ? Math.max(2, Math.min(100, (power / this.config.maxPowerKw) * 100)) : 0;
@@ -2067,7 +2085,7 @@ class AmperePointQ22Card extends HTMLElement {
     const rawRows = this.rawRows();
     const hasRaw = rawRows.length > 0 && this.hasEntity(e.rawDp);
     const heroMeta = [
-      this.hasEntity(e.cp) ? `<span>${this.icon("mdi:ev-station")} ${this.human(this.state(e.cp))}</span>` : "",
+      this.hasEntity(e.cp) ? `<span>${this.icon("mdi:ev-station")} ${cpText}</span>` : "",
       phases.length ? `<span>${this.icon("mdi:sine-wave")} ${phases.length} ${this.t("activePhases")}</span>` : "",
       this.hasEntity(e.temperature) ? `<span>${this.icon("mdi:thermometer")} ${this.fmt(this.state(e.temperature), "C", 0)}</span>` : "",
     ].join("");
@@ -2103,7 +2121,7 @@ class AmperePointQ22Card extends HTMLElement {
               hasSwitch
                 ? `<button class="power-button ${sessionRunning ? "on" : ""}" data-render-key="charging-toggle" type="button">
                     ${this.icon(sessionRunning ? "mdi:pause" : "mdi:play")}
-                    ${sessionRunning ? this.t("stop") : this.t("charging")}
+                    ${sessionRunning ? this.t("stop") : nativeLocal ? "Start" : this.t("charging")}
                   </button>`
                 : ""
             }
@@ -2192,9 +2210,9 @@ class AmperePointQ22Card extends HTMLElement {
       : "";
 
     const statusRows = [
-      this.statusRow("mdi:state-machine", "status", this.human(this.state(e.status)), charging ? "good" : ""),
-      this.statusRow("mdi:car-electric", "carCp", this.human(this.state(e.cp))),
-      this.statusRow("mdi:alert-circle-outline", "diagnostics", faults, hasFault ? "bad" : "good"),
+      this.statusRow("mdi:state-machine", "status", statusText, charging ? "good" : ""),
+      this.statusRow("mdi:car-electric", "carCp", cpText),
+      this.statusRow("mdi:alert-circle-outline", "diagnostics", nativeLocal && ["Brak danych", "No data"].includes(faults) ? null : faults, hasFault ? "bad" : "good"),
       this.statusRow("mdi:thermometer", "temperature", this.hasEntity(e.temperature) ? this.fmt(this.state(e.temperature), "C", 0) : null),
       this.statusRow("mdi:history", "lastSessionDp25", this.hasEntity(e.lastSessionDp25) ? this.fmt(this.state(e.lastSessionDp25), "kWh", 2) : null),
       this.statusRow("mdi:delta", "lastSessionDelta", this.hasEntity(e.lastSessionDelta) ? this.fmt(this.state(e.lastSessionDelta), "kWh", 2) : null),

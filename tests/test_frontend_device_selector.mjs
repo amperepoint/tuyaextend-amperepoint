@@ -509,7 +509,7 @@ test("local tables show readable labels, false and zero, and escape device text"
     local_diagnostics: [
       {dp:"140",group:"settings",label:{pl:"Zezwolenie",en:"Enabled"},value:false,note:{pl:"Potwierdzone"}},
       {dp:"102",path:"p",group:"session",label:{pl:"Moc",en:"Power"},value:0,unit:"kW"},
-      {dp:"999",group:"other",label:{en:"Unknown"},value:"<script>bad()</script>"},
+      {dp:"999",group:"technical",label:{en:"DP999"},value:"<script>bad()</script>",note:{pl:"Znaczenie niepotwierdzone"}},
     ],
   }}}};
   const html = instance.localDataTables();
@@ -519,6 +519,19 @@ test("local tables show readable labels, false and zero, and escape device text"
   assert.match(html,/DP102 · p/);
   assert.match(html,/&lt;script&gt;/);
   assert.doesNotMatch(html,/<script>/);
+  assert.match(html,/Dodatkowe wartości techniczne/);
+  assert.doesNotMatch(html,/niepotwierdzone|OBJAŚNIENIE/);
+});
+
+test("disabled planner does not claim an active weekly plan or next action", () => {
+  const instance = new Card();
+  instance.setConfig({});
+  instance._hass = {language:"pl", states:{}};
+  const attributes = {enabled:false, next_action:{action:"start",at:"2026-09-12T10:00:00+02:00"}};
+  assert.match(instance.plannerOverrideBanner(null, attributes), /planer wyłączony/);
+  assert.doesNotMatch(instance.plannerOverrideBanner(null, attributes), /Aktywny jest plan/);
+  assert.match(instance.plannerEffectiveNext(attributes).text, /Brak zaplanowanej akcji/);
+  assert.match(instance.plannerOverrideBanner({mode:"pause",reason:"energy_ready"}), /Gotowe do doładowania/);
 });
 
 test("disconnect cancels queued rendering and delayed restoration", () => {

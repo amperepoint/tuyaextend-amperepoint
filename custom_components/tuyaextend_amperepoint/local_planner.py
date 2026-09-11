@@ -43,8 +43,13 @@ class AmperePointLocalPlanner(AmperePointPlanner):
         return self._local_mode
 
     def snapshot(self):
-        return {**super().snapshot(), "control_source": "home_assistant_lan",
+        result = {**super().snapshot(), "control_source": "home_assistant_lan",
                 "charging_mode": self.charging_mode, "target_energy_kwh": self.target_energy_kwh}
+        if not self.config.get("enabled"):
+            result["next_action"] = None
+            if not self.override:
+                result["effective_next_action"] = None
+        return result
 
     async def async_set_mode(self, mode):
         async with self._lock:
@@ -113,6 +118,8 @@ class AmperePointLocalPlanner(AmperePointPlanner):
             pass
         windows = normalize_windows(windows, min_current=6,
                                     max_current=self.coordinator.dp_definition("charge_cur_set").get("max", 16))
+        if any(window["current_a"] != int(window["current_a"]) for window in windows):
+            raise PlannerConfigError("Local current must be a whole number of amperes")
         self._local_mode = "charge_schedule" if enabled else "charge_now"
         await super().async_set_config(enabled, windows)
 
