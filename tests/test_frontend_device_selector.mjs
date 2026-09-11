@@ -507,13 +507,13 @@ test("local tables show readable labels, false and zero, and escape device text"
   instance._hass = { language: "pl", states: { "sensor.local_dp": {state: "3", attributes: {
     source_type: "amperepoint_local",
     local_diagnostics: [
-      {dp:"140",group:"settings",label:{pl:"Zezwolenie",en:"Enabled"},value:false,note:{pl:"Potwierdzone"}},
+      {dp:"140",group:"settings",label:{pl:"Ładowanie włączone",en:"Enabled"},value:false,note:{pl:"Potwierdzone"}},
       {dp:"102",path:"p",group:"session",label:{pl:"Moc",en:"Power"},value:0,unit:"kW"},
       {dp:"999",group:"technical",label:{en:"DP999"},value:"<script>bad()</script>",note:{pl:"Znaczenie niepotwierdzone"}},
     ],
   }}}};
   const html = instance.localDataTables();
-  assert.match(html,/Zezwolenie/);
+  assert.match(html,/Ładowanie włączone/);
   assert.match(html,/>Nie</);
   assert.match(html,/>0 kW</);
   assert.match(html,/DP102 · p/);

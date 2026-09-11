@@ -14,7 +14,7 @@ LOAD_SCALE = pair("DP102 · skala /10", "DP102 · scale /10")
 LABELS = {
     "101": ("session", "Stan ładowarki", "Charger state"),
     "109": ("session", "Stan protokołu", "Protocol state"),
-    "140": ("settings", "Zezwolenie na ładowanie", "Charging enabled"),
+    "140": ("settings", "Ładowanie włączone", "Charging enabled"),
     "150": ("settings", "Zadany prąd ładowania", "Requested charging current"),
     "152": ("settings", "Limit prądu instalacji", "Installation current limit"),
     "107": ("settings", "Skróty wyboru prądu w aplikacji", "App current presets"),

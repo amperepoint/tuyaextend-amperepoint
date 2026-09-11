@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.38b6";
+const AP_Q22_DASHBOARD_VERSION = "0.5.38b7";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -2115,7 +2115,7 @@ class AmperePointQ22Card extends HTMLElement {
           <div class="card-title">
             <div>
               <span>${this.t("control")}</span>
-              <strong>${nativeLocal ? (this.lang() === "pl" ? (sessionRunning ? "Zezwolenie włączone" : "Zezwolenie wyłączone") : (sessionRunning ? "Charging enabled" : "Charging disabled")) : (charging ? this.t("activeSession") : this.t("ready"))}</strong>
+              <strong>${nativeLocal ? (this.lang() === "pl" ? (sessionRunning ? "Ładowanie włączone" : "Ładowanie wyłączone") : (sessionRunning ? "Charging enabled" : "Charging disabled")) : (charging ? this.t("activeSession") : this.t("ready"))}</strong>
             </div>
             ${
               hasSwitch

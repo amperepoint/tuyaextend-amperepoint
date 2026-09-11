@@ -44,4 +44,5 @@ class PrimeDiagnosticsTests(unittest.TestCase):
         rows=mod.readable_rows({"140":False,"150":0,"999":{},"154":False})
         self.assertEqual(len(rows),4)
         self.assertFalse(next(r for r in rows if r["dp"]=="140")["value"])
+        self.assertEqual(next(r for r in rows if r["dp"]=="140")["label"]["pl"], "Ładowanie włączone")
         self.assertEqual(next(r for r in rows if r["dp"]=="154")["note"],mod.UNKNOWN)
