@@ -8,7 +8,6 @@ from datetime import datetime, time, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.tuya.const import TUYA_HA_SIGNAL_UPDATE_ENTITY
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     PERCENTAGE,
@@ -136,6 +135,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                               if self._config(CONF_SOURCE_INTEGRATION) == LOCAL_SOURCE
                               else NativeTuyaSource.resolve(hass, config_entry))
         if self.native_source is not None and not isinstance(self.native_source, NativeLocalSource):
+            # A LAN-only installation must not import the optional Tuya cloud SDK.
+            from homeassistant.components.tuya.const import TUYA_HA_SIGNAL_UPDATE_ENTITY
+
             config_entry.async_on_unload(
                 async_dispatcher_connect(
                     hass,
