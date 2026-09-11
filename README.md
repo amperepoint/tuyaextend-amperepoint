@@ -1,4 +1,4 @@
-# TuyaExtend AmperePoint
+# Ampere Point - Tuya dashboard
 
 Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 
@@ -13,7 +13,7 @@ Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 - [English installation manual](INSTALL.en.md)
 - [Polska instrukcja instalacji](INSTALL.pl.md)
 
-## Quick Start
+## Quick Start (Q Series / cloud)
 
 1. Add the charger to the Tuya Smart / Smart Life app.
 2. Configure the official Home Assistant Tuya integration first.
@@ -21,11 +21,39 @@ Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 4. Restart Home Assistant. This is required after every first HACS installation.
 5. Add `AmperePoint` from Home Assistant integrations.
 6. Choose automatic setup and select the detected charger. The integration
-   creates one shared `AmperePoint` sidebar panel and adopts the remaining
+   creates one shared `Ampere Point - Tuya dashboard` sidebar panel and adopts the remaining
    detected chargers automatically; every charger is available from the
    device selector on the panel.
 
 Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](INSTALL.pl.md).
+
+## Wallbox Prime setup through AmperePoint
+
+For **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`**, install AmperePoint and Tuya Local
+through HACS first, restart HA, then open **Add integration → AmperePoint → Add Wallbox
+Prime profile (Tuya Local)**. The same installer is available under the
+AmperePoint integration's **Configure** menu.
+
+Submit the installer, restart Home Assistant, then pair the charger in Tuya
+Local using its device ID, IP, local key and protocol 3.5. Select **Ampere Point
+Wallbox Prime 22kW (local)**. In AmperePoint, choose automatic setup for the
+detected charger to create its dashboard. If a previous Tuya Local entry uses
+the wrong profile, preserve its connection details before replacing that entry.
+
+The bundled Prime profile provides **read-only telemetry**: power, session
+energy, temperature, phase measurements, vehicle connection and session duration.
+It does **not yet provide Q Series control parity** (start/stop, current changes
+or planner control). These require confirmed Prime command mappings and device
+tests. Energy-target charging and native schedule/mode writes are also not
+supported for PRIME. Standard Tuya cloud does not expose this Prime telemetry;
+the official HA Tuya integration is not required for this local path. Other
+Prime PIDs/firmware are not automatically covered. Measurements depend on the
+data reported by the device. See the installation manuals for LAN/key requirements.
+
+The installer preserves existing files with different contents and reports a
+conflict for manual review. If a Tuya Local update removes the profile, run the
+installer again. Removing AmperePoint does not remove a profile already in use
+by Tuya Local. For the remaining work, see the [Prime implementation plan](amperepoint/docs/prime-control-plan.md).
 
 ## Dashboard previews
 

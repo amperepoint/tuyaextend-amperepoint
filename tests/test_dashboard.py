@@ -104,6 +104,24 @@ class _FakeStorage:
 
 
 class DashboardVersionRefreshTests(unittest.TestCase):
+    def test_generic_dashboard_name(self) -> None:
+        config = dashboard._dashboard_config()
+        self.assertEqual(config["title"], "Ampere Point - Tuya dashboard")
+        self.assertEqual(config["views"][0]["title"], config["title"])
+
+    def test_default_titles_migrate_without_changing_custom_titles(self) -> None:
+        for title in ("AmperePoint", "My garage"):
+            with self.subTest(title=title):
+                storage = _FakeStorage({"title": title, "views": [
+                    {"title": title, "cards": []}
+                ]})
+                asyncio.run(dashboard._async_refresh_dashboard_version(storage))
+                if title == "AmperePoint":
+                    self.assertEqual(storage.saved["title"], dashboard.DASHBOARD_TITLE)
+                    self.assertEqual(storage.saved["views"][0]["title"], dashboard.DASHBOARD_TITLE)
+                else:
+                    self.assertIsNone(storage.saved)
+
     def test_stored_card_version_is_stamped_on_upgrade(self) -> None:
         storage = _FakeStorage(
             {

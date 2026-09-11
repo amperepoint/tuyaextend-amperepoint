@@ -25,7 +25,7 @@ _DASHBOARD_LOCK = "dashboard_lock"
 
 DASHBOARD_URL_PATH = "amperepoint-panel"
 DASHBOARD_STORAGE_ID = "amperepoint_panel"
-DASHBOARD_TITLE = "AmperePoint"
+DASHBOARD_TITLE = "Ampere Point - Tuya dashboard"
 DASHBOARD_ICON = "mdi:ev-station"
 SETTINGS_PATH = f"/config/integrations/integration/{DOMAIN}"
 
@@ -217,7 +217,14 @@ async def _async_refresh_dashboard_version(storage: LovelaceStorage) -> None:
         return
 
     changed = False
+    # Rename only our former default; preserve titles customized by the user.
+    if config.get("title") == "AmperePoint":
+        config["title"] = DASHBOARD_TITLE
+        changed = True
     for view in config.get("views", []):
+        if view.get("title") == "AmperePoint":
+            view["title"] = DASHBOARD_TITLE
+            changed = True
         for card in view.get("cards", []):
             if not isinstance(card, dict):
                 continue
@@ -267,4 +274,6 @@ async def async_create_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> str
         except ConfigNotFound:
             await storage.async_save(_dashboard_config())
             _LOGGER.info("Created AmperePoint dashboard at /%s", DASHBOARD_URL_PATH)
+        else:
+            await _async_refresh_dashboard_version(storage)
         return DASHBOARD_URL_PATH

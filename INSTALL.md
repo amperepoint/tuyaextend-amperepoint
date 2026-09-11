@@ -7,13 +7,19 @@ Choose a language:
 
 ## Important
 
-TuyaExtend AmperePoint does not replace Tuya pairing. Initialize the charger in
-Tuya first and configure the official Home Assistant Tuya integration before
-installing this HACS integration.
+Wallbox Prime 22 kW uses **Tuya Local** for read-only telemetry. AmperePoint
+includes a profile installer in its setup and options menus; see the language
+manuals above. The cloud setup below applies to chargers exposing their data
+through the official Tuya integration.
 
-TuyaExtend AmperePoint nie zastępuje parowania Tuya. Najpierw dodaj ładowarkę do
-Tuya i skonfiguruj oficjalną integrację Tuya w Home Assistant, a dopiero potem
-instaluj tę integrację przez HACS.
+AmperePoint does not replace device pairing. Q Series can use the official
+Home Assistant Tuya integration; PRIME uses Tuya Local with the bundled profile.
+The shared panel is named **Ampere Point - Tuya dashboard**.
+
+AmperePoint nie zastępuje parowania urządzenia. Q Series może korzystać z
+oficjalnej integracji Tuya, a PRIME wymaga Tuya Local z dołączonym profilem.
+PRIME: odczyt telemetrii, bez start/stop, zmiany prądu i sterowania planerem.
+Nazwa wspólnego panelu: **Ampere Point - Tuya dashboard**.
 
 ## HACS
 
