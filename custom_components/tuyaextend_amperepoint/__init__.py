@@ -13,6 +13,7 @@ from .frontend import async_register_frontend
 from .planner import AmperePointPlanner
 from .planner_model import PlannerConfigError
 from .local_source import NativeLocalSource
+from .local_planner import AmperePointLocalPlanner
 
 
 SERVICE_SET_PLANNER = "set_planner"
@@ -34,7 +35,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     planner = None
-    if not isinstance(coordinator.native_source, NativeLocalSource):
+    if isinstance(coordinator.native_source, NativeLocalSource) and coordinator.native_source.controls_verified:
+        planner = AmperePointLocalPlanner(hass, entry, coordinator)
+        await planner.async_load()
+    elif not isinstance(coordinator.native_source, NativeLocalSource):
         planner = AmperePointPlanner(hass, entry, coordinator)
         await planner.async_load()
     coordinator.planner = planner

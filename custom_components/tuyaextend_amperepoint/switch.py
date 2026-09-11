@@ -8,6 +8,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import CONF_SOURCE_CHARGE_SWITCH, DOMAIN
 from .coordinator import AmperePointCoordinator
 from .entity import AmperePointEntity, AmperePointEntityDescription
+from .local_planner import AmperePointLocalPlanner
 
 
 CHARGING_DESCRIPTION = AmperePointEntityDescription(
@@ -40,9 +41,15 @@ class AmperePointChargingSwitch(AmperePointEntity, SwitchEntity):
         return self.coordinator.data.get("switch_enabled")
 
     async def async_turn_on(self, **kwargs) -> None:
-        await self.coordinator.async_set_charging(True)
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            await self.coordinator.planner.async_user_charging(True)
+        else:
+            await self.coordinator.async_set_charging(True)
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs) -> None:
-        await self.coordinator.async_set_charging(False)
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            await self.coordinator.planner.async_user_charging(False)
+        else:
+            await self.coordinator.async_set_charging(False)
         await self.coordinator.async_request_refresh()

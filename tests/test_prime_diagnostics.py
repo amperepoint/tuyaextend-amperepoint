@@ -27,6 +27,18 @@ class PrimeDiagnosticsTests(unittest.TestCase):
         current=next(r for r in rows if r["dp"]=="117" and r["path"]=="L1[1]")
         self.assertEqual(current["unit"],"")
         self.assertEqual(current["note"],mod.UNKNOWN)
+        self.assertEqual(current["group"], "technical")
+        self.assertEqual(current["label"]["pl"], "DP117 · L1[1]")
+        self.assertNotIn("niepotwierdzone", json.dumps(rows, ensure_ascii=False))
+
+    def test_technical_values_keep_raw_value_without_guessed_scale(self):
+        rows = mod.readable_rows({"117": '{"L1":[2270,0],"cp":61}', "154": False})
+        voltage = next(row for row in rows if row["path"] == "L1[0]")
+        self.assertEqual(voltage["value"], 2270)
+        self.assertEqual(voltage["unit"], "")
+        self.assertEqual(voltage["group"], "technical")
+        cp = next(row for row in rows if row["path"] == "cp")
+        self.assertEqual(cp["group"], "electrical")
 
     def test_false_zero_and_unknown_are_not_discarded(self):
         rows=mod.readable_rows({"140":False,"150":0,"999":{},"154":False})

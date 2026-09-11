@@ -80,6 +80,9 @@ def write_local(config: dict, code: str, value: Any) -> dict:
     if not control_supported(config, before["dps"], before["family"]):
         raise LocalConnectionError("local_control_not_verified")
     if code == "switch" and type(value) is bool:
+        mode = as_mapping(before["dps"].get("151")).get("m")
+        if value and not (type(mode) is int and mode == 0):
+            raise LocalConnectionError("local_immediate_mode_required")
         dp, expected = 140, value
     elif code == "charge_cur_set" and type(value) in (int, float):
         if not math.isfinite(value) or value != int(value) or not 6 <= value <= current_max(before["dps"]):
@@ -219,6 +222,9 @@ class NativeLocalSource:
             return self.dps.get("150")
         if code == "work_state":
             return self.dps.get("109")
+        if code == "work_mode":
+            mode = as_mapping(self.dps.get("151")).get("m")
+            return "charge_now" if type(mode) is int and mode == 0 else None
         if code == "system_version":
             return as_mapping(self.dps.get("106")).get("fv")
         return None

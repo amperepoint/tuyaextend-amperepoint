@@ -292,14 +292,14 @@
       },
       "local_connection": {
         "title": "AmperePoint Local connection",
-        "description": "Change IP, protocol or local key. Blank key keeps the existing key; blank IP runs discovery. The connection is tested before saving.Test controls are available only for the validated PRIME firmware layout. Current is capped at 16 A and never exceeds DP152. Planner and device modes are not supported yet.",
+        "description": "Change IP, protocol or local key. Blank key keeps the existing key; blank IP runs discovery. The connection is tested before saving. Controls are available for the validated PRIME firmware layout, capped at 16 A and DP152. Home Assistant runs charging modes and the weekly planner over LAN; HA must stay running. Keep immediate charging selected in the device app.",
         "data": {
           "name": "Charger name",
           "local_device_id": "Charger / device ID",
           "local_key": "Local key",
           "local_host": "IP address (blank = discover automatically)",
           "local_protocol": "LAN protocol",
-          "enable_test_controls": "Enable test start/stop and current controls (matching PRIME)"
+          "enable_test_controls": "Enable LAN controls and HA charging planner (matching PRIME)"
         }
       }
     },

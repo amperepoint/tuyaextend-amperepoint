@@ -159,6 +159,7 @@ def install_homeassistant_stubs() -> None:
     ha.util = util
 
     components = _module("homeassistant.components")
+    components.select = _module("homeassistant.components.select", SelectEntity=object)
     components.number = _module(
         "homeassistant.components.number",
         NumberEntity=object,

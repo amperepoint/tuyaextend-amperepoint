@@ -882,6 +882,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.native_source.definition(code)
 
     async def async_set_work_mode(self, value: str) -> None:
+        if isinstance(self.native_source, NativeLocalSource):
+            raise HomeAssistantError("PRIME device mode is read-only: select immediate charging in the device app before using the HA planner (DP151.m must be 0)")
         self._assert_not_local_read_only()
         entity_id = self._config(CONF_SOURCE_WORK_MODE)
         if entity_id:

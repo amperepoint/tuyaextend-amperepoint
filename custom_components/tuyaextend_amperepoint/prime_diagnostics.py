@@ -1,4 +1,4 @@
-"""Readable, lossless PRIME datapoint rows; unverified meanings stay explicit."""
+"""Readable PRIME measurements and a separate lossless technical table."""
 from __future__ import annotations
 import json
 from .local_source import PRIVATE_DPS
@@ -8,9 +8,9 @@ def pair(pl, en):
     return {"pl": pl, "en": en}
 
 
-UNKNOWN = pair("Znaczenie niepotwierdzone — wartość surowa", "Meaning not verified — raw value")
-INFERRED = pair("Mapowanie rodziny urządzeń; wymaga potwierdzenia", "Device-family mapping; needs verification")
-LOAD_SCALE = pair("Skala /10; wymaga testu z poborem energii", "Scale /10; requires a test under load")
+UNKNOWN = pair("Wartość techniczna", "Technical value")
+INFERRED = pair("Dane urządzenia", "Device data")
+LOAD_SCALE = pair("DP102 · skala /10", "DP102 · scale /10")
 LABELS = {
     "101": ("session", "Stan ładowarki", "Charger state"),
     "109": ("session", "Stan protokołu", "Protocol state"),
@@ -78,6 +78,7 @@ def readable_rows(dps):
         parsed = unpack(raw)
         fields = [("", parsed)] if dp in PRIVATE_DPS or dp == "107" else leaves(parsed)
         for path, value in fields:
+            original_value = value
             group, pl, en = LABELS.get(dp, ("other", f"Dodatkowe dane DP{dp}", f"Additional data DP{dp}"))
             label, note, unit = pair(pl, en), UNKNOWN, ""
             display = None
@@ -144,6 +145,15 @@ def readable_rows(dps):
                     note = UNKNOWN  # Do not apply another firmware's integer enum.
             if path and dp not in ("102", "106", "117", "151"):
                 label = pair(f"{pl} — {path}", f"{en} — {path}")
+            if note == UNKNOWN or note == INFERRED:
+                # Keep exact values and paths without assigning a speculative
+                # meaning or unit. Main tables contain the normalized readings.
+                group = "technical"
+                label = pair(f"DP{dp}" + (f" · {path}" if path else ""),
+                             f"DP{dp}" + (f" · {path}" if path else ""))
+                value, unit, display = original_value, "", None
+            if dp in PRIVATE_DPS:
+                group = "technical"
             rows.append({"dp": dp, "path": path, "group": group, "label": label,
                          "value": value, "display": display, "unit": unit, "note": note})
     return rows

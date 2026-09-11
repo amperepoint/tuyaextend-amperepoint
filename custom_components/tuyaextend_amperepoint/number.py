@@ -9,6 +9,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import CONF_SOURCE_CURRENT_LIMIT, CONF_SOURCE_TARGET_ENERGY, DOMAIN
 from .coordinator import AmperePointCoordinator
 from .entity import AmperePointEntity, AmperePointEntityDescription
+from .local_planner import AmperePointLocalPlanner
 
 
 CURRENT_LIMIT_DESCRIPTION = AmperePointEntityDescription(
@@ -43,7 +44,7 @@ async def async_setup_entry(
     )
     if (
         target_source and target_source.split(".", 1)[0] in {"number", "input_number"}
-    ) or coordinator.can_write_dp("energy_charge"):
+    ) or coordinator.can_write_dp("energy_charge") or isinstance(getattr(coordinator, "planner", None), AmperePointLocalPlanner):
         entities.append(AmperePointTargetEnergyNumber(coordinator))
     async_add_entities(entities)
 
@@ -109,12 +110,21 @@ class AmperePointTargetEnergyNumber(AmperePointEntity, NumberEntity):
     def __init__(self, coordinator: AmperePointCoordinator) -> None:
         super().__init__(coordinator, TARGET_ENERGY_DESCRIPTION)
 
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            self.async_on_remove(self.coordinator.planner.async_add_listener(self.async_write_ha_state))
+
     @property
     def native_value(self) -> float | None:
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            return self.coordinator.planner.target_energy_kwh
         return self.coordinator.data.get("target_energy_kwh")
 
     @property
     def native_min_value(self) -> float:
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            return 0.1
         if value := _mapped_number_attribute(
             self.coordinator, CONF_SOURCE_TARGET_ENERGY, "min"
         ):
@@ -131,6 +141,8 @@ class AmperePointTargetEnergyNumber(AmperePointEntity, NumberEntity):
 
     @property
     def native_step(self) -> float:
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            return 0.1
         if value := _mapped_number_attribute(
             self.coordinator, CONF_SOURCE_TARGET_ENERGY, "step"
         ):
@@ -138,7 +150,10 @@ class AmperePointTargetEnergyNumber(AmperePointEntity, NumberEntity):
         return float(self.coordinator.dp_definition("energy_charge").get("step") or 1)
 
     async def async_set_native_value(self, value: float) -> None:
-        await self.coordinator.async_set_target_energy(value)
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            await self.coordinator.planner.async_set_target(value)
+        else:
+            await self.coordinator.async_set_target_energy(value)
         await self.coordinator.async_request_refresh()
 
 

@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.38b3";
+const AP_Q22_DASHBOARD_VERSION = "0.5.38b4";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -1064,7 +1064,7 @@ class AmperePointQ22Card extends HTMLElement {
         ? this._pendingCharging
         : this.chargingControlState();
     const planner = this.stateObj(this.config.entities.planner);
-    if (planner?.attributes?.enabled) {
+    if (planner?.attributes?.enabled && this.attr(this.config.entities.rawDp, "source_type") !== "amperepoint_local") {
       await this.setPlannerOverride(running ? "pause" : "charge", {
         duration_minutes: 60,
       });
@@ -1531,7 +1531,7 @@ class AmperePointQ22Card extends HTMLElement {
         </div>
         <div class="planner-summary">
           <div>${this.icon("mdi:calendar-arrow-right")}<span><small>${effectiveNext.label}</small><b>${effectiveNext.text}</b></span></div>
-          <div>${this.icon(attributes.command_status === "pending" ? "mdi:cloud-sync-outline" : attributes.command_status === "failed" ? "mdi:cloud-alert" : "mdi:cloud-check-outline")}<span><small>${this.t("plannerCommand")}</small><b>${this.plannerCommandLabel(attributes.command_status)}</b>${commandDetail ? `<em>${commandDetail}</em>` : ""}</span></div>
+          <div>${this.icon(attributes.control_source === "home_assistant_lan" ? "mdi:lan-connect" : attributes.command_status === "pending" ? "mdi:cloud-sync-outline" : attributes.command_status === "failed" ? "mdi:cloud-alert" : "mdi:cloud-check-outline")}<span><small>${attributes.control_source === "home_assistant_lan" ? (this.lang() === "pl" ? "Komenda LAN" : "LAN command") : this.t("plannerCommand")}</small><b>${this.plannerCommandLabel(attributes.command_status)}</b>${commandDetail ? `<em>${commandDetail}</em>` : ""}</span></div>
         </div>
         <label class="planner-master">
           <input class="planner-enabled" data-render-key="planner-enabled" type="checkbox" role="switch" ${draft.enabled ? "checked" : ""} aria-label="${draft.enabled ? this.t("plannerDraftOn") : this.t("plannerDraftOff")}" />
@@ -1659,6 +1659,7 @@ class AmperePointQ22Card extends HTMLElement {
       electrical: {pl: "Pomiary elektryczne", en: "Electrical measurements"},
       settings: {pl: "Ustawienia odczytane z ładowarki", en: "Settings reported by the charger"},
       device: {pl: "Informacje o urządzeniu", en: "Device information"},
+      technical: {pl: "Dodatkowe wartości techniczne", en: "Additional technical values"},
       other: {pl: "Pozostałe dane", en: "Additional data"},
     };
     return `<section class="local-data" aria-label="${lang === "pl" ? "Wszystkie odczyty LAN" : "All LAN readings"}">${Object.entries(headings).map(([group, heading]) => {
@@ -1667,7 +1668,7 @@ class AmperePointQ22Card extends HTMLElement {
       return `<div class="panel local-data-panel"><h3>${this.escape(local(heading))}</h3>
         <div class="table-wrap"><table class="local-readings"><thead><tr>
         <th>${lang === "pl" ? "Parametr" : "Parameter"}</th><th>${lang === "pl" ? "Wartość" : "Value"}</th>
-        <th>${lang === "pl" ? "Źródło" : "Source"}</th><th>${lang === "pl" ? "Objaśnienie" : "Explanation"}</th>
+        <th>${lang === "pl" ? "Źródło LAN" : "LAN source"}</th>
         </tr></thead><tbody>${selected.map((row) => {
           let value = row.display ? local(row.display) : row.value;
           if (typeof value === "boolean") value = lang === "pl" ? (value ? "Tak" : "Nie") : (value ? "Yes" : "No");
@@ -1676,7 +1677,7 @@ class AmperePointQ22Card extends HTMLElement {
           else if (typeof value === "number") value = value.toLocaleString(lang, {maximumFractionDigits: 3});
           const source = `DP${row.dp}${row.path ? " · " + row.path : ""}`;
           return `<tr><td>${this.escape(local(row.label))}</td><td><strong>${this.escape(value ?? "—")}${row.unit ? " " + this.escape(row.unit) : ""}</strong></td>
-            <td><code>${this.escape(source)}</code></td><td>${this.escape(local(row.note))}</td></tr>`;
+            <td><code>${this.escape(source)}</code></td></tr>`;
         }).join("")}</tbody></table></div></div>`;
     }).join("")}</section>`;
   }
@@ -2133,15 +2134,17 @@ class AmperePointQ22Card extends HTMLElement {
                 : ""
             }
           </div>
-          ${this._pendingChargingMode ? `<div class="mode-pending">${this.icon("mdi:cloud-sync")} ${this.t("modePending")}</div>` : ""}
+          ${this._pendingChargingMode ? `<div class="mode-pending">${this.icon(nativeLocal ? "mdi:lan-connect" : "mdi:cloud-sync")} ${nativeLocal ? (this.lang() === "pl" ? "Zapisywanie trybu w HA…" : "Saving mode in HA…") : this.t("modePending")}</div>` : ""}
           ${
             showSchedule
               ? `<div class="schedule-card">
                   ${this.icon("mdi:calendar-clock")}
                   <div>
-                    <strong>${this.t("scheduleTitle")}</strong>
+                    <strong>${nativeLocal ? (this.lang() === "pl" ? "Harmonogram Home Assistant" : "Home Assistant schedule") : this.t("scheduleTitle")}</strong>
                     ${
-                      hasScheduleWindow
+                      nativeLocal
+                        ? `<span>${this.lang() === "pl" ? "Dni tygodnia, godziny i limit prądu ustawisz w planerze poniżej. Plan wykonuje HA przez LAN." : "Set weekdays, times and current limits in the planner below. HA executes the plan over LAN."}</span>`
+                        : hasScheduleWindow
                         ? `<div class="schedule-window">
                             <label><span>${this.t("scheduleStartTime")}</span><input class="schedule-start-time" data-render-key="schedule-start" type="time" step="3600" value="${this.escape(scheduleStartTime)}" /></label>
                             <label><span>${this.t("scheduleEndTime")}</span><input class="schedule-end-time" data-render-key="schedule-end" type="time" step="3600" value="${this.escape(scheduleEndTime)}" /></label>
@@ -2158,7 +2161,7 @@ class AmperePointQ22Card extends HTMLElement {
             hasCurrentLimit || hasChargingMode || showTargetEnergy || showSchedule
               ? `<div class="control-note">
                   ${this.icon("mdi:shield-check")}
-                  <span>${nativeLocal ? (this.lang() === "pl" ? "Start/stop steruje zezwoleniem na ładowanie. Energia sesji pochodzi z DP102 urządzenia." : "Start/stop controls charging permission. Session energy comes from device DP102.") : this.t("dataNote")}</span>
+                  <span>${nativeLocal ? (this.lang() === "pl" ? "Tryby i planer wykonuje Home Assistant przez LAN — HA musi być uruchomiony. Cel kWh liczymy od naciśnięcia Start. Harmonogram w aplikacji ładowarki pozostaw wyłączony." : "Home Assistant runs modes and the planner over LAN — HA must stay running. The energy budget starts when you press Start. Keep the device app schedule disabled.") : this.t("dataNote")}</span>
                 </div>`
               : ""
           }
@@ -2218,9 +2221,9 @@ class AmperePointQ22Card extends HTMLElement {
     const localOnline = nativeLocal && localAttrs.source_online && !["unavailable", "unknown"].includes(this.state(e.rawDp));
     const localLabel = this.lang() === "pl"
       ? (localAttrs.read_only ? "Odczyt bez Tuya Local i bez chmury. Sterowanie niezweryfikowane."
-         : "Bez Tuya Local i bez chmury. Sterowanie testowe: start/stop i prąd. Planer oraz tryby urządzenia jeszcze niewłączone.")
+         : "Bez Tuya Local i bez chmury. Start/stop i prąd przez LAN · tryby i planer w Home Assistant.")
       : (localAttrs.read_only ? "Readings without Tuya Local or cloud. Controls not verified."
-         : "No Tuya Local or cloud. Tested controls: start/stop and current. Planner and device modes not yet enabled.");
+         : "No Tuya Local or cloud. Start/stop and current over LAN · modes and planner in Home Assistant.");
     const localNotice = nativeLocal ? '<div class="empty-state" role="status">' + this.escape(
       'AmperePoint Local · ' + (localOnline ? 'LAN OK' : 'OFFLINE') + ' · ' +
       (localAttrs.local_host || 'LAN') + '. ' + localLabel) + '<br>' +
