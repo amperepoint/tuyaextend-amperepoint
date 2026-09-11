@@ -1,4 +1,12 @@
-# PRIME LAN controls and readable diagnostics — 0.5.38b2
+# PRIME LAN controls and readable diagnostics — 0.5.38b3
+
+Final HA build: `0.5.38b3`. Automated verification: 156 Python tests and 9
+frontend tests pass. Native controls were enabled through the normal HA options
+flow, then verified through the real dashboard: stop → PAUSE, slider → 11 A,
+restore slider → 16 A, start → STATE_C. DP150 readback confirmed the 11 A value
+despite 11 A not being an app preset, supporting 1 A slider steps on this device.
+The native button now follows DP140 charging permission even when power is zero.
+Raw DP count counts physical datapoints, not additional decoded table rows.
 
 ## Physical test conditions
 
