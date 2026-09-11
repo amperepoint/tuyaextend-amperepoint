@@ -275,6 +275,7 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
         raw_dp = self.coordinator.data.get("raw_dp", {})
         metadata = self.coordinator.data.get("dp_metadata", {})
         attributes: dict[str, Any] = {
+            "product_id": self.coordinator.data.get("product_id"),
             "local_host": self.coordinator.data.get("local_host"),
             "read_only": self.coordinator.data.get("read_only", False),
             "local_diagnostics": self.coordinator.data.get("local_diagnostics", []),

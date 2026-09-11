@@ -104,6 +104,14 @@ class _FakeStorage:
 
 
 class DashboardVersionRefreshTests(unittest.TestCase):
+    def test_deleted_config_is_recreated_when_runtime_panel_still_exists(self) -> None:
+        class DeletedStorage(_FakeStorage):
+            async def async_load(self, _force):
+                raise dashboard.ConfigNotFound()
+        storage = DeletedStorage({})
+        asyncio.run(dashboard._async_refresh_dashboard_version(storage))
+        self.assertEqual(storage.saved, dashboard._dashboard_config())
+
     def test_generic_dashboard_name(self) -> None:
         config = dashboard._dashboard_config()
         self.assertEqual(config["title"], "Ampere Point - Tuya dashboard")

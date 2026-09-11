@@ -105,6 +105,33 @@ assert.equal(card.apSelectedDeviceId(), "garage");
 
 console.log("frontend device selector tests passed");
 
+test("PID footer uses only the selected charger and remains visible when unknown", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: { rawDp: "sensor.first_raw" }, language: "en" });
+  instance.render = () => {};
+  instance._hass = { states: {
+    "sensor.first_raw": { state: "22", attributes: { product_id: "first-pid" } },
+    "sensor.second_raw": { state: "22", attributes: { product_id: "second-pid" } },
+  } };
+  assert.equal(instance.detectedProductId(), "first-pid");
+  assert.match(instance.productIdFooter(), /PID: <strong>first-pid<\/strong>/);
+  instance.config.entities.rawDp = "sensor.second_raw";
+  assert.equal(instance.detectedProductId(), "second-pid");
+  instance.config.entities.rawDp = "sensor.missing";
+  assert.equal(instance.detectedProductId(), null);
+  assert.match(instance.productIdFooter(), /PID: <strong>not detected<\/strong>/);
+});
+
+test("PID footer escapes source text and does not hide last identity while offline", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: { rawDp: "sensor.raw" } });
+  instance._hass = { states: {
+    "sensor.raw": { state: "unavailable", attributes: { product_id: '<img src=x onerror="bad()">' } },
+  } };
+  assert.match(instance.productIdFooter(), /&lt;img/);
+  assert.doesNotMatch(instance.productIdFooter(), /<img/);
+});
+
 // A charger applies a new current limit before its entity reports it, so the
 // card holds the requested value instead of snapping the slider back.
 const limitCard = new Card();

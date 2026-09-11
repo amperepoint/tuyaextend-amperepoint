@@ -38,6 +38,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if isinstance(coordinator.native_source, NativeLocalSource) and coordinator.native_source.controls_verified:
         planner = AmperePointLocalPlanner(hass, entry, coordinator)
         await planner.async_load()
+        if entry.data.get("local_pause_planner"):
+            await planner.async_prepare_onboarding()
+            hass.config_entries.async_update_entry(
+                entry, data={key: value for key, value in entry.data.items()
+                             if key != "local_pause_planner"})
     elif not isinstance(coordinator.native_source, NativeLocalSource):
         planner = AmperePointPlanner(hass, entry, coordinator)
         await planner.async_load()

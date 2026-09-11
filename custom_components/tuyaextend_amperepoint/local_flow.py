@@ -6,7 +6,8 @@ from homeassistant.helpers import selector, device_registry as dr
 
 from .const import DOMAIN, CONF_SOURCE_PHYSICAL_IDS
 from .local_source import (LOCAL_SOURCE, LOCAL_FIELDS, CONTROL_PROFILE,
-                           LocalConnectionError, read_local, control_supported)
+                           LocalConnectionError, read_local, control_supported,
+                           detected_control_profile, discover_device)
 
 
 def local_schema(current=None, *, options=False):
@@ -38,7 +39,8 @@ def cloud_candidates(hass):
             ):
                 continue
             result[device.id] = {"name": name, "local_device_id": device.id,
-                                 "local_key": device.local_key, "local_protocol": "3.5"}
+                                 "local_key": device.local_key, "local_protocol": "3.5",
+                                 "local_product_id": getattr(device, "product_id", None)}
     return result
 
 
@@ -59,7 +61,7 @@ def local_entry_data(previous, credentials):
     # Do not leave cloud/entity command routes behind when migrating an entry.
     data = {k: v for k, v in previous.items()
             if not k.startswith("source_") and k not in LOCAL_FIELDS}
-    connection = {key: credentials[key] for key in (*LOCAL_FIELDS, "local_family", "local_control_profile", "name")
+    connection = {key: credentials[key] for key in (*LOCAL_FIELDS, "local_family", "local_control_profile", "local_product_id", "name")
                   if key in credentials}
     return {**data, **connection, "model": "prime", "source_integration": LOCAL_SOURCE,
             CONF_SOURCE_PHYSICAL_IDS: [credentials["local_device_id"]]}
@@ -96,7 +98,18 @@ class NativeLocalFlowMixin:
 
     async def _async_probe_local(self, credentials):
         result = await self.hass.async_add_executor_job(read_local, credentials)
-        return {**credentials, "local_host": result["host"], "local_family": result["family"]}
+        product_id = credentials.get("local_product_id")
+        if not product_id:
+            # A device status response need not contain its PID. Try the local
+            # discovery announcement once during setup, never on every refresh.
+            try:
+                discovered = await self.hass.async_add_executor_job(discover_device, credentials["local_device_id"])
+                product_id = discovered.get("product_id")
+            except LocalConnectionError:
+                pass  # Missing diagnostic identity must not block a working LAN connection.
+        return {**credentials, "local_host": result["host"], "local_family": result["family"],
+                "local_product_id": product_id,
+                "local_control_profile": detected_control_profile(result["dps"], result["family"])}
 
     async def async_step_local_manual(self, user_input=None):
         errors = {}
@@ -115,16 +128,23 @@ class NativeLocalFlowMixin:
         if user_input is not None:
             if existing:
                 data = local_entry_data({**existing.data, **existing.options}, pending)
+                # Preserve saved windows but do not resume old automation simply
+                # because the user switches to a newly control-capable transport.
+                data["local_pause_planner"] = True
                 self.hass.config_entries.async_update_entry(existing, data=data, options={})
                 await self.hass.config_entries.async_reload(existing.entry_id)
                 return self.async_abort(reason="local_migrated")
             await self.async_set_unique_id(f"{DOMAIN}_local_{pending['local_device_id']}")
             self._abort_if_unique_id_configured()
             return self.async_create_entry(title=pending["name"], data=local_entry_data({}, pending))
-        return self.async_show_form(step_id="local_confirm", data_schema=vol.Schema({}),
+        step = "local_confirm" if pending.get("local_control_profile") else "local_confirm_read_only"
+        return self.async_show_form(step_id=step, data_schema=vol.Schema({}),
                                    description_placeholders={"name": pending["name"],
                                     "host": pending["local_host"],
                                     "action": "migration" if existing else "new"})
+
+    async def async_step_local_confirm_read_only(self, user_input=None):
+        return await self.async_step_local_confirm(user_input)
 
 
 class NativeLocalOptionsMixin:

@@ -3,11 +3,10 @@
     "step": {
       "user": {
         "title": "Welcome to AmperePoint",
-        "description": "{count} compatible Tuya charger(s) were detected. Choose automatic setup, or map entities manually.",
+        "description": "Choose a direct LAN connection or use entities from an existing integration. Detected entity sources: {count}. AmperePoint Local does not require the Tuya Local integration.",
         "menu_options": {
           "automatic": "Set up a detected charger",
           "manual": "Configure entity mapping manually",
-          "prime_profile": "Add Wallbox Prime profile (Tuya Local)",
           "local": "AmperePoint Local (LAN)"
         }
       },
@@ -76,7 +75,7 @@
       },
       "local": {
         "title": "AmperePoint Local",
-        "description": "Direct LAN connection — no Tuya Local required. Test build: compatible PRIME readings, no controls.",
+        "description": "Direct LAN connection — no Tuya Local required. A recognized, verified PRIME variant gets a dashboard with controls and the HA planner. Other compatible variants provide readings only.",
         "menu_options": {
           "local_import": "Choose a charger from Tuya in HA",
           "local_manual": "Enter device ID and local key"
@@ -103,7 +102,11 @@
       },
       "local_confirm": {
         "title": "LAN connection succeeded",
-        "description": "{name} responds at {host}. Mode: read-only. Confirm to start the dashboard. An existing AmperePoint entry for this charger will migrate to LAN while keeping entity IDs. Its control automation will not be started."
+        "description": "{name} responds at {host}. PRIME LAN controls are supported. Confirm to create the full dashboard: start/stop, current limit, energy-target charging and weekly planner. Adding the charger does not change its physical state. Saved schedules remain disabled until you enable them. Modes and schedules run in HA, which must stay running and connected over LAN. Keep the charger app in immediate mode."
+      },
+      "local_confirm_read_only": {
+        "title": "LAN connected — readings only",
+        "description": "{name} responds at {host}. Readings are supported, but this DP layout or firmware does not yet have verified controls. Confirm to create the telemetry and diagnostics dashboard, without start/stop or the planner. Tuya Local is not required."
       }
     },
     "error": {
@@ -129,8 +132,7 @@
       "init": {
         "title": "AmperePoint settings",
         "menu_options": {
-          "settings": "Model, entities and tariff",
-          "prime_profile": "Add Wallbox Prime profile (Tuya Local)"
+          "settings": "Model, entities and tariff"
         }
       },
       "settings": {
@@ -186,7 +188,7 @@
           "local_key": "Local key",
           "local_host": "IP address (blank = discover automatically)",
           "local_protocol": "LAN protocol",
-          "enable_test_controls": "Enable LAN controls and HA charging planner (matching PRIME)"
+          "enable_test_controls": "LAN controls and HA planner (disable for read-only operation)"
         }
       }
     },

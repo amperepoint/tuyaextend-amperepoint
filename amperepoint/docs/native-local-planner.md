@@ -5,6 +5,41 @@ the existing Q dashboard controls and an HA-managed planner. Other firmware
 layouts retain their existing capabilities; this is not blanket write support
 for every PRIME product.
 
+## First-run setup — beta 0.5.38b8
+
+Add integration → AmperePoint → AmperePoint Local (LAN), then import a charger
+from an already authorized official Tuya entry or enter its LAN credentials.
+No separate Tuya Local installation is needed. Its legacy profile installer is
+no longer offered in the setup/options menus.
+
+The connection probe recognizes the tested firmware and DP contract. Matching
+PRIME devices get start/stop, current limit, energy-target mode and the weekly
+planner after confirmation, without an additional options checkbox. Other
+compatible telemetry layouts receive an explicit read-only confirmation. All
+physical commands still require a fresh matching snapshot and verified readback.
+
+Adding a device sends no charging command. New schedules are disabled. Migrating
+an existing entry preserves its entity IDs and saved windows, but clears active
+overrides and pauses its planner until the user enables it again. Options still
+allow switching a verified device to read-only operation.
+
+The footer always includes PID for the selected charger. Native LAN setup saves
+the PID imported from Tuya, or attempts local discovery if it is missing. Native
+cloud and mapped sources can supply the same diagnostic attribute. If the source
+does not provide a PID, the footer says “not detected”; it never substitutes a
+device ID or guesses from the model name. No local key is exposed.
+
+Deleting and re-adding a charger in the same HA session also recreates a missing
+generated dashboard config, while existing custom dashboard content is preserved.
+
+Validation of b8: 181 Python tests and 12 Node frontend tests passed. Fresh setup
+on the connected tester recognized PID `3tajnmwugclfmotb`, enabled the full LAN
+control profile and created an inactive, empty planner. HA API checks and the
+rendered dashboard confirmed all three modes, current control and the PID footer.
+DP140 remained on, DP150 remained 12 A and DP152 remained 13 A: onboarding did
+not change the physical charger settings. The temporary entry was removed after
+verification so the user can repeat first-run setup.
+
 ## User interface
 
 - Charge now: direct charging permission and current control.

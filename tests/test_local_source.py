@@ -20,6 +20,19 @@ CONFIG = {"local_device_id": "test-device", "local_key": "0123456789abcdef",
 
 
 class LocalSourceTests(unittest.TestCase):
+    def test_product_identity_is_separate_from_private_device_identity(self):
+        source = local.NativeLocalSource(None, SimpleNamespace(data={**CONFIG, "local_product_id": "public-pid"}, options={}))
+        self.assertEqual(source.product_id, "public-pid")
+        source.config.pop("local_product_id")
+        self.assertIsNone(source.product_id)
+
+    def test_product_id_comes_from_matching_lan_announcement(self):
+        scan = SimpleNamespace(devices=lambda **kw: {CONFIG["local_device_id"]: {
+            "ip": "192.168.0.154", "productKey": "public-pid"}})
+        with patch.dict(sys.modules, {"tinytuya": SimpleNamespace(scanner=scan)}):
+            self.assertEqual(local.discover_device(CONFIG["local_device_id"]),
+                             {"host": "192.168.0.154", "product_id": "public-pid"})
+
     def test_supported_snapshot_preserves_unknown_dps_but_redacts_card_data(self):
         dps, family = local.validate_snapshot({"dps": {**FIXTURE["dps"], "112": "private-card-data", "999": "unknown"}})
         self.assertEqual(family, "prime_split")

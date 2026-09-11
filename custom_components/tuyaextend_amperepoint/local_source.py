@@ -57,15 +57,21 @@ def validate_snapshot(response: Any) -> tuple[dict, str]:
     return public_dps(dps), family
 
 
-def control_supported(config: dict, dps: dict, family: str) -> bool:
-    """Enable only the device entry explicitly approved after physical tests."""
-    return (config.get("local_control_profile") == CONTROL_PROFILE
-            and family == "prime_split"
+def detected_control_profile(dps: dict, family: str) -> str | None:
+    """Recognize the tested firmware/DP contract, independently of user settings."""
+    verified = (family == "prime_split"
             and as_mapping(dps.get("106")).get("fv") == "(V7.0.0)F2.0.0"
             and type(dps.get("140")) is bool
             and type(dps.get("150")) is int
             and type(dps.get("152")) is int
             and 6 <= dps["152"] <= 80)
+    return CONTROL_PROFILE if verified else None
+
+
+def control_supported(config: dict, dps: dict, family: str) -> bool:
+    """Require both the configured profile and a fresh compatible snapshot."""
+    return (config.get("local_control_profile") == CONTROL_PROFILE
+            and detected_control_profile(dps, family) == CONTROL_PROFILE)
 
 
 def current_max(dps: dict) -> int:
@@ -132,7 +138,7 @@ def validate_credentials(config: dict) -> None:
         raise LocalConnectionError("local_invalid_credentials")
 
 
-def discover_host(device_id: str) -> str:
+def discover_device(device_id: str) -> dict:
     from tinytuya import scanner
 
     try:
@@ -141,7 +147,12 @@ def discover_host(device_id: str) -> str:
     except Exception:
         raise LocalConnectionError("local_not_found") from None
     item = found.get(device_id, {})
-    return str(item.get("ip") or "")
+    return {"host": str(item.get("ip") or ""),
+            "product_id": str(item.get("productKey") or "") or None}
+
+
+def discover_host(device_id: str) -> str:
+    return discover_device(device_id)["host"]
 
 
 def read_local(config: dict, rediscover: bool = False) -> dict:
@@ -214,6 +225,10 @@ class NativeLocalSource:
             "101": "state_code", "102": "telemetry", "106": "device_information",
             "117": "electrical_measurements",
         }.items() if dp in self.dps}
+
+    @property
+    def product_id(self):
+        return self.config.get("local_product_id") or None
 
     def raw(self, code):
         if code == "switch":

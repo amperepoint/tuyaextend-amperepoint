@@ -33,6 +33,17 @@ class AmperePointLocalPlanner(AmperePointPlanner):
     def _storage_extra(self):
         return {"local_control": {"mode": self._local_mode, "target_kwh": self.target_energy_kwh}}
 
+    async def async_prepare_onboarding(self):
+        """Keep saved windows, but require a new user action before automation."""
+        self.config["enabled"] = False
+        self.override = None
+        self.managed_charging = False
+        self.pending = None
+        self.retry_after = None
+        self.command_status = "idle"
+        self._local_mode = "charge_now"
+        await self._async_save()
+
     @property
     def charging_mode(self):
         if self.override and self.override.get("mode") == "energy":

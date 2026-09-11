@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.38b7";
+const AP_Q22_DASHBOARD_VERSION = "0.5.38b8";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -1234,6 +1234,17 @@ class AmperePointQ22Card extends HTMLElement {
     return { version, status: this.t("dashboardUpToDate"), state: "current" };
   }
 
+  detectedProductId() {
+    const value = this.attr(this.config.entities.rawDp, "product_id");
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  }
+
+  productIdFooter() {
+    const pid = this.detectedProductId();
+    const missing = this.lang() === "pl" ? "nie wykryto" : "not detected";
+    return `<span class="product-id" data-render-key="product-id">PID: <strong>${this.escape(pid || missing)}</strong></span>`;
+  }
+
   navigateTo(path) {
     window.history.pushState(null, "", path);
     window.dispatchEvent(new Event("location-changed"));
@@ -2308,6 +2319,7 @@ class AmperePointQ22Card extends HTMLElement {
           }
           ${localNotice}
           <footer class="card-footer">
+            ${this.productIdFooter()}
             <a class="footer-link" data-render-key="settings-link" data-navigate href="${this.escape(settingsPath)}">
               ${this.icon("mdi:cog-outline")}
               <span>${this.t("dashboardSettings")}</span>
@@ -3378,6 +3390,11 @@ class AmperePointQ22Card extends HTMLElement {
           color: inherit;
           text-decoration: none;
           transition: color .18s ease, background .18s ease, border-color .18s ease;
+        }
+        .product-id {
+          min-width: 0;
+          overflow-wrap: anywhere;
+          user-select: text;
         }
         .footer-link {
           display: inline-flex;

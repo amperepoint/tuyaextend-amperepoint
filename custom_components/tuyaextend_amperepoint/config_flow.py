@@ -204,7 +204,6 @@ class AmperePointConfigFlow(
         self._candidates = discover_sources(self.hass)
         menu_options = ["automatic", "manual"] if self._candidates else ["manual"]
         menu_options.insert(0, "local")
-        menu_options.append("prime_profile")
         return self.async_show_menu(
             step_id="user",
             menu_options=menu_options,
@@ -298,9 +297,7 @@ class AmperePointOptionsFlowHandler(NativeLocalOptionsMixin, PrimeProfileFlowMix
     ) -> config_entries.ConfigFlowResult:
         if self._config_entry.data.get("source_integration") == LOCAL_SOURCE:
             return await self.async_step_local_connection()
-        return self.async_show_menu(
-            step_id="init", menu_options=["settings", "prime_profile"]
-        )
+        return await self.async_step_settings(user_input)
 
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None

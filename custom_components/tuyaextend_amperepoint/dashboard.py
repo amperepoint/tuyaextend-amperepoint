@@ -212,6 +212,9 @@ async def _async_refresh_dashboard_version(storage: LovelaceStorage) -> None:
     try:
         config = await storage.async_load(False)
     except ConfigNotFound:
+        # The runtime panel may outlive a deleted stored config. Re-adding a
+        # charger in the same HA session must recreate our default card too.
+        await storage.async_save(_dashboard_config())
         return
     if not isinstance(config, dict):
         return

@@ -334,6 +334,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return {
             "model": self.model.name,
+            "product_id": self._product_id(),
             "status": status,
             "vehicle_connected": connected,
             "vehicle_connection_known": connection_known,
@@ -426,6 +427,16 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.native_source.available if self.native_source else True
             ),
         }
+
+    def _product_id(self) -> str | None:
+        if self.native_source:
+            return getattr(self.native_source, "product_id", None)
+        for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
+            entity_id = self._config(key)
+            state = self.hass.states.get(entity_id) if entity_id else None
+            if state and state.attributes.get("product_id"):
+                return str(state.attributes["product_id"])
+        return None
 
     def _state_value(self, key: str) -> Any:
         entity_id = self._config(key)

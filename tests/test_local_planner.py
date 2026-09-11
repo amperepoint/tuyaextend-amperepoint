@@ -42,6 +42,22 @@ def make():
 
 
 class LocalPlannerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_migration_pauses_automation_without_charger_commands_and_keeps_windows(self):
+        planner = make()
+        windows = [{"id": "saved"}]
+        planner.config = {"enabled": True, "windows": windows}
+        planner.override = {"mode": "charge"}
+        planner.managed_charging = True
+        planner.pending = {"action": "start"}
+        await planner.async_prepare_onboarding()
+        await planner.async_evaluate("startup")
+        self.assertEqual(planner.coordinator.commands, [])
+        self.assertFalse(planner.config["enabled"])
+        self.assertEqual(planner.config["windows"], windows)
+        self.assertIsNone(planner.override)
+        self.assertIsNone(planner.pending)
+        self.assertEqual(planner.charging_mode, "charge_now")
+
     async def test_default_does_not_change_charger(self):
         planner = make()
         await planner.async_evaluate("startup")

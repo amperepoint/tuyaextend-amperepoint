@@ -83,6 +83,10 @@ class NativeTuyaSource:
     def available(self) -> bool:
         return bool(getattr(self.device, "online", False))
 
+    @property
+    def product_id(self) -> str | None:
+        return getattr(self.device, "product_id", None) or None
+
     def has(self, code: str) -> bool:
         return code in getattr(self.device, "status", {}) or code in getattr(
             self.device, "function", {}

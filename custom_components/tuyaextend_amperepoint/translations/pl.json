@@ -3,11 +3,10 @@
     "step": {
       "user": {
         "title": "Witaj w AmperePoint",
-        "description": "Wykryto zgodne ładowarki Tuya: {count}. Wybierz automatyczną konfigurację albo ręcznie przypisz encje.",
+        "description": "Wybierz połączenie lokalne LAN albo wykorzystaj encje z istniejącej integracji. Wykryte źródła encji: {count}. AmperePoint Local nie wymaga dodatku Tuya Local.",
         "menu_options": {
           "automatic": "Skonfiguruj wykrytą ładowarkę",
           "manual": "Przypisz encje ręcznie",
-          "prime_profile": "Dodaj profil Wallbox Prime (Tuya Local)",
           "local": "AmperePoint Local (LAN)"
         }
       },
@@ -76,7 +75,7 @@
       },
       "local": {
         "title": "AmperePoint Local",
-        "description": "Bezpośrednie połączenie LAN — nie wymaga Tuya Local. Wersja testowa: odczyt zgodnych wariantów PRIME, bez sterowania.",
+        "description": "Bezpośrednie połączenie LAN — bez dodatku Tuya Local. Rozpoznany, zweryfikowany wariant PRIME otrzyma panel ze sterowaniem i planerem HA. Pozostałe zgodne warianty pozwalają na odczyt danych.",
         "menu_options": {
           "local_import": "Wybierz ładowarkę z Tuya w HA",
           "local_manual": "Podaj Device ID i local key"
@@ -103,7 +102,11 @@
       },
       "local_confirm": {
         "title": "Połączenie LAN działa",
-        "description": "{name} odpowiada pod {host}. Tryb: tylko odczyt. Zatwierdź, aby uruchomić dashboard. Jeśli ładowarka ma już wpis AmperePoint, przełączymy go na LAN, zachowując encje. Automatyka sterująca dla tego wpisu nie zostanie uruchomiona."
+        "description": "{name} odpowiada pod {host}. Rozpoznano PRIME ze wsparciem sterowania LAN. Po zatwierdzeniu otrzymasz pełny panel: start/stop, limit prądu, ładowanie do zadanej energii i planer tygodniowy. Samo dodanie nie zmienia stanu ładowarki. Zapisane plany pozostaną wyłączone do ich włączenia przez Ciebie. Tryby i planer wykonuje HA, który musi działać i mieć połączenie LAN. W aplikacji ładowarki pozostaw tryb natychmiastowy."
+      },
+      "local_confirm_read_only": {
+        "title": "Połączenie LAN działa — odczyt danych",
+        "description": "{name} odpowiada pod {host}. Odczyt danych jest obsługiwany, ale ten układ DP lub firmware nie ma jeszcze zweryfikowanego sterowania. Po zatwierdzeniu uruchomimy panel pomiarów i diagnostyki, bez start/stop i planera. Nie wymaga to dodatku Tuya Local."
       }
     },
     "error": {
@@ -129,8 +132,7 @@
       "init": {
         "title": "Ustawienia AmperePoint",
         "menu_options": {
-          "settings": "Model, encje i taryfa",
-          "prime_profile": "Dodaj profil Wallbox Prime (Tuya Local)"
+          "settings": "Model, encje i taryfa"
         }
       },
       "settings": {
@@ -186,7 +188,7 @@
           "local_key": "Local key",
           "local_host": "Adres IP (puste = wykryj automatycznie)",
           "local_protocol": "Protokół LAN",
-          "enable_test_controls": "Włącz sterowanie LAN i planer ładowania HA (zgodny PRIME)"
+          "enable_test_controls": "Sterowanie LAN i planer HA (wyłącz, aby używać tylko odczytu)"
         }
       }
     },
