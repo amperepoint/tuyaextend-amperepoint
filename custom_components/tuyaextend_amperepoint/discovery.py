@@ -417,6 +417,8 @@ def _looks_like_amperepoint(text: str) -> bool:
         "evse",
         "mode 3 type 2",
         "wallbox",
+        "prime 11kw",
+        "prime 11 kw",
         "prime 22kw",
         "gbmxngploofmhbjc",
     )

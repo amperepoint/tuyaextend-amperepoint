@@ -60,6 +60,11 @@ BATTERY_CHARGER_MEASUREMENTS = [
 
 
 class ChargerSignatureTests(unittest.TestCase):
+    def test_prime_11kw_family_labels_are_discovered(self) -> None:
+        for label in ("Wallbox PRIME", "PRIME 11kW", "PRIME 11 kW"):
+            with self.subTest(label=label):
+                self.assertTrue(discovery._looks_like_amperepoint(label))
+
     def test_q74_is_recognised_without_a_known_name(self) -> None:
         text = " ".join(("Q74", "", "Tuya", "tuya_local"))
         self.assertFalse(

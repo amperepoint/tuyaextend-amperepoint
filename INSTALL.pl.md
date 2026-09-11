@@ -2,6 +2,14 @@
 
 ## Wallbox Prime: instalator profilu w aplikacji
 
+Komunikaty kreatora dotyczą całej rodziny **Wallbox PRIME**, bez ograniczenia
+do mocy lub PID. Integracja rozpoznaje też nazwę PRIME 11 kW i stosuje dla niej
+limit modelu 16 A, zamiast przypisywać ją do wariantu 22 kW. Ogólna lub
+niejednoznaczna nazwa PRIME nie daje domyślnie limitu 32 A.
+Odczyt wersji 11 kW korzysta z tego samego dekodera, jeśli urządzenie udostępnia
+zgodną telemetrię DP102. Nie jest to potwierdzenie zgodności wszystkich firmware
+ani włączenie sterowania. Poniżej opisano dotychczas zweryfikowany profil.
+
 Dla **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`, protokół LAN 3.5**
 obsługiwany jest obecnie **odczyt lokalny, nie pełne sterowanie jak w Q Series**.
 Inne PID i wersje firmware wymagają osobnego potwierdzenia zgodności.

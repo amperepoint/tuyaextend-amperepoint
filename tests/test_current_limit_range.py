@@ -63,7 +63,7 @@ def _slider(coordinator):
 
 class CurrentLimitRangeTests(unittest.TestCase):
     def test_sixteen_amp_models_are_narrowed(self) -> None:
-        for model_key in ("q11", "q37"):
+        for model_key in ("q11", "q37", "prime_11kw"):
             with self.subTest(model=model_key):
                 slider = _slider(
                     _Coordinator(model_key, source_attributes=PROFILE_RANGE)
@@ -111,6 +111,21 @@ class CurrentLimitRangeTests(unittest.TestCase):
 
 class ModelDetectionTests(unittest.TestCase):
     """Several models share one Tuya product, so only the name identifies."""
+
+    def test_prime_variants_are_not_confused_with_q11_or_each_other(self) -> None:
+        for label, key, maximum in (
+            ("Ampere Point Wallbox Prime 11kW", "prime_11kw", 16),
+            ("Wallbox PRIME 11 kW", "prime_11kw", 16),
+            ("Prime 11kw", "prime_11kw", 16),
+            ("Wallbox Prime 22kW", "prime_22kw", 32),
+            ("Wallbox PRIME 22 kW", "prime_22kw", 32),
+            ("Wallbox PRIME", "prime", 16),
+            ("Wallbox Prime 11kw 22kw gbmxngploofmhbjc", "prime", 16),
+        ):
+            with self.subTest(label=label):
+                detected = models.detect_model_key(label)
+                self.assertEqual(detected, key)
+                self.assertEqual(models.get_model(detected).max_current_a, maximum)
 
     def test_shared_product_name_does_not_become_a_q37(self) -> None:
         # What a Q22 looks like once tuya-local writes the profile's product

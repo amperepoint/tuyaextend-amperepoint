@@ -2,6 +2,14 @@
 
 ## Wallbox Prime profile installer
 
+The setup notices address the **Wallbox PRIME** family without a power rating
+or PID restriction. PRIME 11 kW names are also recognized, with a 16 A model
+ceiling instead of being classified as the 22 kW variant. A generic or ambiguous
+PRIME name no longer implies 32 A.
+The 11 kW variant can use the same telemetry decoder when it reports compatible
+DP102 data. This is not validation of every firmware or an enablement of controls.
+The profile verified so far is described below.
+
 For **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`, LAN protocol 3.5**, this
 release supports **local read-only telemetry, not Q Series control parity**.
 Other PIDs and firmware versions require separate compatibility validation.

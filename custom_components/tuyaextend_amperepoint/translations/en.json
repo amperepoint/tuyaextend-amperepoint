@@ -184,7 +184,7 @@
       },
       "prime_profile": {
         "title": "Add Wallbox Prime profile (Tuya Local)",
-        "description": "Install Tuya Local through HACS first. Submit to add the Wallbox Prime 22 kW profile (PID gbmxngploofmhbjc) to Tuya Local. It supports reading power, session energy, temperature, phases and vehicle connection. Start/stop, current control and the planner are not yet supported. An existing profile with different contents will not be overwritten."
+        "description": "Add the Wallbox PRIME profile to Tuya Local. The profile reads data provided by the charger: power, session energy, temperature, phase measurements and vehicle connection. Data availability depends on compatible device DPs. Start/stop, current control and the planner are not yet supported. Tuya Local must be installed through HACS. An existing profile with different contents will be preserved."
       }
     },
     "error": {
@@ -196,7 +196,7 @@
     },
     "abort": {
       "already_configured": "This AmperePoint source is already configured.",
-      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select Ampere Point Wallbox Prime 22kW (local). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
+      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select the Wallbox PRIME profile matching the device data (older profile names may differ). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
     }
   },
   "options": {
@@ -250,7 +250,7 @@
       },
       "prime_profile": {
         "title": "Add Wallbox Prime profile (Tuya Local)",
-        "description": "Install Tuya Local through HACS first. Submit to add the Wallbox Prime 22 kW profile (PID gbmxngploofmhbjc) to Tuya Local. It supports reading power, session energy, temperature, phases and vehicle connection. Start/stop, current control and the planner are not yet supported. An existing profile with different contents will not be overwritten."
+        "description": "Add the Wallbox PRIME profile to Tuya Local. The profile reads data provided by the charger: power, session energy, temperature, phase measurements and vehicle connection. Data availability depends on compatible device DPs. Start/stop, current control and the planner are not yet supported. Tuya Local must be installed through HACS. An existing profile with different contents will be preserved."
       }
     },
     "error": {
@@ -260,7 +260,7 @@
       "prime_profile_write_error": "Could not write the profile. Check Tuya Local directory permissions and the Home Assistant log."
     },
     "abort": {
-      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select Ampere Point Wallbox Prime 22kW (local). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
+      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select the Wallbox PRIME profile matching the device data (older profile names may differ). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
     }
   }
 }
