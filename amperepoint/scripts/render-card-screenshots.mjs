@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -9,6 +9,8 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, "..", "..");
 const fixtureUrl = pathToFileURL(path.join(scriptDir, "card-screenshot-fixture.html")).href;
 const outputDir = path.join(rootDir, "amperepoint", "screenshots");
+const primeOnly = process.argv.includes("--prime-only");
+const version = JSON.parse(await readFile(path.join(rootDir, "custom_components/tuyaextend_amperepoint/manifest.json"), "utf8")).version;
 const chromePath =
   process.env.CHROME_PATH || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 
@@ -41,7 +43,10 @@ const entities = {
   l3Power: "sensor.demo_power_l3",
 };
 
-const scenarios = [
+const scenarios = primeOnly ? [{file: "amperepoint-prime-lan.png", prime: true,
+  mode: "charge_schedule", status: "Wstrzymane", connection: "unknown",
+  power: "0.00", session: "0.00", temperature: "34",
+  currents: ["0", "0", "0"], powers: ["0", "0", "0"]}] : [
   {
     file: "amperepoint-charge-now.png",
     mode: "charge_now",
@@ -121,10 +126,10 @@ function buildStates(scenario) {
     ]),
   );
 
-  return {
+  const states = {
     "update.tuyaextend_amperepoint_update": state("off", {
-      installed_version: "0.5.2",
-      latest_version: "0.5.2",
+      installed_version: version,
+      latest_version: version,
       release_url: "https://github.com/amperepoint/tuyaextend-amperepoint/releases",
       friendly_name: "TuyaExtend AmperePoint Update",
     }),
@@ -231,6 +236,36 @@ function buildStates(scenario) {
     [entities.l2Power]: state(scenario.powers[1], { unit_of_measurement: "kW" }),
     [entities.l3Power]: state(scenario.powers[2], { unit_of_measurement: "kW" }),
   };
+  if (scenario.prime) {
+    states[entities.switch] = state("off");
+    states[entities.phaseCount] = state("0");
+    states[entities.currentLimit].attributes.max = 16;
+    for (const key of ["totalEnergy", "lastSessionDp25", "scheduleStartTime", "scheduleEndTime", "faults"])
+      delete states[entities[key]];
+    const row = (dp, path, group, pl, en, value, unit = "") => ({dp, path, group:group === "status" ? "session" : group, label:{pl,en}, value, unit});
+    states[entities.rawDp] = state("8", {
+      source_type:"amperepoint_local", source_online:true, read_only:false,
+      local_host:"192.168.1.50", product_id:"gbmxngploofmhbjc", local_command_status:"confirmed",
+      local_dp_count:8, local_diagnostics:[
+        {...row("101","","status","Stan ładowarki","Charger state",204),display:{pl:"Wstrzymane",en:"Paused"}},
+        row("102","t","status","Temperatura sterownika","Controller temperature",34,"°C"),
+        row("102","p","status","Moc całkowita","Total power",0,"kW"),
+        row("102","e","status","Energia sesji","Session energy",0,"kWh"),
+        row("109","","status","Stan protokołu","Protocol state","PAUSE"),
+        row("107","","settings","Skróty wyboru prądu w aplikacji","App current presets","6, 8, 10, 13, 16","A"),
+        row("150","","settings","Zadany prąd ładowania","Requested current",16,"A"),
+        row("152","","settings","Limit prądu instalacji","Installation current limit",16,"A"),
+        row("106","fv","device","Wersja firmware","Firmware version","(V8.0.7)F1.3.6"),
+        row("151","m","technical","DP151 · m","DP151 · m",0),
+        row("151","ss","technical","DP151 · ss","DP151 · ss","00:00"),
+        row("151","se","technical","DP151 · se","DP151 · se","08:00")
+      ]});
+    Object.assign(states[entities.planner].attributes, {control_source:"home_assistant_lan",
+      charging_mode:"charge_schedule", target_energy_kwh:10, command_status:"confirmed", pending:null,
+      next_action:{action:"start",at:"2026-09-11T22:15:00+02:00",current_a:16},
+      last_confirmation:{action:"stop",confirmed_at:"2026-09-11T14:00:00+02:00"}});
+  }
+  return states;
 }
 
 function connect(webSocketUrl) {
@@ -315,7 +350,9 @@ try {
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   for (const scenario of scenarios) {
-    const payload = JSON.stringify({ entities, states: buildStates(scenario) });
+    const payload = JSON.stringify({ entities, states: buildStates(scenario),
+      ...(scenario.prime ? {config:{title:"Ampere Point Wallbox PRIME",subtitle:"Tuya LAN · Home Assistant",maxPowerKw:11},
+        caption:"PRIME · LOKALNIE PRZEZ LAN · PODGLĄD Z DANYMI DEMONSTRACYJNYMI"} : {}) });
     const rendered = await cdp("Runtime.evaluate", {
       expression: `window.renderAmperepointPreview(${payload})`,
       awaitPromise: true,
@@ -329,11 +366,30 @@ try {
       format: "png",
       captureBeyondViewport: true,
       fromSurface: true,
-      clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, scale: 1 },
+      clip: { x: rect.x, y: scenario.prime ? 0 : rect.y, width: rect.width,
+        height: scenario.prime ? Math.min(rect.height, 1570) : rect.height, scale: 1 },
     });
     await writeFile(path.join(outputDir, scenario.file), screenshot.data, "base64");
+    if (scenario.prime) {
+      const diagnostics = await cdp("Runtime.evaluate", {expression:`(() => {
+        const card=document.querySelector('amperepoint-q22-card');
+        const table=card.querySelector('.local-data');
+        const label=document.createElement('h3');
+        label.textContent='PRIME · DIAGNOSTYKA LAN · DANE DEMONSTRACYJNE';
+        label.style.cssText='color:#b7c3ca;font:500 15px system-ui;grid-column:1/-1';
+        table.prepend(label);
+        const r=table.getBoundingClientRect();
+        const c=card.getBoundingClientRect();
+        return {x:c.x,y:r.y-12,width:c.width,height:c.bottom-r.y+12};
+      })()`,returnByValue:true});
+      const r=diagnostics.result.value;
+      const shot=await cdp("Page.captureScreenshot", {format:"png",captureBeyondViewport:true,
+        clip:{...r,scale:1}});
+      await writeFile(path.join(outputDir,"amperepoint-prime-diagnostics.png"),shot.data,"base64");
+    }
   }
 
+  if (!primeOnly) {
   const auditPayload = JSON.stringify({ entities, states: buildStates(scenarios[0]) });
   await cdp("Runtime.evaluate", {
     expression: `window.renderAmperepointPreview(${auditPayload})`,
@@ -394,6 +450,7 @@ try {
     clip: { x: mobileRect.x, y: mobileRect.y, width: mobileRect.width, height: mobileRect.height, scale: 1 },
   });
   await writeFile(path.join(outputDir, "amperepoint-planner-mobile.png"), mobileScreenshot.data, "base64");
+  }
 
   socket.close();
 } finally {
@@ -401,7 +458,10 @@ try {
     chrome.kill();
     await once(chrome, "exit");
   }
-  await rm(profileDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  const resolvedProfile = path.resolve(profileDir);
+  if (path.dirname(resolvedProfile) !== path.resolve(os.tmpdir()) || !path.basename(resolvedProfile).startsWith("amperepoint-screenshots-"))
+    throw new Error("Refusing to remove an unexpected temporary profile path");
+  await rm(resolvedProfile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 console.log(`Rendered ${scenarios.length + 1} screenshots to ${outputDir}`);

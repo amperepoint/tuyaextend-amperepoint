@@ -2,6 +2,22 @@
 
 Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 
+## Q Series and Wallbox PRIME
+
+| Series | Recommended connection | Why |
+| --- | --- | --- |
+| **Q Series** | **Tuya Cloud**, using the official HA Tuya integration | Broader currently supported DP/feature coverage in AmperePoint than our local profiles; no local key needed |
+| **Wallbox PRIME** | **AmperePoint Local (LAN)**, built into this integration | Local Tuya readings and verified controls without separate Tuya Local/LocalTuya |
+
+For Q Series, cloud coverage depends on product generation and firmware. We
+use available Tuya runtime DPS even when they have no official HA entities,
+but do not claim every product DP is exposed by the cloud. Xtend is optional.
+For PRIME, cloud alone does not supply the full telemetry used by this panel.
+
+**PL:** Q Series — zalecamy Tuya Cloud ze względu na szerszy obsługiwany zakres
+DP w naszym dodatku. PRIME — lokalna obsługa Tuya jest wbudowana, bez instalowania
+osobnego Tuya Local. Zakres sterowania zależy od zweryfikowanego firmware i DP.
+
 <p align="center">
   <a href="https://my.home-assistant.io/redirect/hacs_repository/?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration">
     <img src="https://my.home-assistant.io/badges/hacs_repository.svg" alt="Open Repository on HACS">
@@ -29,7 +45,7 @@ Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](
 
 ## Wallbox Prime setup through AmperePoint
 
-Development build `0.5.38b9` includes **AmperePoint Local (LAN)** directly in
+Release `0.5.38` includes **AmperePoint Local (LAN)** directly in
 this integration; a separate Tuya Local installation is not required. After
 installing/restarting HA, choose **Add integration → AmperePoint → AmperePoint
 Local (LAN)**. Import connection details from an already configured official
@@ -63,7 +79,18 @@ the native AmperePoint LAN path.
 
 ## Dashboard previews
 
-The values below are simulated, but the images are rendered from the bundled
+### Wallbox PRIME — native LAN controls and planner
+
+Rendered from the **released card**, with clearly labelled demonstration data;
+these images are UI previews, not evidence of a loaded charging test.
+
+![PRIME LAN dashboard with charging controls and Home Assistant planner](amperepoint/screenshots/amperepoint-prime-lan.png)
+
+### PRIME — readable LAN diagnostics and PID
+
+![PRIME LAN diagnostic tables and product PID footer](amperepoint/screenshots/amperepoint-prime-diagnostics.png)
+
+The Q Series values below are simulated, but the images are rendered from the bundled
 Home Assistant card itself.
 
 ### Charge now
