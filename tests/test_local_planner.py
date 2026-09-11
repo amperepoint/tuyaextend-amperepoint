@@ -1,6 +1,5 @@
 """HA-managed PRIME modes: same UX, no speculative firmware writes."""
 import asyncio
-import copy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
@@ -16,7 +15,7 @@ module = load_integration_module("local_planner")
 class Coordinator:
     def __init__(self):
         self.data = dict(source_online=True, work_mode="charge_now", current_limit_a=16,
-                         switch_enabled=True, session_energy_kwh=0)
+                         switch_enabled=True, local_session_energy_kwh=0)
         self.model_limits = SimpleNamespace(min_current_a=6, max_current_a=16)
         self.commands = []
 
@@ -56,26 +55,26 @@ class LocalPlannerTests(unittest.IsolatedAsyncioTestCase):
         await planner.async_set_target(2)
         await planner.async_user_charging(True)
         self.assertTrue(planner.coordinator.data["switch_enabled"])
-        planner.coordinator.data["session_energy_kwh"] = 1.9
+        planner.coordinator.data["local_session_energy_kwh"] = 1.9
         await planner.async_evaluate("reading")
         self.assertTrue(planner.coordinator.data["switch_enabled"])
-        planner.coordinator.data["session_energy_kwh"] = 2
+        planner.coordinator.data["local_session_energy_kwh"] = 2
         await planner.async_evaluate("reading")
         self.assertFalse(planner.coordinator.data["switch_enabled"])
         self.assertEqual(planner.override["reason"], "energy_target_reached")
 
     async def test_energy_budget_survives_counter_reset_and_ha_restart(self):
         planner = make()
-        planner.coordinator.data["session_energy_kwh"] = 10
+        planner.coordinator.data["local_session_energy_kwh"] = 10
         await planner.async_set_override("energy", energy_kwh=3)
-        planner.coordinator.data["session_energy_kwh"] = 11
+        planner.coordinator.data["local_session_energy_kwh"] = 11
         await planner.async_evaluate("reading")
-        planner.coordinator.data["session_energy_kwh"] = 0.5
+        planner.coordinator.data["local_session_energy_kwh"] = 0.5
         await planner.async_evaluate("counter_reset")
         self.assertEqual(planner.override["delivered_kwh"], 1.5)
         restored = make()
         restored._store = planner._store
-        restored.coordinator.data["session_energy_kwh"] = 2
+        restored.coordinator.data["local_session_energy_kwh"] = 2
         await restored.async_load()
         await restored.async_evaluate("restart")
         self.assertEqual(restored.target_energy_kwh, 3)
@@ -85,7 +84,8 @@ class LocalPlannerTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_energy_fails_closed(self):
         planner = make()
         await planner.async_set_override("energy", energy_kwh=2)
-        planner.coordinator.data["session_energy_kwh"] = None
+        planner.coordinator.data["local_session_energy_kwh"] = None
+        planner.coordinator.data["session_energy_kwh"] = 0  # HA's fallback is not a fresh meter.
         await planner.async_evaluate("missing")
         self.assertFalse(planner.coordinator.data["switch_enabled"])
         self.assertEqual(planner.override["reason"], "energy_meter_unavailable")
@@ -93,7 +93,7 @@ class LocalPlannerTests(unittest.IsolatedAsyncioTestCase):
     async def test_target_edit_preserves_progress(self):
         planner = make()
         await planner.async_set_override("energy", energy_kwh=10)
-        planner.coordinator.data["session_energy_kwh"] = 3
+        planner.coordinator.data["local_session_energy_kwh"] = 3
         await planner.async_evaluate("reading")
         await planner.async_set_target(2)
         self.assertFalse(planner.coordinator.data["switch_enabled"])

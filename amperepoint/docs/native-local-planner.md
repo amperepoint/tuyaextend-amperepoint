@@ -1,6 +1,6 @@
 # PRIME LAN dashboard and HA charging modes
 
-Local beta 0.5.38b4 extends the verified `prime_split_v1` control adapter with
+Local beta 0.5.38b6 extends the verified `prime_split_v1` control adapter with
 the existing Q dashboard controls and an HA-managed planner. Other firmware
 layouts retain their existing capabilities; this is not blanket write support
 for every PRIME product.

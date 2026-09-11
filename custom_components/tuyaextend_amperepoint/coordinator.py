@@ -344,6 +344,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 round(source_power_kw, 3) if source_power_kw is not None else None
             ),
             "session_energy_kwh": round(session_energy_kwh, 3),
+            "local_session_energy_kwh": (
+                prime_telemetry.get("session_energy_kwh")
+                if isinstance(self.native_source, NativeLocalSource) and prime_telemetry else None
+            ),
             "total_energy_kwh": (
                 round(source_total_energy, 3)
                 if source_total_energy is not None

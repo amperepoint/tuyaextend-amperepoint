@@ -156,3 +156,24 @@ class LocalSourceTests(unittest.TestCase):
              patch.object(local.time,"sleep"),patch.object(local,"read_local",side_effect=[result(before),result(after)]):
             response=local.write_local({**CONFIG,"local_control_profile":local.CONTROL_PROFILE},"switch",False)
         self.assertFalse(response["dps"]["140"])
+
+    def test_start_requires_immediate_device_mode_on_fresh_preflight(self):
+        config = {**CONFIG, "local_control_profile": local.CONTROL_PROFILE}
+        for mode in (1, 2, None, False, "0"):
+            before = {**FIXTURE["dps"], "140": False, "150": 12, "151": json.dumps({"m": mode})}
+            result = {"host": CONFIG["local_host"], "dps": before, "family": "prime_split"}
+            with patch.object(local, "read_local", return_value=result):
+                with self.assertRaisesRegex(local.LocalConnectionError, "local_immediate_mode_required"):
+                    local.write_local(config, "switch", True)
+
+    def test_start_verified_by_permission_and_new_state_without_mode_write(self):
+        before = {**FIXTURE["dps"], "140": False, "150": 12, "151": '{"m":0,"c":32}'}
+        after = {**before, "140": True, "101": 300, "109": "STATE_C"}
+        result = lambda dps: {"host": CONFIG["local_host"], "dps": dps, "family": "prime_split"}
+        sent = []
+        driver = SimpleNamespace(set_value=lambda dp, value: sent.append((dp, value)), close=lambda: None)
+        with patch.dict(sys.modules, {"tinytuya": SimpleNamespace(Device=lambda *a, **kw: driver)}), \
+             patch.object(local.time, "sleep"), patch.object(local, "read_local", side_effect=[result(before), result(after)]):
+            response = local.write_local({**CONFIG, "local_control_profile": local.CONTROL_PROFILE}, "switch", True)
+        self.assertEqual(sent, [(140, True)])
+        self.assertEqual(response["dps"]["151"], before["151"])

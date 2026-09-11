@@ -6,7 +6,6 @@ verified permission/current commands; the device must remain in immediate mode.
 from __future__ import annotations
 
 import math
-from typing import Any
 
 from .planner import AmperePointPlanner
 from .planner_model import PlannerConfigError, next_window_start, normalize_windows
@@ -113,6 +112,12 @@ class AmperePointLocalPlanner(AmperePointPlanner):
             raise PlannerConfigError("Local current must be a whole number of amperes")
         return min(current, float(maximum))
 
+    def _energy_meter(self):
+        # Use the fresh device counter, never HA's cached/integrated fallback.
+        value = self.coordinator.data.get("local_session_energy_kwh")
+        valid = type(value) in (int, float) and math.isfinite(value) and value >= 0
+        return "local_session_energy_kwh", float(value) if valid else None
+
     async def async_set_config(self, enabled, windows):
         async with self._lock:
             pass
@@ -128,7 +133,7 @@ class AmperePointLocalPlanner(AmperePointPlanner):
             pass
         if mode == "energy":
             kwargs["energy_kwh"] = self._energy_target(kwargs.get("energy_kwh"))
-            key, baseline = self._energy_meter()
+            _, baseline = self._energy_meter()
             if baseline is None or not math.isfinite(baseline) or baseline < 0:
                 raise PlannerConfigError("No energy meter is available")
             self.target_energy_kwh = kwargs["energy_kwh"]
@@ -143,7 +148,7 @@ class AmperePointLocalPlanner(AmperePointPlanner):
     async def _async_desired(self, now):
         if self.override and self.override.get("mode") == "energy":
             budget = self.override
-            reading = self.coordinator.data.get(budget.get("meter_key"))
+            _, reading = self._energy_meter()
             valid = type(reading) in (int, float) and math.isfinite(reading) and reading >= 0
             if not valid:
                 self.override = {"mode": "pause", "until": None, "reason": "energy_meter_unavailable"}
@@ -153,7 +158,7 @@ class AmperePointLocalPlanner(AmperePointPlanner):
                 delivered = float(budget.get("delivered_kwh", 0))
                 # A resetting session counter starts a new segment, not a new
                 # budget. Both values are persisted for restart recovery.
-                delivered += max(0.0, reading - last) if reading >= last else reading
+                delivered = round(delivered + (max(0.0, reading - last) if reading >= last else reading), 6)
                 changed = last != reading or "last_meter_kwh" not in budget
                 budget.update(last_meter_kwh=reading, delivered_kwh=round(delivered, 6))
                 if delivered >= budget["target_kwh"]:
