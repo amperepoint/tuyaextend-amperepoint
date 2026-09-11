@@ -417,6 +417,8 @@ def _looks_like_amperepoint(text: str) -> bool:
         "evse",
         "mode 3 type 2",
         "wallbox",
+        "prime 11kw",
+        "prime 11 kw",
         "prime 22kw",
         "gbmxngploofmhbjc",
     )
@@ -453,6 +455,7 @@ def _has_prime_telemetry(value: Any) -> bool:
             payload = json.loads(payload)
         except (TypeError, ValueError):
             return False
-    return isinstance(payload, dict) and all(
-        key in payload for key in ("L1", "p", "e", "cp")
+    return isinstance(payload, dict) and (
+        all(key in payload for key in ("L1", "p", "e", "cp"))
+        or all(key in payload for key in ("L", "p", "e", "t"))
     )

@@ -1,298 +1,140 @@
-# Installation
+# Installation — Ampere Point Q Series and Wallbox PRIME
 
-## Wallbox Prime profile installer
+## Choose a connection
 
-For **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`, LAN protocol 3.5**, this
-release supports **local read-only telemetry, not Q Series control parity**.
-Other PIDs and firmware versions require separate compatibility validation.
+| Series | Recommended path | Requirements |
+| --- | --- | --- |
+| Q Series | Tuya Cloud + AmperePoint | Official Tuya integration in HA, internet |
+| Wallbox PRIME | Built-in AmperePoint Local (LAN) | Device ID, local key, LAN and compatible firmware |
 
-Install both AmperePoint (step 2 below) and
-[Tuya Local](https://github.com/make-all/tuya-local) through HACS, then restart HA.
-Tuya Local and LocalTuya are different integrations; this installer requires
-**Tuya Local**. Choose **Add integration → AmperePoint → Add Wallbox Prime profile
-(Tuya Local)**. The installer is also available in **Configure** for an existing
-AmperePoint integration. Submit the form and restart Home Assistant.
+For **Q Series we recommend Tuya Cloud**: our integration currently supports
+a broader DP/feature range through this path than through our local profiles.
+AmperePoint also reads DPS present in the Tuya runtime without dedicated
+official HA entities. Coverage depends on generation and firmware; not every
+DP or phase measurement is guaranteed. Xtend Tuya is not required.
 
-Pair the charger in Tuya Local with its device ID, IP, local key and protocol
-3.5. Choose **Ampere Point Wallbox Prime 22kW (local)**, then use automatic setup
-in AmperePoint for the detected charger. Preserve connection details before
-replacing an existing Tuya Local entry with an incorrect profile.
+For **PRIME, local Tuya protocol support is built into this repository**.
+Separate Tuya Local or LocalTuya is not needed. The official Tuya integration
+can help import credentials, but is not required for LAN operation.
 
-The dashboard reads power, session energy, temperature, phase measurements,
-vehicle connection and session duration when reported by the firmware.
-The profile also exposes diagnostics such as the reported current limit and
-schedule configuration; these are readings, not controls. Missing data does
-not mean a zero measurement.
+## 1. Install through HACS
 
-**Not supported for PRIME in 0.5.37:** start/stop, current-limit changes,
-schedule/mode writes, kWh targets and execution of the HA planner. This release
-does not claim full PRIME/Q Series feature parity. The profile's DP102 telemetry
-requires a local source; the official HA Tuya integration alone is insufficient.
-You do not need to configure the cloud integration in HA for this local path.
+1. Open HACS → menu → **Custom repositories**.
+2. Add `https://github.com/amperepoint/tuyaextend-amperepoint`, category **Integration**.
+3. Download **TuyaExtend AmperePoint** and restart Home Assistant.
+4. Open **Settings → Devices & services → Add integration → AmperePoint**.
+5. Follow the path for your series below.
 
-Ensure LAN connectivity between HA and the charger; a DHCP reservation is useful.
-Obtain the local key following the Tuya Local instructions. The profile installer
-does not retrieve credentials or authorize a Tuya account. Never publish local
-keys or account credentials. Existing different profiles are preserved. Run the
-installer again if a Tuya Local update removes the profile, then restart HA.
+Downloading files in HACS alone does not configure the charger.
 
-AmperePoint is a Home Assistant integration for AmperePoint EV
-chargers. It can use the official Tuya integration directly or consume entities
-from Xtend Tuya, `tuya-local` and LocalTuya. Xtend Tuya is optional.
+## 2A. Q Series — Tuya Cloud
 
-It does not replace device pairing. Step 1 below describes the Q Series cloud
-path; for PRIME, use the local procedure above instead.
+1. Pair the charger in Tuya Smart or Smart Life.
+2. Add the official **Tuya** integration in HA, enter the app account's User Code
+   and complete QR authorization following the [HA instructions](https://www.home-assistant.io/integrations/tuya/).
+3. Confirm that the charger appears among Tuya devices in HA.
+4. Choose the detected-charger setup option in AmperePoint.
+5. Select the charger, configure the tariff and submit.
 
-## 1. Initialize Tuya In Home Assistant
+This path does not require a local key or a separate Tuya Developer account
+for official HA authorization. If discovery fails, reload Tuya and check the
+name/model, for example `Ampere Point Q Series`.
 
-1. Add the charger to the Tuya Smart / Smart Life mobile app.
-2. In Home Assistant, go to:
+Available product features include start/stop, current, modes, energy target,
+planner, measurements and diagnostics. Commands require writable DPS.
+A DP in a product schema is not necessarily returned by the cloud.
 
-```text
-Settings -> Devices & services -> Add integration -> Tuya
-```
+## 2B. Wallbox PRIME — AmperePoint Local (LAN)
 
-3. Complete the official Tuya login / QR authorization flow.
-4. Confirm that the charger appears in Home Assistant.
-5. It is enough for the charger and at least one of its entities to appear in
-   Tuya. TuyaExtend reads the remaining supported DPS from the official
-   integration runtime even when Home Assistant did not create entities for
-   them.
+1. Ensure HA can reach the charger; a router DHCP reservation is recommended.
+2. Choose **AmperePoint Local (LAN)** in the AmperePoint wizard.
+3. Import details from an already authorized Tuya integration, or select manual setup.
+4. Enter the name, **device ID**, **local key**, IP and protocol (tested PRIME: **3.5**).
+5. Empty IP requests discovery. Docker/VLAN may require an explicit IP and LAN routing.
+6. The wizard checks the device and indicates controls or read-only support.
+7. Confirm and open **Ampere Point - Tuya dashboard**.
 
-```text
-switch
-charging current / current limit
-power
-energy
-work state / connection state
-temperature
-```
+**Device ID is not PID.** Device ID identifies the individual charger and is
+needed for connection. PID identifies the product and appears in the diagnostic footer.
 
-The exact DP list depends on the Tuya product generation and firmware.
+The local key is a device secret. If import cannot provide it, obtain it
+through authorized Tuya account tools. Manual retrieval may require a Tuya
+Developer account, Cloud project and linked app account. Our wizard does not
+create that project or authenticate to Tuya Developer. Re-pairing can change the key.
 
-If the charger is not visible through the official Tuya integration, install and
-configure Tuya first. TuyaExtend AmperePoint cannot discover a cloud charger that
-Home Assistant cannot see yet.
+### PRIME scope in 0.5.38
 
-## 2. Install With HACS
+Profiles use the DP contract and firmware, not just name, power rating or PID.
 
-1. Open HACS in Home Assistant.
-2. Go to `Integrations`.
-3. Open the three-dot menu and choose `Custom repositories`.
-4. Add this repository:
+| Feature | Scope |
+| --- | --- |
+| LAN readings | Power, session energy, temperature, status, firmware and available technical values |
+| Start/stop | Verified split `(V7.0.0)F2.0.0` and packed `(V8.0.7)F1.3.6` profiles |
+| Current | Integer 1 A steps, maximum 16 A and never above installation limit DP152 |
+| Modes | Charge now, energy target and scheduled charging — executed by HA |
+| Planner | Multiple weekdays/windows, minute precision, per-window current, overrides and next action |
+| Commands | Independent readback; an ACK alone is insufficient |
+| Restart | Saved plan/settings and automatic LAN reconnection |
 
-```text
-https://github.com/amperepoint/tuyaextend-amperepoint
-```
+Packed was verified with a 16 A installation limit; other limits or unknown
+firmware may remain read-only. Split is also capped at 16 A. This is not a
+claim of full-range controls for every PRIME 11/22 kW variant.
 
-5. Select category:
+**The planner runs in HA, not in the charger's memory.** HA must remain running
+and connected for scheduled stops and energy cutoffs. Keep the device in native
+immediate mode with its own schedules disabled. Avoid competing Tuya or other
+integration controls. We do not write DP151, DP152 or protection settings.
 
-```text
-Integration
-```
+Start/stop, current and a scheduled window were confirmed on zero-load EVSE
+testers. Meter accuracy and energy-target cutoff still need real-vehicle tests.
+Missing CP does not mean the car is disconnected.
+[Packed test report](amperepoint/docs/prime-packed-local-controls-20260911.md).
 
-6. Install `TuyaExtend AmperePoint`.
-7. Restart Home Assistant.
+## 3. Dashboard and settings
 
-## 3. Add The Integration
+One shared **Ampere Point - Tuya dashboard** supports Q Cloud and PRIME LAN.
+Select a charger in the header when several are configured. Each entry has
+its own configuration and planner.
 
-1. Go to:
+**Integration settings** in the footer opens the matching HA entry. LAN options
+allow changing the IP, key and protocol and rechecking verified controls.
+An existing read-only entry need not be deleted. The footer shows source, PID
+and dashboard version.
 
-```text
-Settings -> Devices & services -> Add integration
-```
-
-2. Search for:
-
-```text
-AmperePoint
-```
-
-3. On the welcome screen, choose automatic setup or manual entity mapping.
-4. Select the detected AmperePoint charger and configure the tariff.
-5. Save the entry.
-
-The integration automatically creates one shared `Ampere Point - Tuya dashboard` sidebar panel
-and adopts the remaining detected Tuya chargers as additional entries. Every
-charger appears in the device selector on the panel. Chargers can also be
-added manually from the integration page - that never creates another panel,
-it only adds the device to the selector.
-
-When upgrading from an older version, the integration removes only an
-unchanged dashboard that it generated for a charger. If you edited that legacy
-dashboard, it is kept so your Lovelace changes are not lost.
-
-The integration detects Q Series models from the Tuya device name, model and
-product metadata. If the charger is not detected, rename the Tuya/Home Assistant
-device so that the model is visible in the name, for example:
-
-```text
-AmperePoint Q22 OTA
-AmperePoint Q37
-AmperePoint Q Series
-```
-
-Then reload the Tuya integration or restart Home Assistant and try again.
-
-## 4. Open The AmperePoint Dashboard
-
-The integration creates one `Ampere Point - Tuya dashboard` panel in the Home Assistant sidebar.
-It does not overwrite or edit existing dashboards, and later changes made to
-that panel are preserved across restarts. With more than one charger, the card
-header shows a device selector.
-
-The bundled card resource is registered automatically in standard Home
-Assistant storage-mode dashboards. The card can also be added manually to any
-of your own dashboards:
+Add the card to your own dashboard:
 
 ```yaml
 type: custom:amperepoint-q22-card
+entityPrefix: amperepoint_q_series
 ```
 
-For multiple chargers, pass an entity prefix:
+The technical card name is retained for compatibility; it also supports PRIME.
+For YAML Lovelace add this resource as a `module`:
+`/tuyaextend_amperepoint/frontend/amperepoint-q22-card.js`.
 
-```yaml
-type: custom:amperepoint-q22-card
-entityPrefix: amperepoint_q22_ota
-```
+## 4. Updates and migration
 
-You can also provide explicit entity IDs:
+HACS offers a published release after checking for updates. A GitHub commit
+alone does not install anything on users' systems. Back up HA, update through
+HACS, restart HA and refresh the browser. Check the backend/card version in the footer.
 
-```yaml
-type: custom:amperepoint-q22-card
-entities:
-  switch: switch.amperepoint_q22_ota_charging
-  currentLimit: number.amperepoint_q22_ota_current_limit
-  status: sensor.amperepoint_q22_ota_status
-  power: sensor.amperepoint_q22_ota_power
-  sessionEnergy: sensor.amperepoint_q22_ota_session_energy
-  totalEnergy: sensor.amperepoint_q22_ota_total_energy
-```
+When migrating from separate Tuya Local, preserve connection details and check
+dependent automations. Disable competing LAN connections before enabling ours.
+The wizard can migrate a matching AmperePoint entry to LAN, retaining entities
+and pausing its previous planner. Check dependencies before deleting entries.
 
-If Lovelace is configured in YAML mode, add the card resource manually:
+Xtend Tuya, Tuya Local and LocalTuya remain optional entity sources for existing
+setups, but are not dependencies of built-in PRIME LAN.
 
-```yaml
-resources:
-  - url: /tuyaextend_amperepoint/frontend/amperepoint-q22-card.js
-    type: module
-```
+## Troubleshooting and security
 
-## 5. What The Integration Adds
+- **PRIME missing in Cloud:** use LAN; do not expect full PRIME telemetry from cloud.
+- **LAN error:** check IP, key, protocol, routing and competing LAN clients.
+- **Read-only:** inspect firmware and DPS; do not force another device's profile.
+- **Missing phases:** coverage depends on source; missing measurements are not fabricated.
+- **Old card:** hard-refresh the browser.
+- **Unconfirmed command:** check connectivity, device status and competing automations.
 
-TuyaExtend AmperePoint creates normalized Home Assistant entities such as:
-
-```text
-readable charging status
-vehicle / control-pilot state
-charging power
-current session energy
-total energy
-last session energy
-current limit slider
-charging mode selector
-target energy
-temperature
-fault diagnostics
-system version and a complete raw-DP list
-phase voltage/current/power when DPS are available
-```
-
-With the official Tuya source, DP18 `switch`, DP4 `charge_cur_set`, DP14
-`work_mode` and DP17 `energy_charge` can be controlled without Xtend Tuya when
-the product marks them writable.
-
-Current session energy can be calculated from:
-
-```text
-total energy delta
-native session counter
-power integration fallback
-```
-
-The default for newer Q22 OTA style devices is total-energy delta when a stable
-total counter is available.
-
-## 6. Optional Xtend And Local Sources
-
-If Xtend Tuya is already installed, select its device during automatic setup or
-map its entities manually. This remains compatible with earlier configurations,
-but it is not required.
-
-The repository also contains `tuya-local` profile candidates under:
-
-```text
-amperepoint/profiles/tuya_local/
-```
-
-Local mode is optional and more advanced. It can expose local DPS on some
-chargers, but it usually requires the device local key and a working local Tuya
-setup. The first public HACS path is intentionally based on the official Tuya
-integration because it is easier for normal Home Assistant users.
-
-For PRIME, the installer at the beginning of this manual is recommended.
-Alternatively, install the profile manually:
-
-1. Copy the profile from `amperepoint/profiles/tuya_local/` into
-   `config/custom_components/tuya_local/devices/`.
-2. Restart Home Assistant so tuya-local loads the new profile.
-3. **Only if the existing entry uses the wrong profile:** preserve connection
-   details and check entity/automation references before deleting it. tuya-local can
-   only choose a device profile while *adding* a device; the `Configure`
-   dialog of an existing entry offers local key, host, protocol version and
-   poll-only, never the device type, so an entry created with the wrong
-   profile cannot be repointed at the right one.
-4. `Add integration` -> `Tuya Local` -> enter device id, IP, local key and
-   protocol version (`3.5` for the Prime). The connection must succeed; on
-   failure the credentials form is re-rendered and the flow never reaches
-   profile selection.
-5. In the device-type step pick the charger profile, for example
-   `Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
-
-A HACS update of tuya-local can remove files from its `devices/` directory. If
-the profile disappears after such an update, run the installer again and
-restart HA. Do not delete a correctly paired entry just because of an update.
-
-Once the local source is added, AmperePoint recognizes it as the same physical
-charger and backfills the telemetry mapping into the existing entry - no second
-entry and no second panel are created.
-
-## Troubleshooting
-
-### No charger is detected
-
-- Confirm that the charger appears in the official Tuya integration first.
-- Reload the Tuya integration.
-- Rename the HA device to include `AmperePoint`, `Q22`, `Q37`, or `Q Series`.
-- Restart Home Assistant after installing the HACS integration.
-
-### Phase data is missing
-
-Some Tuya product generations define DP6/DP7/DP8 phase payloads but do not expose
-them through the official Tuya API. The dashboard hides phase sections when those
-values are not available.
-
-### The card does not load
-
-- Hard-refresh the browser.
-- Check that `/tuyaextend_amperepoint/frontend/amperepoint-q22-card.js` is present
-  as a Lovelace resource.
-- In YAML-mode Lovelace, add the resource manually.
-
-### Start/stop or current limit does not work
-
-The official Tuya mode does not require a separate source entity. TuyaExtend
-uses the device's writable DP definition. Confirm that the charger is online and
-that the raw-DP view marks the item with `↔`. Xtend/local sources require a
-correctly mapped writable source entity.
-
-## Security
-
-Do not publish:
-
-```text
-Tuya local keys
-Tuya access tokens
-Home Assistant .storage files
-account identifiers
-unsanitized raw API dumps
-```
+Never publish local keys, tokens, HA `.storage`, account details or unsanitized
+raw dumps. Card/authentication data is redacted in diagnostics. The integration
+does not replace electrical protections or correct installation settings.

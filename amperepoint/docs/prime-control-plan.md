@@ -14,6 +14,17 @@ This does not claim that other Prime firmware or product IDs are compatible.
 
 ## Remaining work for control parity
 
+The UI uses the family name Wallbox PRIME. PRIME 11 kW recognition is included
+with a 16 A model ceiling; a family-only name also uses a conservative 16 A
+fallback. The shared decoder is data-driven, but the 11 kW firmware/DP match
+still needs a real-device check. Do not add an invented PID or assume writable
+capabilities from the product name.
+
+For a smoother local onboarding experience, native LAN transport, device/IP
+discovery and credentials belong to the existing [native local source plan
+(#15)](https://github.com/amperepoint/tuyaextend-amperepoint/issues/15).
+The profile installer is a transitional option, not a bundled Tuya Local runtime.
+
 1. Capture a baseline with the existing read-only profile and record firmware.
 2. Change current in the Tuya app at several allowed settings; correlate DP150,
    DP107, DP152 and DP157, including allowed steps and hard device bounds.

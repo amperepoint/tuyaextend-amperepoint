@@ -8,7 +8,6 @@ from datetime import datetime, time, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.components.tuya.const import TUYA_HA_SIGNAL_UPDATE_ENTITY
 from homeassistant.const import (
     ATTR_UNIT_OF_MEASUREMENT,
     PERCENTAGE,
@@ -21,7 +20,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -79,6 +78,8 @@ from .models import (
     normalize_status,
 )
 from .source import NativeTuyaSource
+from .local_source import LOCAL_SOURCE, NativeLocalSource, LocalConnectionError
+from .prime_diagnostics import readable_rows
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,8 +132,13 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.config_entry = config_entry
         self.model = get_model(self._config(CONF_MODEL))
-        self.native_source = NativeTuyaSource.resolve(hass, config_entry)
-        if self.native_source is not None:
+        self.native_source = (NativeLocalSource(hass, config_entry)
+                              if self._config(CONF_SOURCE_INTEGRATION) == LOCAL_SOURCE
+                              else NativeTuyaSource.resolve(hass, config_entry))
+        if self.native_source is not None and not isinstance(self.native_source, NativeLocalSource):
+            # A LAN-only installation must not import the optional Tuya cloud SDK.
+            from homeassistant.components.tuya.const import TUYA_HA_SIGNAL_UPDATE_ENTITY
+
             config_entry.async_on_unload(
                 async_dispatcher_connect(
                     hass,
@@ -181,6 +187,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._was_connected = bool(data.get("was_connected", False))
 
     async def _async_update_data(self) -> dict[str, Any]:
+        if isinstance(self.native_source, NativeLocalSource):
+            try:
+                await self.native_source.async_refresh()
+            except LocalConnectionError as err:
+                raise UpdateFailed(str(err)) from None
         now = dt_util.utcnow()
         prime_telemetry = _decode_prime_telemetry(self._prime_telemetry_source())
 
@@ -323,6 +334,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         return {
             "model": self.model.name,
+            "product_id": self._product_id(),
             "status": status,
             "vehicle_connected": connected,
             "vehicle_connection_known": connection_known,
@@ -333,6 +345,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 round(source_power_kw, 3) if source_power_kw is not None else None
             ),
             "session_energy_kwh": round(session_energy_kwh, 3),
+            "local_session_energy_kwh": (
+                prime_telemetry.get("session_energy_kwh")
+                if isinstance(self.native_source, NativeLocalSource) and prime_telemetry else None
+            ),
             "total_energy_kwh": (
                 round(source_total_energy, 3)
                 if source_total_energy is not None
@@ -388,18 +404,39 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "schedule_start_time": schedule_window[0] if schedule_window else None,
             "schedule_end_time": schedule_window[1] if schedule_window else None,
             "system_version": self._native_value("system_version"),
-            "raw_dp_count": len(raw_dp),
+            "raw_dp_count": (len(self.native_source.dps)
+                             if isinstance(self.native_source, NativeLocalSource) else len(raw_dp)),
             "raw_dp": raw_dp,
             "dp_metadata": dp_metadata,
             "source_type": (
-                "native_tuya"
+                getattr(self.native_source, "source_type", "native_tuya")
                 if self.native_source
                 else self._config(CONF_SOURCE_INTEGRATION, "entity_mapping")
             ),
+            "local_host": (self.native_source.config.get("local_host")
+                           if isinstance(self.native_source, NativeLocalSource) else None),
+            "read_only": (isinstance(self.native_source, NativeLocalSource)
+                          and not self.native_source.controls_verified),
+            "local_diagnostics": (readable_rows(self.native_source.dps)
+                                  if isinstance(self.native_source, NativeLocalSource) else []),
+            "local_dp_count": (len(self.native_source.dps)
+                               if isinstance(self.native_source, NativeLocalSource) else None),
+            "local_command_status": getattr(self.native_source, "command_status", None),
+            "local_command_error": getattr(self.native_source, "command_error", None),
             "source_online": (
                 self.native_source.available if self.native_source else True
             ),
         }
+
+    def _product_id(self) -> str | None:
+        if self.native_source:
+            return getattr(self.native_source, "product_id", None)
+        for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
+            entity_id = self._config(key)
+            state = self.hass.states.get(entity_id) if entity_id else None
+            if state and state.attributes.get("product_id"):
+                return str(state.attributes["product_id"])
+        return None
 
     def _state_value(self, key: str) -> Any:
         entity_id = self._config(key)
@@ -454,6 +491,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         status entity doubles as a fallback and heals such entries without
         a migration.
         """
+        if isinstance(self.native_source, NativeLocalSource):
+            attrs = self.native_source.attributes()
+            payload = _as_json_mapping(attrs.get('telemetry'))
+            return {**payload, '_electrical_measurements': attrs.get('electrical_measurements')}
         for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
             entity_id = self._config(key)
             if not entity_id:
@@ -463,6 +504,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 continue
             value = state.attributes.get(PRIME_TELEMETRY_ATTRIBUTE)
             if value is not None:
+                electrical = state.attributes.get("electrical_measurements")
+                if electrical is not None:
+                    payload = _as_json_mapping(value)
+                    if payload:
+                        return {**payload, "_electrical_measurements": electrical}
                 return value
         return None
 
@@ -503,6 +549,17 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         snapshot, while local entries without a packed source are rebuilt from
         their mapped entities.
         """
+        if isinstance(self.native_source, NativeLocalSource):
+            attrs = self.native_source.attributes()
+            state = self.native_source.raw('work_state')
+            values = self.native_source.values()
+            metadata = self.native_source.definitions()
+            for dp in (101, 102, 106, 109, 117):
+                values.pop(f'dp_{dp}', None)
+                metadata.pop(f'dp_{dp}', None)
+            values.update(_prime_raw_values(state, attrs))
+            metadata.update(_prime_raw_metadata(state, attrs))
+            return values, metadata
         values = self._mapped_raw_values()
         metadata = self._mapped_raw_metadata()
         # An existing cloud entry may be enriched later with a tuya-local
@@ -778,6 +835,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return now - self._complete_candidate_since >= timedelta(minutes=idle_minutes)
 
     async def async_set_current_limit(self, value: float) -> None:
+        self._assert_not_local_read_only("charge_cur_set")
         entity_id = self._config(CONF_SOURCE_CURRENT_LIMIT)
         if not entity_id:
             if self.native_source and self.native_source.writable("charge_cur_set"):
@@ -798,6 +856,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise HomeAssistantError(f"Unsupported current limit source domain: {domain}")
 
     async def async_set_charging(self, enabled: bool) -> None:
+        self._assert_not_local_read_only("switch")
         entity_id = self._config(CONF_SOURCE_CHARGE_SWITCH)
         if not entity_id:
             if self.native_source and self.native_source.writable("switch"):
@@ -818,6 +877,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         raise HomeAssistantError(f"Unsupported charging switch source domain: {domain}")
 
+    def _assert_not_local_read_only(self, code: str | None = None) -> None:
+        if isinstance(self.native_source, NativeLocalSource) and not self.native_source.writable(code):
+            raise HomeAssistantError('AmperePoint Local: this tested profile is read-only')
+
     @property
     def model_limits(self) -> AmperePointModel:
         return self.model
@@ -834,6 +897,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.native_source.definition(code)
 
     async def async_set_work_mode(self, value: str) -> None:
+        if isinstance(self.native_source, NativeLocalSource):
+            raise HomeAssistantError("PRIME device mode is read-only: select immediate charging in the device app before using the HA planner (DP151.m must be 0)")
+        self._assert_not_local_read_only()
         entity_id = self._config(CONF_SOURCE_WORK_MODE)
         if entity_id:
             if entity_id.split(".", 1)[0] != "select":
@@ -851,6 +917,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise HomeAssistantError("No writable work mode source configured")
 
     async def async_set_target_energy(self, value: float) -> None:
+        self._assert_not_local_read_only()
         entity_id = self._config(CONF_SOURCE_TARGET_ENERGY)
         if entity_id:
             domain = entity_id.split(".", 1)[0]
@@ -869,6 +936,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise HomeAssistantError("No writable target energy source configured")
 
     async def async_set_schedule_boundary(self, boundary: str, value: time) -> None:
+        self._assert_not_local_read_only()
         if self.native_source is None or not self.native_source.writable("local_timer"):
             raise HomeAssistantError("No writable schedule source configured")
         if value.minute or value.second or value.microsecond:
@@ -914,8 +982,10 @@ def _decode_prime_phase(value: Any) -> dict[str, float | None] | None:
     return {"voltage": voltage, "current": current, "power": power}
 
 
-def _decode_prime_telemetry(value: Any) -> dict[str, Any] | None:
-    """Decode the Wallbox Prime 22kW JSON payload exposed by tuya-local."""
+def _decode_prime_telemetry(
+    value: Any, electrical_measurements: Any = None
+) -> dict[str, Any] | None:
+    """Decode known PRIME telemetry shapes without inventing missing phase data."""
     payload = value
     if isinstance(payload, str):
         try:
@@ -931,7 +1001,16 @@ def _decode_prime_telemetry(value: Any) -> dict[str, Any] | None:
         phase: _decode_prime_phase(payload.get(phase))
         for phase in ("L1", "L2", "L3")
     }
-    cp_voltage_v = _scaled_number(payload.get("cp"))
+    electrical = _as_json_mapping(
+        electrical_measurements if electrical_measurements is not None
+        else payload.get("_electrical_measurements")
+    )
+    # Split firmware reports control pilot in DP117, not DP102. Its two-item
+    # phase arrays and aggregate L field are not the older three-item payload.
+    # Keep phase load readings unknown until their scaling is measured under load.
+    cp_voltage_v = _scaled_number(
+        payload.get("cp") if payload.get("cp") is not None else electrical.get("cp")
+    )
     vehicle_connected: bool | None = None
     if cp_voltage_v is not None:
         if 2.0 <= cp_voltage_v < 11.0:
@@ -967,6 +1046,7 @@ PRIME_DP_CODES: tuple[tuple[str, str, int], ...] = (
     (PRIME_TELEMETRY_ATTRIBUTE, "telemetry", 102),
     ("session_data", "session_data", 103),
     ("device_information", "device_information", 106),
+    ("electrical_measurements", "electrical_measurements", 117),
 )
 
 
@@ -1031,6 +1111,9 @@ def _prime_raw_values(state: Any, attributes: dict[str, Any]) -> dict[str, Any]:
     values["work_state"] = state
     fields = _prime_telemetry_fields(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
     values.update({code: field["raw"] for code, field in fields.items()})
+    electrical = _as_json_mapping(attributes.get("electrical_measurements"))
+    if "cp_voltage_v" not in values and _scaled_number(electrical.get("cp")) is not None:
+        values["cp_voltage_v"] = electrical["cp"]
     return values
 
 
@@ -1040,7 +1123,9 @@ def _prime_raw_metadata(state: Any, attributes: dict[str, Any]) -> dict[str, Any
     Without this the dashboard shows the JSON payloads verbatim in both the
     raw and the decoded column, with no DP number.
     """
-    telemetry = _decode_prime_telemetry(attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+    telemetry = _decode_prime_telemetry(
+        attributes.get(PRIME_TELEMETRY_ATTRIBUTE), attributes.get("electrical_measurements")
+    )
     if telemetry is None:
         return {}
 
@@ -1061,6 +1146,13 @@ def _prime_raw_metadata(state: Any, attributes: dict[str, Any]) -> dict[str, Any
             "writable": False,
             "unit": field["unit"],
             "meaning": f"{field['scaled']:g} {field['unit']}",
+        }
+    electrical = _as_json_mapping(attributes.get("electrical_measurements"))
+    cp_voltage = _scaled_number(electrical.get("cp"))
+    if "cp_voltage_v" not in metadata and cp_voltage is not None:
+        metadata["cp_voltage_v"] = {
+            "dp_id": 117, "writable": False, "unit": "V",
+            "meaning": f"{cp_voltage:g} V",
         }
     if "device_information" in metadata:
         info = _as_json_mapping(attributes.get("device_information"))

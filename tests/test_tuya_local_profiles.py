@@ -46,6 +46,7 @@ ALLOWED_DPS_TYPES = {
 # earlier releases for chargers that cannot be measured here, so they are
 # only checked against the structural rules, not against these conventions.
 MAINTAINED_FILENAMES = (
+    "amperepoint_prime_split_evcharger.yaml",
     "amperepoint_prime_22kw_evcharger.yaml",
     "amperepoint_q11_pro_evcharger.yaml",
 )
@@ -60,6 +61,17 @@ def _profiles() -> list[tuple[str, dict]]:
 
 
 class TuyaLocalProfileTests(unittest.TestCase):
+    def test_split_prime_matches_observed_types_and_remains_read_only(self) -> None:
+        config = dict(_profiles())["amperepoint_prime_split_evcharger.yaml"]
+        self.assertEqual(config["products"][0]["id"], "3tajnmwugclfmotb")
+        observed = {101: "integer", 102: "json", 106: "json", 107: "json",
+                    109: "string", 117: "json", 150: "integer", 151: "json",
+                    152: "integer", 153: "string", 154: "boolean", 157: "integer"}
+        for entity in config["entities"]:
+            self.assertIn(entity["entity"], ("sensor", "binary_sensor"))
+            for dp in entity["dps"]:
+                self.assertEqual(dp["type"], observed[dp["id"]])
+        self.assertNotIn("22", config["name"])
     def setUp(self) -> None:
         self.profiles = _profiles()
         self.assertTrue(self.profiles, "no tuya-local profiles found")

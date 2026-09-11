@@ -8,6 +8,6 @@
   "integration_type": "device",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/amperepoint/tuyaextend-amperepoint/issues",
-  "requirements": [],
-  "version": "0.5.37"
+  "requirements": ["tinytuya==1.20.0"],
+  "version": "0.5.38"
 }

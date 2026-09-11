@@ -105,6 +105,33 @@ assert.equal(card.apSelectedDeviceId(), "garage");
 
 console.log("frontend device selector tests passed");
 
+test("PID footer uses only the selected charger and remains visible when unknown", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: { rawDp: "sensor.first_raw" }, language: "en" });
+  instance.render = () => {};
+  instance._hass = { states: {
+    "sensor.first_raw": { state: "22", attributes: { product_id: "first-pid" } },
+    "sensor.second_raw": { state: "22", attributes: { product_id: "second-pid" } },
+  } };
+  assert.equal(instance.detectedProductId(), "first-pid");
+  assert.match(instance.productIdFooter(), /PID: <strong>first-pid<\/strong>/);
+  instance.config.entities.rawDp = "sensor.second_raw";
+  assert.equal(instance.detectedProductId(), "second-pid");
+  instance.config.entities.rawDp = "sensor.missing";
+  assert.equal(instance.detectedProductId(), null);
+  assert.match(instance.productIdFooter(), /PID: <strong>not detected<\/strong>/);
+});
+
+test("PID footer escapes source text and does not hide last identity while offline", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: { rawDp: "sensor.raw" } });
+  instance._hass = { states: {
+    "sensor.raw": { state: "unavailable", attributes: { product_id: '<img src=x onerror="bad()">' } },
+  } };
+  assert.match(instance.productIdFooter(), /&lt;img/);
+  assert.doesNotMatch(instance.productIdFooter(), /<img/);
+});
+
 // A charger applies a new current limit before its entity reports it, so the
 // card holds the requested value instead of snapping the slider back.
 const limitCard = new Card();
@@ -482,6 +509,56 @@ test("a necessary DOM replacement preserves scroll, details and an edited field"
     if (originalRequest === undefined) delete globalThis.requestAnimationFrame;
     else globalThis.requestAnimationFrame = originalRequest;
   }
+});
+
+test("local charging control can stop an enabled zero-load tester", async () => {
+  const instance = new Card();
+  instance.setConfig({entities:{rawDp:"sensor.dp",power:"sensor.power",switch:"switch.ev"}});
+  instance.render = () => {};
+  const calls=[];
+  instance._hass={states:{
+    "sensor.dp":{state:"1",attributes:{source_type:"amperepoint_local"}},
+    "sensor.power":{state:"0",attributes:{}},
+    "switch.ev":{state:"on",attributes:{}},
+  },callService:async (...args)=>calls.push(args)};
+  assert.equal(instance.isCharging(),false);
+  assert.equal(instance.chargingControlState(),true);
+  await instance.toggleCharging();
+  instance.clearPendingCharging();
+  assert.equal(calls[0][1],"turn_off");
+});
+
+test("local tables show readable labels, false and zero, and escape device text", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: {rawDp: "sensor.local_dp"} });
+  instance._hass = { language: "pl", states: { "sensor.local_dp": {state: "3", attributes: {
+    source_type: "amperepoint_local",
+    local_diagnostics: [
+      {dp:"140",group:"settings",label:{pl:"Ładowanie włączone",en:"Enabled"},value:false,note:{pl:"Potwierdzone"}},
+      {dp:"102",path:"p",group:"session",label:{pl:"Moc",en:"Power"},value:0,unit:"kW"},
+      {dp:"999",group:"technical",label:{en:"DP999"},value:"<script>bad()</script>",note:{pl:"Znaczenie niepotwierdzone"}},
+    ],
+  }}}};
+  const html = instance.localDataTables();
+  assert.match(html,/Ładowanie włączone/);
+  assert.match(html,/>Nie</);
+  assert.match(html,/>0 kW</);
+  assert.match(html,/DP102 · p/);
+  assert.match(html,/&lt;script&gt;/);
+  assert.doesNotMatch(html,/<script>/);
+  assert.match(html,/Dodatkowe wartości techniczne/);
+  assert.doesNotMatch(html,/niepotwierdzone|OBJAŚNIENIE/);
+});
+
+test("disabled planner does not claim an active weekly plan or next action", () => {
+  const instance = new Card();
+  instance.setConfig({});
+  instance._hass = {language:"pl", states:{}};
+  const attributes = {enabled:false, next_action:{action:"start",at:"2026-09-12T10:00:00+02:00"}};
+  assert.match(instance.plannerOverrideBanner(null, attributes), /planer wyłączony/);
+  assert.doesNotMatch(instance.plannerOverrideBanner(null, attributes), /Aktywny jest plan/);
+  assert.match(instance.plannerEffectiveNext(attributes).text, /Brak zaplanowanej akcji/);
+  assert.match(instance.plannerOverrideBanner({mode:"pause",reason:"energy_ready"}), /Gotowe do doładowania/);
 });
 
 test("disconnect cancels queued rendering and delayed restoration", () => {

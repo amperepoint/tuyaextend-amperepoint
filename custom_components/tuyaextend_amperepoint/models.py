@@ -68,6 +68,22 @@ MODELS: dict[str, AmperePointModel] = {
         min_current_a=6,
         max_current_a=32,
     ),
+    # A family-only label must not imply a 32 A device. Source capabilities
+    # still determine which controls exist; the PRIME profile is read-only.
+    "prime": AmperePointModel(
+        key="prime",
+        name="Ampere Point Wallbox PRIME",
+        phases=3,
+        min_current_a=6,
+        max_current_a=16,
+    ),
+    "prime_11kw": AmperePointModel(
+        key="prime_11kw",
+        name="Ampere Point Wallbox Prime 11kW",
+        phases=3,
+        min_current_a=6,
+        max_current_a=16,
+    ),
     "prime_22kw": AmperePointModel(
         key="prime_22kw",
         name="Ampere Point Wallbox Prime 22kW",
@@ -80,9 +96,10 @@ MODELS: dict[str, AmperePointModel] = {
 DEFAULT_MODEL = "q_series"
 
 MODEL_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("prime_11kw", ("prime 11kw", "prime 11 kw")),
     (
         "prime_22kw",
-        ("wallbox prime", "prime 22kw", "gbmxngploofmhbjc"),
+        ("prime 22kw", "prime 22 kw", "gbmxngploofmhbjc"),
     ),
     ("q22_ota", ("q22 ota", "q22_ota", "cu111poj2mtikvls")),
     # "ev charger ve" and the product id fdfjiphjxtc9qyhd are NOT listed for
@@ -190,7 +207,12 @@ def detect_model_key(value: Any) -> str:
         for model_key, aliases in MODEL_ALIASES
         if any(alias in raw for alias in aliases)
     }
+    if "prime_11kw" in matched and "q11" not in raw:
+        # The generic "11kw" alias belongs to Q11, not an explicitly named PRIME.
+        matched.discard("q11")
     if len(matched) != 1:
+        if "wallbox prime" in raw or any(key.startswith("prime") for key in matched):
+            return "prime"
         return DEFAULT_MODEL
     return matched.pop()
 

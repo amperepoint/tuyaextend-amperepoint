@@ -3,11 +3,11 @@
     "step": {
       "user": {
         "title": "Witaj w AmperePoint",
-        "description": "Wykryto zgodne ładowarki Tuya: {count}. Wybierz automatyczną konfigurację albo ręcznie przypisz encje.",
+        "description": "Wybierz połączenie lokalne LAN albo wykorzystaj encje z istniejącej integracji. Wykryte źródła encji: {count}. AmperePoint Local nie wymaga dodatku Tuya Local.",
         "menu_options": {
           "automatic": "Skonfiguruj wykrytą ładowarkę",
           "manual": "Przypisz encje ręcznie",
-          "prime_profile": "Dodaj profil Wallbox Prime (Tuya Local)"
+          "local": "AmperePoint Local (LAN)"
         }
       },
       "automatic": {
@@ -71,7 +71,42 @@
       },
       "prime_profile": {
         "title": "Dodaj profil Wallbox Prime (Tuya Local)",
-        "description": "Zainstaluj najpierw Tuya Local przez HACS. Po zatwierdzeniu dodamy profil Wallbox Prime 22 kW (PID gbmxngploofmhbjc) do Tuya Local. Profil obsługuje odczyt mocy, energii sesji, temperatury, faz i podłączenia auta. Sterowanie start/stop, regulacja prądu i planer nie są jeszcze obsługiwane. Istniejący profil o innej zawartości nie zostanie nadpisany."
+        "description": "Dodaj profil Wallbox PRIME do Tuya Local. Profil odczytuje dane udostępniane przez ładowarkę: moc, energię sesji, temperaturę, pomiary faz i podłączenie auta. Dostępność danych zależy od zgodności DP urządzenia. Start/stop, regulacja prądu i planer nie są jeszcze obsługiwane. Wymagana jest instalacja Tuya Local przez HACS. Istniejący profil o innej zawartości pozostanie bez zmian."
+      },
+      "local": {
+        "title": "AmperePoint Local",
+        "description": "Bezpośrednie połączenie LAN — bez dodatku Tuya Local. Rozpoznany, zweryfikowany wariant PRIME otrzyma panel ze sterowaniem i planerem HA. Pozostałe zgodne warianty pozwalają na odczyt danych.",
+        "menu_options": {
+          "local_import": "Wybierz ładowarkę z Tuya w HA",
+          "local_manual": "Podaj Device ID i local key"
+        }
+      },
+      "local_manual": {
+        "title": "AmperePoint Local",
+        "description": "Dane zostaną zapisane w konfiguracji HA. Odczyt działa lokalnie, bez konta Tuya w HA. Puste IP uruchomi wykrywanie; w Dockerze lub między VLAN-ami może być potrzebny ręczny adres.",
+        "data": {
+          "name": "Nazwa ładowarki",
+          "local_device_id": "Ładowarka / Device ID",
+          "local_key": "Local key",
+          "local_host": "Adres IP (puste = wykryj automatycznie)",
+          "local_protocol": "Protokół LAN"
+        }
+      },
+      "local_import": {
+        "title": "Wybierz ładowarkę",
+        "description": "Jednorazowo skopiujemy local key z już autoryzowanej integracji Tuya w HA. Późniejsze odczyty będą wyłącznie po LAN, bez chmurowego źródła zapasowego.",
+        "data": {
+          "local_device_id": "Ładowarka / Device ID",
+          "local_host": "Adres IP (puste = wykryj automatycznie)"
+        }
+      },
+      "local_confirm": {
+        "title": "Połączenie LAN działa",
+        "description": "{name} odpowiada pod {host}. Rozpoznano PRIME ze wsparciem sterowania LAN. Po zatwierdzeniu otrzymasz pełny panel: start/stop, limit prądu, ładowanie do zadanej energii i planer tygodniowy. Samo dodanie nie zmienia stanu ładowarki. Zapisane plany pozostaną wyłączone do ich włączenia przez Ciebie. Tryby i planer wykonuje HA, który musi działać i mieć połączenie LAN. W aplikacji ładowarki pozostaw tryb natychmiastowy."
+      },
+      "local_confirm_read_only": {
+        "title": "Połączenie LAN działa — odczyt danych",
+        "description": "{name} odpowiada pod {host}. Odczyt danych jest obsługiwany, ale ten układ DP lub firmware nie ma jeszcze zweryfikowanego sterowania. Po zatwierdzeniu uruchomimy panel pomiarów i diagnostyki, bez start/stop i planera. Nie wymaga to dodatku Tuya Local."
       }
     },
     "error": {
@@ -79,11 +114,17 @@
       "prime_tuya_local_missing": "Nie znaleziono instalacji Tuya Local. Zainstaluj ją przez HACS, uruchom ponownie HA i spróbuj ponownie.",
       "prime_profile_path_error": "Katalog Tuya Local używa przekierowanej ścieżki. Zainstaluj profil ręcznie zgodnie z instrukcją w repozytorium.",
       "prime_profile_conflict": "Plik profilu już istnieje i ma inną zawartość. Zachowaliśmy go. Porównaj go z profilem w repozytorium przed ręczną aktualizacją.",
-      "prime_profile_write_error": "Nie udało się zapisać profilu. Sprawdź uprawnienia katalogu Tuya Local i log Home Assistant."
+      "prime_profile_write_error": "Nie udało się zapisać profilu. Sprawdź uprawnienia katalogu Tuya Local i log Home Assistant.",
+      "local_cannot_connect": "Brak poprawnej odpowiedzi LAN. Sprawdź IP, local key i protokół. Zamknij inne połączenie lokalne do ładowarki.",
+      "local_not_found": "Nie wykryto ładowarki. Podaj jej adres IP i spróbuj ponownie.",
+      "local_invalid_credentials": "Sprawdź Device ID, 16-znakowy local key i protokół.",
+      "local_invalid_host": "Podaj prywatny adres IPv4 ładowarki.",
+      "local_unsupported": "Połączenie odpowiada, ale tego układu DP jeszcze nie obsługujemy."
     },
     "abort": {
       "already_configured": "To zrodlo AmperePoint jest juz skonfigurowane.",
-      "prime_profile_installed": "Profil Prime jest zainstalowany. Uruchom ponownie Home Assistant. Następnie dodaj ładowarkę przez Tuya Local, podając jej ID, adres IP, local key i protokół 3.5; wybierz profil Ampere Point Wallbox Prime 22kW (local). Jeżeli ładowarka ma błędny profil, zachowaj dane połączenia i dodaj jej wpis Tuya Local ponownie. W AmperePoint wybierz automatyczną konfigurację wykrytej ładowarki. Po aktualizacji Tuya Local użyj tego instalatora ponownie, jeśli profil zniknie."
+      "prime_profile_installed": "Profil Prime jest zainstalowany. Uruchom ponownie Home Assistant. Następnie dodaj ładowarkę przez Tuya Local, podając jej ID, adres IP, local key i protokół 3.5; wybierz profil Wallbox PRIME pasujący do danych urządzenia (nazwa starszego profilu może się różnić). Jeżeli ładowarka ma błędny profil, zachowaj dane połączenia i dodaj jej wpis Tuya Local ponownie. W AmperePoint wybierz automatyczną konfigurację wykrytej ładowarki. Po aktualizacji Tuya Local użyj tego instalatora ponownie, jeśli profil zniknie.",
+      "local_migrated": "Istniejąca ładowarka została przełączona na AmperePoint Local. Otwórz dashboard."
     }
   },
   "options": {
@@ -91,8 +132,7 @@
       "init": {
         "title": "Ustawienia AmperePoint",
         "menu_options": {
-          "settings": "Model, encje i taryfa",
-          "prime_profile": "Dodaj profil Wallbox Prime (Tuya Local)"
+          "settings": "Model, encje i taryfa"
         }
       },
       "settings": {
@@ -137,17 +177,35 @@
       },
       "prime_profile": {
         "title": "Dodaj profil Wallbox Prime (Tuya Local)",
-        "description": "Zainstaluj najpierw Tuya Local przez HACS. Po zatwierdzeniu dodamy profil Wallbox Prime 22 kW (PID gbmxngploofmhbjc) do Tuya Local. Profil obsługuje odczyt mocy, energii sesji, temperatury, faz i podłączenia auta. Sterowanie start/stop, regulacja prądu i planer nie są jeszcze obsługiwane. Istniejący profil o innej zawartości nie zostanie nadpisany."
+        "description": "Dodaj profil Wallbox PRIME do Tuya Local. Profil odczytuje dane udostępniane przez ładowarkę: moc, energię sesji, temperaturę, pomiary faz i podłączenie auta. Dostępność danych zależy od zgodności DP urządzenia. Start/stop, regulacja prądu i planer nie są jeszcze obsługiwane. Wymagana jest instalacja Tuya Local przez HACS. Istniejący profil o innej zawartości pozostanie bez zmian."
+      },
+      "local_connection": {
+        "title": "Połączenie AmperePoint Local",
+        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie jest dostępne dla zweryfikowanego układu firmware PRIME, do 16 A i nie powyżej DP152. Tryby ładowania i plan tygodniowy wykonuje Home Assistant przez LAN — HA musi być uruchomiony. W aplikacji ładowarki pozostaw tryb natychmiastowy.",
+        "data": {
+          "name": "Nazwa ładowarki",
+          "local_device_id": "Ładowarka / Device ID",
+          "local_key": "Local key",
+          "local_host": "Adres IP (puste = wykryj automatycznie)",
+          "local_protocol": "Protokół LAN",
+          "enable_test_controls": "Sterowanie LAN i planer HA (wyłącz, aby używać tylko odczytu)"
+        }
       }
     },
     "error": {
       "prime_tuya_local_missing": "Nie znaleziono instalacji Tuya Local. Zainstaluj ją przez HACS, uruchom ponownie HA i spróbuj ponownie.",
       "prime_profile_path_error": "Katalog Tuya Local używa przekierowanej ścieżki. Zainstaluj profil ręcznie zgodnie z instrukcją w repozytorium.",
       "prime_profile_conflict": "Plik profilu już istnieje i ma inną zawartość. Zachowaliśmy go. Porównaj go z profilem w repozytorium przed ręczną aktualizacją.",
-      "prime_profile_write_error": "Nie udało się zapisać profilu. Sprawdź uprawnienia katalogu Tuya Local i log Home Assistant."
+      "prime_profile_write_error": "Nie udało się zapisać profilu. Sprawdź uprawnienia katalogu Tuya Local i log Home Assistant.",
+      "local_cannot_connect": "Brak poprawnej odpowiedzi LAN. Sprawdź IP, local key i protokół. Zamknij inne połączenie lokalne do ładowarki.",
+      "local_not_found": "Nie wykryto ładowarki. Podaj jej adres IP i spróbuj ponownie.",
+      "local_invalid_credentials": "Sprawdź Device ID, 16-znakowy local key i protokół.",
+      "local_invalid_host": "Podaj prywatny adres IPv4 ładowarki.",
+      "local_unsupported": "Połączenie odpowiada, ale tego układu DP jeszcze nie obsługujemy."
     },
     "abort": {
-      "prime_profile_installed": "Profil Prime jest zainstalowany. Uruchom ponownie Home Assistant. Następnie dodaj ładowarkę przez Tuya Local, podając jej ID, adres IP, local key i protokół 3.5; wybierz profil Ampere Point Wallbox Prime 22kW (local). Jeżeli ładowarka ma błędny profil, zachowaj dane połączenia i dodaj jej wpis Tuya Local ponownie. W AmperePoint wybierz automatyczną konfigurację wykrytej ładowarki. Po aktualizacji Tuya Local użyj tego instalatora ponownie, jeśli profil zniknie."
+      "prime_profile_installed": "Profil Prime jest zainstalowany. Uruchom ponownie Home Assistant. Następnie dodaj ładowarkę przez Tuya Local, podając jej ID, adres IP, local key i protokół 3.5; wybierz profil Wallbox PRIME pasujący do danych urządzenia (nazwa starszego profilu może się różnić). Jeżeli ładowarka ma błędny profil, zachowaj dane połączenia i dodaj jej wpis Tuya Local ponownie. W AmperePoint wybierz automatyczną konfigurację wykrytej ładowarki. Po aktualizacji Tuya Local użyj tego instalatora ponownie, jeśli profil zniknie.",
+      "local_updated": "Dane połączenia zostały sprawdzone i zapisane."
     }
   },
   "entity": {

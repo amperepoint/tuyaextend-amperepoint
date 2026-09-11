@@ -510,8 +510,12 @@ class AmperePointPlanner:
                 if self.retry_after
                 else None,
                 "managed_charging": self.managed_charging,
+                **self._storage_extra(),
             }
         )
+
+    def _storage_extra(self) -> dict[str, Any]:
+        return {}
 
 
 def _serialize_window(window: dict[str, Any] | None) -> dict[str, Any] | None:

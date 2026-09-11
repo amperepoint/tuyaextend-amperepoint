@@ -86,6 +86,31 @@ def _make_coordinator() -> object:
 
 
 class PrimeTelemetryDecodeTests(unittest.TestCase):
+    def test_split_prime_tester_snapshot(self) -> None:
+        payload = {"L": [2280, 0, 0], "t": 360, "p": 0, "d": 0, "e": 0}
+        electrical = {"L1": [2270, 0], "L2": [0, 0], "L3": [0, 0], "cp": 61}
+        self.assertTrue(discovery._has_prime_telemetry(json.dumps(payload)))
+        instance = _make_coordinator()
+        instance.model = models.get_model("prime")
+        instance.hass.states._states["sensor.prime_charging_status"] = _state(
+            "STATE_C", telemetry=json.dumps(payload),
+            electrical_measurements=json.dumps(electrical), state_code=300,
+        )
+        result = asyncio.run(instance._async_update_data())
+        self.assertEqual(result["power_kw"], 0)
+        self.assertEqual(result["temperature_c"], 36)
+        self.assertEqual(result["cp_voltage_v"], 6.1)
+        self.assertIs(result["vehicle_connected"], True)
+        self.assertIsNone(result["power_l1"])
+        self.assertNotEqual(result["status"], "Ladowanie")
+        self.assertEqual(result["dp_metadata"]["electrical_measurements"]["dp_id"], 117)
+        self.assertEqual(result["dp_metadata"]["cp_voltage_v"]["dp_id"], 117)
+        self.assertEqual(result["raw_dp"]["cp_voltage_v"], 61)
+
+    def test_split_missing_electrical_data_does_not_imply_unplugged(self) -> None:
+        result = coordinator._decode_prime_telemetry({"L": [2280, 0, 0], "p": 0, "e": 0})
+        self.assertIsNone(result["vehicle_connected"])
+
     def test_charging_payload_is_scaled(self) -> None:
         decoded = coordinator._decode_prime_telemetry(CHARGING_PAYLOAD)
         self.assertEqual(

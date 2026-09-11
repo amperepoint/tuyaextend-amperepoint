@@ -9,6 +9,7 @@ from .const import CONF_MODEL, CONF_SOURCE_WORK_MODE, DOMAIN
 from .coordinator import AmperePointCoordinator
 from .entity import AmperePointEntity, AmperePointEntityDescription
 from .models import MODELS
+from .local_planner import AmperePointLocalPlanner, MODES
 
 
 MODEL_DESCRIPTION = AmperePointEntityDescription(
@@ -36,7 +37,7 @@ async def async_setup_entry(
     )
     if (
         mode_source and mode_source.split(".", 1)[0] == "select"
-    ) or coordinator.can_write_dp("work_mode"):
+    ) or coordinator.can_write_dp("work_mode") or isinstance(getattr(coordinator, "planner", None), AmperePointLocalPlanner):
         entities.append(AmperePointChargingModeSelect(coordinator))
     async_add_entities(entities)
 
@@ -72,8 +73,15 @@ class AmperePointChargingModeSelect(AmperePointEntity, SelectEntity):
     def __init__(self, coordinator: AmperePointCoordinator) -> None:
         super().__init__(coordinator, CHARGING_MODE_DESCRIPTION)
 
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            self.async_on_remove(self.coordinator.planner.async_add_listener(self.async_write_ha_state))
+
     @property
     def options(self) -> list[str]:
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            return list(MODES)
         source_entity = self.coordinator._config(CONF_SOURCE_WORK_MODE)
         if source_entity:
             state = self.hass.states.get(source_entity)
@@ -83,8 +91,13 @@ class AmperePointChargingModeSelect(AmperePointEntity, SelectEntity):
 
     @property
     def current_option(self) -> str | None:
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            return self.coordinator.planner.charging_mode
         return self.coordinator.data.get("work_mode")
 
     async def async_select_option(self, option: str) -> None:
-        await self.coordinator.async_set_work_mode(option)
+        if isinstance(getattr(self.coordinator, "planner", None), AmperePointLocalPlanner):
+            await self.coordinator.planner.async_set_mode(option)
+        else:
+            await self.coordinator.async_set_work_mode(option)
         await self.coordinator.async_request_refresh()

@@ -44,9 +44,15 @@
       }
       customElements.define("ha-icon", MockHaIcon);
 
-      window.renderAmperepointPreview = async ({ entities, states }) => {
+      window.renderAmperepointPreview = async ({ entities, states, config = {}, caption = "" }) => {
         await customElements.whenDefined("amperepoint-q22-card");
         document.body.replaceChildren();
+        if (caption) {
+          const label = document.createElement("div");
+          label.textContent = caption;
+          label.style.cssText = "color:#b7c3ca;font:500 15px system-ui;padding:0 0 18px;letter-spacing:.06em";
+          document.body.appendChild(label);
+        }
         const card = document.createElement("amperepoint-q22-card");
         card.setConfig({
           title: "AmperePoint Q11",
@@ -54,8 +60,9 @@
           language: "pl",
           maxPowerKw: 22,
           configEntryId: "demo-entry",
-          dashboardVersion: "0.5.2",
+          dashboardVersion: AP_Q22_DASHBOARD_VERSION,
           entities,
+          ...config,
         });
         document.body.appendChild(card);
         card.hass = {

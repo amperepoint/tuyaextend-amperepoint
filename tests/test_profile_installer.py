@@ -18,6 +18,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ProfileInstallerTests(unittest.TestCase):
+    def test_family_installer_includes_split_generation(self):
+        self.prepare_tuya_local()
+        self.assertEqual(installer.install_prime_profiles(str(self.root)), "prime_profile_installed")
+        for name in (installer.PROFILE_NAME, installer.SPLIT_PROFILE_NAME):
+            self.assertTrue((self.devices / name).is_file())
+            canonical = ROOT / "amperepoint/profiles/tuya_local" / name
+            self.assertEqual(canonical.read_text(encoding="utf-8"),
+                             (self.devices / name).read_text(encoding="utf-8"))
+
+    def test_old_conflict_does_not_block_new_generation(self):
+        target = self.prepare_tuya_local()
+        target.write_text("custom profile", encoding="utf-8")
+        self.assertEqual(installer.install_prime_profiles(str(self.root)), "prime_profile_conflict")
+        self.assertEqual(target.read_text(), "custom profile")
+        self.assertTrue((self.devices / installer.SPLIT_PROFILE_NAME).is_file())
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -103,6 +119,19 @@ class _Flow(installer.PrimeProfileFlowMixin):
 
 
 class ProfileFlowTests(unittest.TestCase):
+    def test_prime_notice_is_not_restricted_to_a_rating_or_product_id(self):
+        paths = [ROOT / "custom_components/tuyaextend_amperepoint/strings.json"]
+        paths += [ROOT / "custom_components/tuyaextend_amperepoint/translations" / f"{language}.json"
+                  for language in ("en", "pl")]
+        for path in paths:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            for section in ("config", "options"):
+                notice = data[section]["step"]["prime_profile"]["description"]
+                self.assertIn("Wallbox PRIME", notice)
+                self.assertNotIn("PID", notice)
+                self.assertNotIn("kW", notice)
+                self.assertNotIn("gbmxngploofmhbjc", notice)
+
     def test_opening_form_does_not_install(self):
         flow = _Flow()
         result = asyncio.run(flow.async_step_prime_profile())

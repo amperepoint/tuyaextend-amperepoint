@@ -12,6 +12,8 @@ from .dashboard import async_create_dashboard
 from .frontend import async_register_frontend
 from .planner import AmperePointPlanner
 from .planner_model import PlannerConfigError
+from .local_source import NativeLocalSource
+from .local_planner import AmperePointLocalPlanner
 
 
 SERVICE_SET_PLANNER = "set_planner"
@@ -32,18 +34,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_load_state()
     await coordinator.async_config_entry_first_refresh()
 
-    planner = AmperePointPlanner(hass, entry, coordinator)
-    await planner.async_load()
+    planner = None
+    if isinstance(coordinator.native_source, NativeLocalSource) and coordinator.native_source.controls_verified:
+        planner = AmperePointLocalPlanner(hass, entry, coordinator)
+        await planner.async_load()
+        if entry.data.get("local_pause_planner"):
+            await planner.async_prepare_onboarding()
+            hass.config_entries.async_update_entry(
+                entry, data={key: value for key, value in entry.data.items()
+                             if key != "local_pause_planner"})
+    elif not isinstance(coordinator.native_source, NativeLocalSource):
+        planner = AmperePointPlanner(hass, entry, coordinator)
+        await planner.async_load()
     coordinator.planner = planner
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await planner.async_start()
+    if planner is not None:
+        await planner.async_start()
 
     await async_create_dashboard(hass, entry)
     await async_start_auto_adoption(hass)
 
-    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    if not isinstance(coordinator.native_source, NativeLocalSource):
+        entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     return True
 
 
@@ -51,7 +65,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator: AmperePointCoordinator = hass.data[DOMAIN][entry.entry_id]
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
-        await coordinator.planner.async_stop()
+        if coordinator.planner is not None:
+            await coordinator.planner.async_stop()
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
 

@@ -56,6 +56,8 @@ from .const import (
 from .discovery import SourceCandidate, discover_sources
 from .models import DEFAULT_MODEL, MODELS
 from .profile_installer import PrimeProfileFlowMixin
+from .local_flow import NativeLocalFlowMixin, NativeLocalOptionsMixin
+from .local_source import LOCAL_SOURCE
 
 
 def _model_options() -> dict[str, str]:
@@ -174,7 +176,7 @@ def _automatic_schema(candidates: list[SourceCandidate]) -> vol.Schema:
 
 
 class AmperePointConfigFlow(
-    PrimeProfileFlowMixin, config_entries.ConfigFlow, domain=DOMAIN
+    NativeLocalFlowMixin, PrimeProfileFlowMixin, config_entries.ConfigFlow, domain=DOMAIN
 ):
     VERSION = 1
     _candidates: list[SourceCandidate]
@@ -201,7 +203,7 @@ class AmperePointConfigFlow(
     ) -> config_entries.ConfigFlowResult:
         self._candidates = discover_sources(self.hass)
         menu_options = ["automatic", "manual"] if self._candidates else ["manual"]
-        menu_options.append("prime_profile")
+        menu_options.insert(0, "local")
         return self.async_show_menu(
             step_id="user",
             menu_options=menu_options,
@@ -286,16 +288,16 @@ class AmperePointConfigFlow(
         return AmperePointOptionsFlowHandler(config_entry)
 
 
-class AmperePointOptionsFlowHandler(PrimeProfileFlowMixin, config_entries.OptionsFlow):
+class AmperePointOptionsFlowHandler(NativeLocalOptionsMixin, PrimeProfileFlowMixin, config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        return self.async_show_menu(
-            step_id="init", menu_options=["settings", "prime_profile"]
-        )
+        if self._config_entry.data.get("source_integration") == LOCAL_SOURCE:
+            return await self.async_step_local_connection()
+        return await self.async_step_settings(user_input)
 
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
