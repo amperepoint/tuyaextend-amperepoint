@@ -5,7 +5,8 @@ import voluptuous as vol
 from homeassistant.helpers import selector, device_registry as dr
 
 from .const import DOMAIN, CONF_SOURCE_PHYSICAL_IDS
-from .local_source import LOCAL_SOURCE, LOCAL_FIELDS, LocalConnectionError, read_local
+from .local_source import (LOCAL_SOURCE, LOCAL_FIELDS, CONTROL_PROFILE,
+                           LocalConnectionError, read_local, control_supported)
 
 
 def local_schema(current=None, *, options=False):
@@ -18,6 +19,8 @@ def local_schema(current=None, *, options=False):
     fields[key_marker] = selector.TextSelector(selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD))
     fields[vol.Optional("local_host", default=current.get("local_host", ""))] = str
     fields[vol.Required("local_protocol", default=current.get("local_protocol", "3.5"))] = vol.In(["3.5", "3.4", "3.3"])
+    if options:
+        fields[vol.Optional("enable_test_controls", default=current.get("local_control_profile") == CONTROL_PROFILE)] = bool
     return vol.Schema(fields)
 
 
@@ -56,7 +59,7 @@ def local_entry_data(previous, credentials):
     # Do not leave cloud/entity command routes behind when migrating an entry.
     data = {k: v for k, v in previous.items()
             if not k.startswith("source_") and k not in LOCAL_FIELDS}
-    connection = {key: credentials[key] for key in (*LOCAL_FIELDS, "local_family", "name")
+    connection = {key: credentials[key] for key in (*LOCAL_FIELDS, "local_family", "local_control_profile", "name")
                   if key in credentials}
     return {**data, **connection, "model": "prime", "source_integration": LOCAL_SOURCE,
             CONF_SOURCE_PHYSICAL_IDS: [credentials["local_device_id"]]}
@@ -136,6 +139,9 @@ class NativeLocalOptionsMixin:
                 result = await self.hass.async_add_executor_job(read_local, credentials)
                 credentials["local_host"] = result["host"]
                 credentials["local_family"] = result["family"]
+                credentials["local_control_profile"] = CONTROL_PROFILE if user_input.get("enable_test_controls") else None
+                if user_input.get("enable_test_controls") and not control_supported(credentials, result["dps"], result["family"]):
+                    raise LocalConnectionError("local_unsupported")
                 self.hass.config_entries.async_update_entry(
                     self._config_entry, data=local_entry_data(current, credentials), options={})
                 await self.hass.config_entries.async_reload(self._config_entry.entry_id)

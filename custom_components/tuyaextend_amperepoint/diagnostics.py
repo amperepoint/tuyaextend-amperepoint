@@ -61,7 +61,7 @@ async def async_get_config_entry_diagnostics(
             "version": VERSION,
             "source_type": data.get("source_type"),
             "source_online": data.get("source_online"),
-            "read_only": True,
+            "read_only": data.get("read_only", True),
             "local_family": config_entry.data.get("local_family"),
             "dp_count": data.get("raw_dp_count"),
             "last_update_success": getattr(coordinator, "last_update_success", None),

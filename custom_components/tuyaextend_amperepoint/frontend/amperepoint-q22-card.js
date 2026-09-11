@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.38b1";
+const AP_Q22_DASHBOARD_VERSION = "0.5.38b2";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -1640,6 +1640,40 @@ class AmperePointQ22Card extends HTMLElement {
     `;
   }
 
+  localDataTables() {
+    const raw = this.config.entities.rawDp;
+    if (this.attr(raw, "source_type") !== "amperepoint_local") return "";
+    const rows = this.attr(raw, "local_diagnostics", []);
+    if (!Array.isArray(rows) || !rows.length) return "";
+    const lang = this.lang() === "pl" ? "pl" : "en";
+    const local = (v) => v && typeof v === "object" ? (v[lang] ?? v.en ?? "") : (v ?? "");
+    const headings = {
+      session: {pl: "Status i sesja", en: "Status and session"},
+      electrical: {pl: "Pomiary elektryczne", en: "Electrical measurements"},
+      settings: {pl: "Ustawienia odczytane z ładowarki", en: "Settings reported by the charger"},
+      device: {pl: "Informacje o urządzeniu", en: "Device information"},
+      other: {pl: "Pozostałe dane", en: "Additional data"},
+    };
+    return `<section class="local-data" aria-label="${lang === "pl" ? "Wszystkie odczyty LAN" : "All LAN readings"}">${Object.entries(headings).map(([group, heading]) => {
+      const selected = rows.filter((row) => row.group === group);
+      if (!selected.length) return "";
+      return `<div class="panel local-data-panel"><h3>${this.escape(local(heading))}</h3>
+        <div class="table-wrap"><table class="local-readings"><thead><tr>
+        <th>${lang === "pl" ? "Parametr" : "Parameter"}</th><th>${lang === "pl" ? "Wartość" : "Value"}</th>
+        <th>${lang === "pl" ? "Źródło" : "Source"}</th><th>${lang === "pl" ? "Objaśnienie" : "Explanation"}</th>
+        </tr></thead><tbody>${selected.map((row) => {
+          let value = row.display ? local(row.display) : row.value;
+          if (typeof value === "boolean") value = lang === "pl" ? (value ? "Tak" : "Nie") : (value ? "Yes" : "No");
+          else if (Array.isArray(value)) value = value.join(", ");
+          else if (value && typeof value === "object") value = JSON.stringify(value);
+          else if (typeof value === "number") value = value.toLocaleString(lang, {maximumFractionDigits: 3});
+          const source = `DP${row.dp}${row.path ? " · " + row.path : ""}`;
+          return `<tr><td>${this.escape(local(row.label))}</td><td><strong>${this.escape(value ?? "—")}${row.unit ? " " + this.escape(row.unit) : ""}</strong></td>
+            <td><code>${this.escape(source)}</code></td><td>${this.escape(local(row.note))}</td></tr>`;
+        }).join("")}</tbody></table></div></div>`;
+    }).join("")}</section>`;
+  }
+
   rawRows() {
     const raw = this.config.entities.rawDp;
     const snapshot = this.attr(raw, "raw_dp", null);
@@ -2176,8 +2210,10 @@ class AmperePointQ22Card extends HTMLElement {
     const nativeLocal = localAttrs.source_type === "amperepoint_local";
     const localOnline = nativeLocal && localAttrs.source_online && !["unavailable", "unknown"].includes(this.state(e.rawDp));
     const localLabel = this.lang() === "pl"
-      ? "Odczyt bez Tuya Local i bez chmury. Wersja testowa — sterowanie wyłączone."
-      : "Readings without Tuya Local or cloud. Test build — controls disabled.";
+      ? (localAttrs.read_only ? "Odczyt bez Tuya Local i bez chmury. Sterowanie niezweryfikowane."
+         : "Bez Tuya Local i bez chmury. Sterowanie testowe: start/stop i prąd. Planer oraz tryby urządzenia jeszcze niewłączone.")
+      : (localAttrs.read_only ? "Readings without Tuya Local or cloud. Controls not verified."
+         : "No Tuya Local or cloud. Tested controls: start/stop and current. Planner and device modes not yet enabled.");
     const localNotice = nativeLocal ? '<div class="empty-state" role="status">' + this.escape(
       'AmperePoint Local · ' + (localOnline ? 'LAN OK' : 'OFFLINE') + ' · ' +
       (localAttrs.local_host || 'LAN') + '. ' + localLabel) + '</div>' : '';
@@ -2217,9 +2253,10 @@ class AmperePointQ22Card extends HTMLElement {
                 </section>
                 ${plannerCard}
                 ${contentPanels.length ? `<section class="content-grid ${contentPanels.length === 1 ? "single" : ""}">${contentPanels.join("")}</section>` : ""}
+                ${this.localDataTables()}
                 ${
                   hasRaw
-                    ? `<details class="diagnostics" data-render-key="diagnostics" open>
+                    ? `<details class="diagnostics" data-render-key="diagnostics" ${nativeLocal ? "" : "open"}>
                         <summary>
                           <span>${this.icon("mdi:database-search")} ${this.t("rawDp")}</span>
                           <small>${this.t("rawHint")}</small>
@@ -3227,6 +3264,14 @@ class AmperePointQ22Card extends HTMLElement {
         .status-row.bad .row-icon ha-icon {
           color: var(--ap-red);
         }
+        .local-data { display: grid; gap: 16px; margin-top: 20px; min-width: 0; }
+        .local-data-panel { min-width: 0; padding: 20px; }
+        .local-data-panel h3 { margin: 0 0 14px; font-size: 17px; }
+        .local-readings { min-width: 620px; }
+        .local-readings td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+        .local-readings td:first-child { width: 27%; }
+        .local-readings td:nth-child(2) { width: 19%; }
+        .local-readings td:last-child { color: var(--muted); font-size: 12px; }
         .diagnostics {
           margin-top: 16px;
           padding: 0;

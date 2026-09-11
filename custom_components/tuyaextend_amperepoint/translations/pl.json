@@ -179,13 +179,14 @@
       },
       "local_connection": {
         "title": "Połączenie AmperePoint Local",
-        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie.",
+        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie testowe jest dostępne tylko dla zweryfikowanego układu firmware PRIME. Limit prądu wynosi najwyżej 16 A i nie przekroczy DP152. Planer oraz tryby ładowarki nie są jeszcze obsługiwane.",
         "data": {
           "name": "Nazwa ładowarki",
           "local_device_id": "Ładowarka / Device ID",
           "local_key": "Local key",
           "local_host": "Adres IP (puste = wykryj automatycznie)",
-          "local_protocol": "Protokół LAN"
+          "local_protocol": "Protokół LAN",
+          "enable_test_controls": "Włącz testowe start/stop i regulację prądu (zgodny PRIME)"
         }
       }
     },

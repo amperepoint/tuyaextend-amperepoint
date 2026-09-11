@@ -484,6 +484,26 @@ test("a necessary DOM replacement preserves scroll, details and an edited field"
   }
 });
 
+test("local tables show readable labels, false and zero, and escape device text", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: {rawDp: "sensor.local_dp"} });
+  instance._hass = { language: "pl", states: { "sensor.local_dp": {state: "3", attributes: {
+    source_type: "amperepoint_local",
+    local_diagnostics: [
+      {dp:"140",group:"settings",label:{pl:"Zezwolenie",en:"Enabled"},value:false,note:{pl:"Potwierdzone"}},
+      {dp:"102",path:"p",group:"session",label:{pl:"Moc",en:"Power"},value:0,unit:"kW"},
+      {dp:"999",group:"other",label:{en:"Unknown"},value:"<script>bad()</script>"},
+    ],
+  }}}};
+  const html = instance.localDataTables();
+  assert.match(html,/Zezwolenie/);
+  assert.match(html,/>Nie</);
+  assert.match(html,/>0 kW</);
+  assert.match(html,/DP102 · p/);
+  assert.match(html,/&lt;script&gt;/);
+  assert.doesNotMatch(html,/<script>/);
+});
+
 test("disconnect cancels queued rendering and delayed restoration", () => {
   const originalRequest = globalThis.requestAnimationFrame;
   const originalCancel = globalThis.cancelAnimationFrame;

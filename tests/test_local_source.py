@@ -20,11 +20,11 @@ CONFIG = {"local_device_id": "test-device", "local_key": "0123456789abcdef",
 
 
 class LocalSourceTests(unittest.TestCase):
-    def test_supported_snapshot_filters_unreviewed_and_card_data(self):
+    def test_supported_snapshot_preserves_unknown_dps_but_redacts_card_data(self):
         dps, family = local.validate_snapshot({"dps": {**FIXTURE["dps"], "112": "private-card-data", "999": "unknown"}})
         self.assertEqual(family, "prime_split")
-        self.assertNotIn("112", dps)
-        self.assertNotIn("999", dps)
+        self.assertEqual(dps["112"], "[redacted: card/auth data]")
+        self.assertEqual(dps["999"], "unknown")
 
     def test_unknown_devices_and_authentication_errors_are_rejected(self):
         for value in ({"dps": {"1": True}}, {"Error": "secret response", "Err": "914"}, None):
@@ -104,3 +104,55 @@ class LocalSourceTests(unittest.TestCase):
             self.assertIn("read-only", str(err.exception))
         self.assertFalse(instance.native_source.writable("switch"))
 
+    def test_control_profile_is_opt_in_and_firmware_specific(self):
+        dps = {**FIXTURE["dps"], "140": True}
+        self.assertFalse(local.control_supported(CONFIG, dps, "prime_split"))
+        config = {**CONFIG, "local_control_profile": local.CONTROL_PROFILE}
+        self.assertTrue(local.control_supported(config, dps, "prime_split"))
+        self.assertFalse(local.control_supported(config, dps, "prime_packed"))
+        self.assertFalse(local.control_supported(config, {**dps,"106":'{}'}, "prime_split"))
+        self.assertFalse(local.control_supported(config, {**dps,"152":True}, "prime_split"))
+
+    def test_writes_require_real_readback_and_preserve_safety_limit(self):
+        before = {**FIXTURE["dps"], "140": True, "150":16}
+        result = lambda dps: {"host":CONFIG["local_host"],"dps":dps,"family":"prime_split"}
+        sent=[]
+        driver=SimpleNamespace(set_value=lambda dp,value:sent.append((dp,value)),close=lambda:None)
+        config={**CONFIG,"local_control_profile":local.CONTROL_PROFILE}
+        with patch.dict(sys.modules,{"tinytuya":SimpleNamespace(Device=lambda *a,**kw:driver)}), \
+             patch.object(local.time,"sleep"), \
+             patch.object(local,"read_local",side_effect=[result(before),result(before),result({**before,"150":8})]):
+            after=local.write_local(config,"charge_cur_set",8.0)
+        self.assertEqual(sent,[(150,8)])
+        self.assertIs(type(sent[0][1]),int)
+        self.assertEqual(after["dps"]["152"],16)
+
+    def test_ack_without_state_change_is_not_success(self):
+        before={**FIXTURE["dps"],"140":True,"150":16}
+        result={"host":CONFIG["local_host"],"dps":before,"family":"prime_split"}
+        driver=SimpleNamespace(set_value=lambda *a:{},close=lambda:None)
+        with patch.dict(sys.modules,{"tinytuya":SimpleNamespace(Device=lambda *a,**kw:driver)}), \
+             patch.object(local.time,"sleep"),patch.object(local,"read_local",return_value=result):
+            with self.assertRaisesRegex(local.LocalConnectionError,"local_command_unconfirmed"):
+                local.write_local({**CONFIG,"local_control_profile":local.CONTROL_PROFILE},"switch",False)
+
+    def test_current_limits_and_unverified_commands_are_rejected_before_write(self):
+        before={**FIXTURE["dps"],"140":True,"150":16}
+        result={"host":CONFIG["local_host"],"dps":before,"family":"prime_split"}
+        config={**CONFIG,"local_control_profile":local.CONTROL_PROFILE}
+        with patch.object(local,"read_local",return_value=result):
+            for value in (0,5,17,32,6.5,float('nan'),float('inf'),True):
+                with self.subTest(value=value),self.assertRaises(local.LocalConnectionError):
+                    local.write_local(config,"charge_cur_set",value)
+            for code,value in (("work_mode","charge_now"),("energy_charge",5),("local_timer","00:00")):
+                with self.assertRaises(local.LocalConnectionError): local.write_local(config,code,value)
+
+    def test_false_switch_readback_requires_stopped_state_too(self):
+        before={**FIXTURE["dps"],"140":True,"150":16}
+        after={**before,"140":False,"101":204,"109":"PAUSE"}
+        result=lambda dps:{"host":CONFIG["local_host"],"dps":dps,"family":"prime_split"}
+        driver=SimpleNamespace(set_value=lambda *a:None,close=lambda:None)
+        with patch.dict(sys.modules,{"tinytuya":SimpleNamespace(Device=lambda *a,**kw:driver)}), \
+             patch.object(local.time,"sleep"),patch.object(local,"read_local",side_effect=[result(before),result(after)]):
+            response=local.write_local({**CONFIG,"local_control_profile":local.CONTROL_PROFILE},"switch",False)
+        self.assertFalse(response["dps"]["140"])

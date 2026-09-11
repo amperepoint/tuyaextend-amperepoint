@@ -1,4 +1,8 @@
-# AmperePoint Local — 0.5.38b1 test build
+# AmperePoint Local — test builds
+
+**0.5.38b2:** readable tables for every reported datapoint and opt-in, verified
+PRIME start/stop/current controls. See the [hardware test report](native-local-controls-test-20260911.md).
+The read-only baseline below describes 0.5.38b1 and the default for unverified entries.
 
 This build adds an integration-owned LAN transport using TinyTuya. It does not
 require the Tuya Local custom integration. It is a read-only PRIME pilot, not

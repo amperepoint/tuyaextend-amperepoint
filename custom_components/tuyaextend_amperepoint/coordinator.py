@@ -79,6 +79,7 @@ from .models import (
 )
 from .source import NativeTuyaSource
 from .local_source import LOCAL_SOURCE, NativeLocalSource, LocalConnectionError
+from .prime_diagnostics import readable_rows
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -408,7 +409,14 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
             "local_host": (self.native_source.config.get("local_host")
                            if isinstance(self.native_source, NativeLocalSource) else None),
-            "read_only": isinstance(self.native_source, NativeLocalSource),
+            "read_only": (isinstance(self.native_source, NativeLocalSource)
+                          and not self.native_source.controls_verified),
+            "local_diagnostics": (readable_rows(self.native_source.dps)
+                                  if isinstance(self.native_source, NativeLocalSource) else []),
+            "local_dp_count": (len(self.native_source.dps)
+                               if isinstance(self.native_source, NativeLocalSource) else None),
+            "local_command_status": getattr(self.native_source, "command_status", None),
+            "local_command_error": getattr(self.native_source, "command_error", None),
             "source_online": (
                 self.native_source.available if self.native_source else True
             ),
@@ -811,7 +819,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return now - self._complete_candidate_since >= timedelta(minutes=idle_minutes)
 
     async def async_set_current_limit(self, value: float) -> None:
-        self._assert_not_local_read_only()
+        self._assert_not_local_read_only("charge_cur_set")
         entity_id = self._config(CONF_SOURCE_CURRENT_LIMIT)
         if not entity_id:
             if self.native_source and self.native_source.writable("charge_cur_set"):
@@ -832,7 +840,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise HomeAssistantError(f"Unsupported current limit source domain: {domain}")
 
     async def async_set_charging(self, enabled: bool) -> None:
-        self._assert_not_local_read_only()
+        self._assert_not_local_read_only("switch")
         entity_id = self._config(CONF_SOURCE_CHARGE_SWITCH)
         if not entity_id:
             if self.native_source and self.native_source.writable("switch"):
@@ -853,8 +861,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         raise HomeAssistantError(f"Unsupported charging switch source domain: {domain}")
 
-    def _assert_not_local_read_only(self) -> None:
-        if isinstance(self.native_source, NativeLocalSource):
+    def _assert_not_local_read_only(self, code: str | None = None) -> None:
+        if isinstance(self.native_source, NativeLocalSource) and not self.native_source.writable(code):
             raise HomeAssistantError('AmperePoint Local: this tested profile is read-only')
 
     @property

@@ -277,6 +277,10 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
         attributes: dict[str, Any] = {
             "local_host": self.coordinator.data.get("local_host"),
             "read_only": self.coordinator.data.get("read_only", False),
+            "local_diagnostics": self.coordinator.data.get("local_diagnostics", []),
+            "local_dp_count": self.coordinator.data.get("local_dp_count"),
+            "local_command_status": self.coordinator.data.get("local_command_status"),
+            "local_command_error": self.coordinator.data.get("local_command_error"),
             "source_type": self.coordinator.data.get("source_type"),
             "source_online": self.coordinator.data.get("source_online"),
             "raw_dp": raw_dp,
