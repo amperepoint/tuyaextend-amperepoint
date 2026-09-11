@@ -399,7 +399,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "schedule_start_time": schedule_window[0] if schedule_window else None,
             "schedule_end_time": schedule_window[1] if schedule_window else None,
             "system_version": self._native_value("system_version"),
-            "raw_dp_count": len(raw_dp),
+            "raw_dp_count": (len(self.native_source.dps)
+                             if isinstance(self.native_source, NativeLocalSource) else len(raw_dp)),
             "raw_dp": raw_dp,
             "dp_metadata": dp_metadata,
             "source_type": (

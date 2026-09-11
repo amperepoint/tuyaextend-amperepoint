@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.38b2";
+const AP_Q22_DASHBOARD_VERSION = "0.5.38b3";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -562,7 +562,7 @@ class AmperePointQ22Card extends HTMLElement {
     if (
       this._pendingCharging !== null &&
       this._pendingCharging !== undefined &&
-      this.isCharging() === this._pendingCharging
+      this.chargingControlState() === this._pendingCharging
     ) {
       this.clearPendingCharging();
       changed = true;
@@ -1051,11 +1051,18 @@ class AmperePointQ22Card extends HTMLElement {
     return power > 0.1 || chargingStates.includes(status);
   }
 
+  chargingControlState() {
+    if (this.attr(this.config.entities.rawDp, "source_type") === "amperepoint_local") {
+      return this.state(this.config.entities.switch) === "on";
+    }
+    return this.isCharging();
+  }
+
   async toggleCharging() {
     const running =
       this._pendingCharging !== null && this._pendingCharging !== undefined
         ? this._pendingCharging
-        : this.isCharging();
+        : this.chargingControlState();
     const planner = this.stateObj(this.config.entities.planner);
     if (planner?.attributes?.enabled) {
       await this.setPlannerOverride(running ? "pause" : "charge", {
@@ -2005,6 +2012,8 @@ class AmperePointQ22Card extends HTMLElement {
     const selectedDeviceId = this.apSelectedDeviceId();
     const deviceSelectionLocked = this.deviceSelectionLocked();
     const e = this.config.entities;
+    const localAttrs = this._hass?.states?.[e.rawDp]?.attributes || {};
+    const nativeLocal = localAttrs.source_type === "amperepoint_local";
     const powerAvailable = this.hasEntity(e.power);
     const power = this.num(e.power);
     const powerPct = powerAvailable ? Math.max(2, Math.min(100, (power / this.config.maxPowerKw) * 100)) : 0;
@@ -2020,7 +2029,7 @@ class AmperePointQ22Card extends HTMLElement {
     const sessionRunning =
       this._pendingCharging !== null && this._pendingCharging !== undefined
         ? this._pendingCharging
-        : charging;
+        : this.chargingControlState();
     const chargingModeEntity = this.stateObj(e.chargingMode);
     const hasChargingMode = this.hasEntity(e.chargingMode);
     const chargingModes = chargingModeEntity?.attributes?.options || [];
@@ -2087,7 +2096,7 @@ class AmperePointQ22Card extends HTMLElement {
           <div class="card-title">
             <div>
               <span>${this.t("control")}</span>
-              <strong>${charging ? this.t("activeSession") : this.t("ready")}</strong>
+              <strong>${nativeLocal ? (this.lang() === "pl" ? (sessionRunning ? "Zezwolenie włączone" : "Zezwolenie wyłączone") : (sessionRunning ? "Charging enabled" : "Charging disabled")) : (charging ? this.t("activeSession") : this.t("ready"))}</strong>
             </div>
             ${
               hasSwitch
@@ -2149,7 +2158,7 @@ class AmperePointQ22Card extends HTMLElement {
             hasCurrentLimit || hasChargingMode || showTargetEnergy || showSchedule
               ? `<div class="control-note">
                   ${this.icon("mdi:shield-check")}
-                  <span>${this.t("dataNote")}</span>
+                  <span>${nativeLocal ? (this.lang() === "pl" ? "Start/stop steruje zezwoleniem na ładowanie. Energia sesji pochodzi z DP102 urządzenia." : "Start/stop controls charging permission. Session energy comes from device DP102.") : this.t("dataNote")}</span>
                 </div>`
               : ""
           }
@@ -2206,8 +2215,6 @@ class AmperePointQ22Card extends HTMLElement {
     const hasAnyData = powerCard || controlCard || plannerCard || metrics || contentPanels.length || hasRaw;
     const versionInfo = this.dashboardVersionInfo();
     const settingsPath = this.integrationSettingsPath();
-    const localAttrs = this._hass?.states?.[e.rawDp]?.attributes || {};
-    const nativeLocal = localAttrs.source_type === "amperepoint_local";
     const localOnline = nativeLocal && localAttrs.source_online && !["unavailable", "unknown"].includes(this.state(e.rawDp));
     const localLabel = this.lang() === "pl"
       ? (localAttrs.read_only ? "Odczyt bez Tuya Local i bez chmury. Sterowanie niezweryfikowane."
@@ -2216,7 +2223,10 @@ class AmperePointQ22Card extends HTMLElement {
          : "No Tuya Local or cloud. Tested controls: start/stop and current. Planner and device modes not yet enabled.");
     const localNotice = nativeLocal ? '<div class="empty-state" role="status">' + this.escape(
       'AmperePoint Local · ' + (localOnline ? 'LAN OK' : 'OFFLINE') + ' · ' +
-      (localAttrs.local_host || 'LAN') + '. ' + localLabel) + '</div>' : '';
+      (localAttrs.local_host || 'LAN') + '. ' + localLabel) + '<br>' +
+      this.escape((this.lang() === 'pl' ? 'Komenda LAN: ' : 'LAN command: ') +
+        this.plannerCommandLabel(localAttrs.local_command_status) +
+        (localAttrs.local_command_error ? ' · ' + localAttrs.local_command_error : '')) + '</div>' : '';
     const renderState = this.beginDomReplacement();
 
     this.innerHTML = `

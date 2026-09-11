@@ -484,6 +484,23 @@ test("a necessary DOM replacement preserves scroll, details and an edited field"
   }
 });
 
+test("local charging control can stop an enabled zero-load tester", async () => {
+  const instance = new Card();
+  instance.setConfig({entities:{rawDp:"sensor.dp",power:"sensor.power",switch:"switch.ev"}});
+  instance.render = () => {};
+  const calls=[];
+  instance._hass={states:{
+    "sensor.dp":{state:"1",attributes:{source_type:"amperepoint_local"}},
+    "sensor.power":{state:"0",attributes:{}},
+    "switch.ev":{state:"on",attributes:{}},
+  },callService:async (...args)=>calls.push(args)};
+  assert.equal(instance.isCharging(),false);
+  assert.equal(instance.chargingControlState(),true);
+  await instance.toggleCharging();
+  instance.clearPendingCharging();
+  assert.equal(calls[0][1],"turn_off");
+});
+
 test("local tables show readable labels, false and zero, and escape device text", () => {
   const instance = new Card();
   instance.setConfig({ entities: {rawDp: "sensor.local_dp"} });
