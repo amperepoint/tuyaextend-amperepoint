@@ -2,8 +2,14 @@
 
 ## Wallbox Prime: instalator profilu w aplikacji
 
-Dla **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`**, zainstaluj Tuya Local
-przez HACS, a następnie wybierz **Dodaj integrację → AmperePoint → Dodaj profil
+Dla **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`, protokół LAN 3.5**
+obsługiwany jest obecnie **odczyt lokalny, nie pełne sterowanie jak w Q Series**.
+Inne PID i wersje firmware wymagają osobnego potwierdzenia zgodności.
+
+Zainstaluj przez HACS zarówno AmperePoint (krok 2 poniżej), jak i
+[Tuya Local](https://github.com/make-all/tuya-local), a następnie zrestartuj HA.
+Tuya Local i LocalTuya to różne integracje; ten instalator wymaga **Tuya Local**.
+Wybierz **Dodaj integrację → AmperePoint → Dodaj profil
 Wallbox Prime (Tuya Local)**. Instalator jest także w menu **Konfiguruj**
 istniejącej integracji AmperePoint. Zatwierdź instalację i uruchom ponownie HA.
 
@@ -12,17 +18,30 @@ Wybierz profil **Ampere Point Wallbox Prime 22kW (local)**, a potem automatyczn�
 konfigurację wykrytej ładowarki w AmperePoint. Przy błędnym dotychczasowym profilu
 zachowaj dane połączenia przed ponownym dodaniem wpisu ładowarki w Tuya Local.
 
-Na tym etapie dostępny jest odczyt telemetrii; start/stop, zmiana prądu i planer
-wymagają jeszcze testów komend Prime. Oficjalna integracja chmurowa Tuya nie
-udostępnia tych danych Prime. Instalator nie nadpisuje innych wersji profilu.
+Dashboard odczytuje moc, energię sesji, temperaturę, pomiary faz, podłączenie
+auta i czas sesji, jeśli firmware raportuje odpowiednie dane. Profil udostępnia
+też diagnostykę, m.in. raportowany limit prądu i konfigurację harmonogramu;
+są to odczyty, nie pola sterowania. Brak danych nie oznacza pomiaru zerowego.
+
+**Niedostępne dla PRIME w 0.5.37:** start/stop, zmiana limitu prądu, zapis
+harmonogramu i trybu ładowania, cel kWh oraz wykonywanie planu HA. Nie wymagamy
+i nie zakładamy pełnej zgodności funkcji PRIME z Q Series.
+Telemetria DP102 tego profilu wymaga źródła lokalnego; samo skonfigurowanie
+oficjalnej integracji Tuya w HA nie wystarczy. Nie trzeba jednak dodawać
+integracji chmurowej HA, aby korzystać z tej ścieżki lokalnej.
+
+Zapewnij łączność LAN między HA i ładowarką; warto zarezerwować jej IP w DHCP.
+Local key uzyskaj zgodnie z instrukcją Tuya Local. Instalator profilu nie pobiera
+kluczy i nie realizuje autoryzacji konta Tuya. Nie publikuj local key ani danych konta.
+Instalator nie nadpisuje innych wersji profilu.
 Jeśli aktualizacja Tuya Local usunie plik, uruchom instalator ponownie.
 
 TuyaExtend AmperePoint to integracja Home Assistant dla ładowarek AmperePoint EV.
 Może korzystać bezpośrednio z oficjalnej integracji Tuya albo z encji Xtend Tuya,
 `tuya-local` i LocalTuya. Xtend Tuya jest opcjonalny.
 
-Ta integracja nie zastępuje parowania Tuya. Najpierw zainicjalizuj Tuya, potem
-dodaj integrację przez HACS.
+Ta integracja nie zastępuje parowania urządzenia. Poniższy krok 1 dotyczy
+ścieżki chmurowej Q Series; dla PRIME użyj procedury lokalnej powyżej.
 
 ## 1. Zainicjalizuj Tuya w Home Assistant
 
@@ -93,7 +112,7 @@ AmperePoint
 4. Wybierz wykrytą ładowarkę AmperePoint i ustaw taryfę.
 5. Zapisz wpis integracji.
 
-Integracja automatycznie tworzy jeden wspólny panel `AmperePoint` na pasku
+Integracja automatycznie tworzy jeden wspólny panel `Ampere Point - Tuya dashboard` na pasku
 bocznym i sama przejmuje pozostałe wykryte ładowarki Tuya jako kolejne wpisy.
 Każda ładowarka pojawia się na liście rozwijanej na panelu. Kolejne
 urządzenia można też dodawać ręcznie z poziomu integracji — nie tworzy to
@@ -119,7 +138,7 @@ ponownie.
 
 ## 4. Otwórz panel AmperePoint
 
-Integracja tworzy jeden panel `AmperePoint` na pasku bocznym Home Assistanta.
+Integracja tworzy jeden panel `Ampere Point - Tuya dashboard` na pasku bocznym Home Assistanta.
 Nie nadpisuje ani nie zmienia istniejących dashboardów, a późniejsze zmiany w
 tym panelu są zachowywane po restartach. Przy więcej niż jednej ładowarce w
 nagłówku karty pojawia się lista rozwijana z wyborem urządzenia.
@@ -213,13 +232,14 @@ konfiguracji lokalnej Tuya. Pierwsza publiczna ścieżka HACS jest celowo oparta
 na oficjalnej integracji Tuya, bo jest prostsza dla typowych użytkowników Home
 Assistant.
 
-Dla ładowarek, których telemetria jest dostępna wyłącznie lokalnie (np. Wallbox
-Prime 22kW i jej DP102), wykonaj **wszystkie** poniższe kroki:
+Dla PRIME zalecany jest instalator opisany na początku tej instrukcji.
+Alternatywnie profil można zainstalować ręcznie:
 
 1. Skopiuj profil z `amperepoint/profiles/tuya_local/` do
    `config/custom_components/tuya_local/devices/`.
 2. Zrestartuj Home Assistant, żeby tuya-local wczytał nowy profil.
-3. **Usuń istniejący wpis tuya-local dla tej ładowarki.** tuya-local pozwala
+3. **Tylko gdy istniejący wpis ma błędny profil:** zachowaj dane połączenia
+   i sprawdź używane encje oraz automatyzacje przed usunięciem wpisu. tuya-local pozwala
    wybrać profil urządzenia wyłącznie podczas *dodawania*; okno `Konfiguruj`
    istniejącego wpisu udostępnia tylko local key, adres IP, wersję protokołu i
    tryb odpytywania — nigdy typu urządzenia. Wpisu utworzonego z błędnym
@@ -232,8 +252,8 @@ Prime 22kW i jej DP102), wykonaj **wszystkie** poniższe kroki:
    `Ampere Point Wallbox Prime 22kW (amperepoint_prime_22kw_evcharger)`.
 
 Aktualizacja tuya-local przez HACS może usunąć pliki z jego katalogu
-`devices/`. Jeśli po takiej aktualizacji ładowarka przestanie działać, skopiuj
-profil ponownie i powtórz kroki 2–5.
+`devices/`. Jeśli plik zniknie, uruchom ponownie instalator i zrestartuj HA.
+Nie usuwaj poprawnie sparowanego wpisu tylko z powodu aktualizacji.
 
 Po poprawnym dodaniu źródła lokalnego integracja AmperePoint sama rozpozna, że
 to ta sama ładowarka, i dopisze mapowanie telemetrii do istniejącego wpisu —

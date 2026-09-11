@@ -513,7 +513,7 @@ class AmperePointQ22Card extends HTMLElement {
   setConfig(config) {
     this.config = {
       title: "AmperePoint",
-      subtitle: "AmperePoint Q Series",
+      subtitle: "Ampere Point - Tuya dashboard",
       language: "auto",
       maxPowerKw: 22,
       phaseMaxPowerKw: 7.4,
@@ -3569,6 +3569,6 @@ if (!customElements.get("amperepoint-q22-card")) {
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "amperepoint-q22-card",
-  name: "AmperePoint Q Series",
-  description: "AmperePoint Q Series EV charger dashboard card",
+  name: "Ampere Point - Tuya dashboard",
+  description: "Ampere Point EV charger dashboard for Q Series and supported Prime telemetry",
 });
