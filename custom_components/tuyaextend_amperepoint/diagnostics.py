@@ -53,7 +53,19 @@ async def async_get_config_entry_diagnostics(
     config_entry: ConfigEntry,
 ) -> dict[str, Any]:
     coordinator = hass.data.get(DOMAIN, {}).get(config_entry.entry_id)
-    data = coordinator.data if coordinator else {}
+    data = (coordinator.data if coordinator else {}) or {}
+    if config_entry.data.get("source_integration") == "amperepoint_local":
+        # Never export local credentials, identifiers or raw protocol payloads.
+        from .const import VERSION
+        return {
+            "version": VERSION,
+            "source_type": data.get("source_type"),
+            "source_online": data.get("source_online"),
+            "read_only": True,
+            "local_family": config_entry.data.get("local_family"),
+            "dp_count": data.get("raw_dp_count"),
+            "last_update_success": getattr(coordinator, "last_update_success", None),
+        }
     native_source = coordinator.native_source if coordinator else None
 
     return async_redact_data(

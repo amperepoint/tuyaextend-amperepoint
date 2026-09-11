@@ -144,6 +144,7 @@ def install_homeassistant_stubs() -> None:
     helpers.update_coordinator = _module(
         "homeassistant.helpers.update_coordinator",
         DataUpdateCoordinator=_DataUpdateCoordinator,
+        UpdateFailed=HomeAssistantError,
         CoordinatorEntity=_CoordinatorEntity,
     )
     ha.helpers = helpers

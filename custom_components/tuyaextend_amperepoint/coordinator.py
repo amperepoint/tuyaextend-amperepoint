@@ -21,7 +21,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
 from .const import (
@@ -79,6 +79,7 @@ from .models import (
     normalize_status,
 )
 from .source import NativeTuyaSource
+from .local_source import LOCAL_SOURCE, NativeLocalSource, LocalConnectionError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -131,8 +132,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.config_entry = config_entry
         self.model = get_model(self._config(CONF_MODEL))
-        self.native_source = NativeTuyaSource.resolve(hass, config_entry)
-        if self.native_source is not None:
+        self.native_source = (NativeLocalSource(hass, config_entry)
+                              if self._config(CONF_SOURCE_INTEGRATION) == LOCAL_SOURCE
+                              else NativeTuyaSource.resolve(hass, config_entry))
+        if self.native_source is not None and not isinstance(self.native_source, NativeLocalSource):
             config_entry.async_on_unload(
                 async_dispatcher_connect(
                     hass,
@@ -181,6 +184,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._was_connected = bool(data.get("was_connected", False))
 
     async def _async_update_data(self) -> dict[str, Any]:
+        if isinstance(self.native_source, NativeLocalSource):
+            try:
+                await self.native_source.async_refresh()
+            except LocalConnectionError as err:
+                raise UpdateFailed(str(err)) from None
         now = dt_util.utcnow()
         prime_telemetry = _decode_prime_telemetry(self._prime_telemetry_source())
 
@@ -392,10 +400,13 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "raw_dp": raw_dp,
             "dp_metadata": dp_metadata,
             "source_type": (
-                "native_tuya"
+                getattr(self.native_source, "source_type", "native_tuya")
                 if self.native_source
                 else self._config(CONF_SOURCE_INTEGRATION, "entity_mapping")
             ),
+            "local_host": (self.native_source.config.get("local_host")
+                           if isinstance(self.native_source, NativeLocalSource) else None),
+            "read_only": isinstance(self.native_source, NativeLocalSource),
             "source_online": (
                 self.native_source.available if self.native_source else True
             ),
@@ -454,6 +465,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         status entity doubles as a fallback and heals such entries without
         a migration.
         """
+        if isinstance(self.native_source, NativeLocalSource):
+            attrs = self.native_source.attributes()
+            payload = _as_json_mapping(attrs.get('telemetry'))
+            return {**payload, '_electrical_measurements': attrs.get('electrical_measurements')}
         for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
             entity_id = self._config(key)
             if not entity_id:
@@ -508,6 +523,17 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         snapshot, while local entries without a packed source are rebuilt from
         their mapped entities.
         """
+        if isinstance(self.native_source, NativeLocalSource):
+            attrs = self.native_source.attributes()
+            state = self.native_source.raw('work_state')
+            values = self.native_source.values()
+            metadata = self.native_source.definitions()
+            for dp in (101, 102, 106, 109, 117):
+                values.pop(f'dp_{dp}', None)
+                metadata.pop(f'dp_{dp}', None)
+            values.update(_prime_raw_values(state, attrs))
+            metadata.update(_prime_raw_metadata(state, attrs))
+            return values, metadata
         values = self._mapped_raw_values()
         metadata = self._mapped_raw_metadata()
         # An existing cloud entry may be enriched later with a tuya-local
@@ -783,6 +809,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return now - self._complete_candidate_since >= timedelta(minutes=idle_minutes)
 
     async def async_set_current_limit(self, value: float) -> None:
+        self._assert_not_local_read_only()
         entity_id = self._config(CONF_SOURCE_CURRENT_LIMIT)
         if not entity_id:
             if self.native_source and self.native_source.writable("charge_cur_set"):
@@ -803,6 +830,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise HomeAssistantError(f"Unsupported current limit source domain: {domain}")
 
     async def async_set_charging(self, enabled: bool) -> None:
+        self._assert_not_local_read_only()
         entity_id = self._config(CONF_SOURCE_CHARGE_SWITCH)
         if not entity_id:
             if self.native_source and self.native_source.writable("switch"):
@@ -823,6 +851,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         raise HomeAssistantError(f"Unsupported charging switch source domain: {domain}")
 
+    def _assert_not_local_read_only(self) -> None:
+        if isinstance(self.native_source, NativeLocalSource):
+            raise HomeAssistantError('AmperePoint Local: this tested profile is read-only')
+
     @property
     def model_limits(self) -> AmperePointModel:
         return self.model
@@ -839,6 +871,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self.native_source.definition(code)
 
     async def async_set_work_mode(self, value: str) -> None:
+        self._assert_not_local_read_only()
         entity_id = self._config(CONF_SOURCE_WORK_MODE)
         if entity_id:
             if entity_id.split(".", 1)[0] != "select":
@@ -856,6 +889,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise HomeAssistantError("No writable work mode source configured")
 
     async def async_set_target_energy(self, value: float) -> None:
+        self._assert_not_local_read_only()
         entity_id = self._config(CONF_SOURCE_TARGET_ENERGY)
         if entity_id:
             domain = entity_id.split(".", 1)[0]
@@ -874,6 +908,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raise HomeAssistantError("No writable target energy source configured")
 
     async def async_set_schedule_boundary(self, boundary: str, value: time) -> None:
+        self._assert_not_local_read_only()
         if self.native_source is None or not self.native_source.writable("local_timer"):
             raise HomeAssistantError("No writable schedule source configured")
         if value.minute or value.second or value.microsecond:

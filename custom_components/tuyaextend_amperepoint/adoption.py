@@ -120,7 +120,7 @@ def _async_backfill_mapping(
     instead of a duplicate entry being created.
     """
     entry = info["entry"]
-    if entry is None:
+    if entry is None or entry.data.get("source_integration") == "amperepoint_local":
         return
     merged = {**entry.data, **entry.options}
     missing = {

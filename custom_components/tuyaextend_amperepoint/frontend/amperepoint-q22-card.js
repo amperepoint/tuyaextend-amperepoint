@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.37";
+const AP_Q22_DASHBOARD_VERSION = "0.5.38b1";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -2172,6 +2172,15 @@ class AmperePointQ22Card extends HTMLElement {
     const hasAnyData = powerCard || controlCard || plannerCard || metrics || contentPanels.length || hasRaw;
     const versionInfo = this.dashboardVersionInfo();
     const settingsPath = this.integrationSettingsPath();
+    const localAttrs = this._hass?.states?.[e.rawDp]?.attributes || {};
+    const nativeLocal = localAttrs.source_type === "amperepoint_local";
+    const localOnline = nativeLocal && localAttrs.source_online && !["unavailable", "unknown"].includes(this.state(e.rawDp));
+    const localLabel = this.lang() === "pl"
+      ? "Odczyt bez Tuya Local i bez chmury. Wersja testowa — sterowanie wyłączone."
+      : "Readings without Tuya Local or cloud. Test build — controls disabled.";
+    const localNotice = nativeLocal ? '<div class="empty-state" role="status">' + this.escape(
+      'AmperePoint Local · ' + (localOnline ? 'LAN OK' : 'OFFLINE') + ' · ' +
+      (localAttrs.local_host || 'LAN') + '. ' + localLabel) + '</div>' : '';
     const renderState = this.beginDomReplacement();
 
     this.innerHTML = `
@@ -2229,6 +2238,7 @@ class AmperePointQ22Card extends HTMLElement {
               `
               : `<div class="empty-state">${this.icon("mdi:database-off")} ${this.t("noData")}</div>`
           }
+          ${localNotice}
           <footer class="card-footer">
             <a class="footer-link" data-render-key="settings-link" data-navigate href="${this.escape(settingsPath)}">
               ${this.icon("mdi:cog-outline")}

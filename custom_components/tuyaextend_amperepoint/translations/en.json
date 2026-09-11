@@ -120,7 +120,8 @@
         "menu_options": {
           "automatic": "Set up a detected charger",
           "manual": "Configure entity mapping manually",
-          "prime_profile": "Add Wallbox Prime profile (Tuya Local)"
+          "prime_profile": "Add Wallbox Prime profile (Tuya Local)",
+          "local": "AmperePoint Local (LAN)"
         }
       },
       "automatic": {
@@ -185,6 +186,37 @@
       "prime_profile": {
         "title": "Add Wallbox Prime profile (Tuya Local)",
         "description": "Add the Wallbox PRIME profile to Tuya Local. The profile reads data provided by the charger: power, session energy, temperature, phase measurements and vehicle connection. Data availability depends on compatible device DPs. Start/stop, current control and the planner are not yet supported. Tuya Local must be installed through HACS. An existing profile with different contents will be preserved."
+      },
+      "local": {
+        "title": "AmperePoint Local",
+        "description": "Direct LAN connection — no Tuya Local required. Test build: compatible PRIME readings, no controls.",
+        "menu_options": {
+          "local_import": "Choose a charger from Tuya in HA",
+          "local_manual": "Enter device ID and local key"
+        }
+      },
+      "local_manual": {
+        "title": "AmperePoint Local",
+        "description": "Credentials are saved in HA configuration. Runtime reads work locally without a Tuya account in HA. Leave IP blank for discovery; Docker/VLAN networks may require a manual address.",
+        "data": {
+          "name": "Charger name",
+          "local_device_id": "Charger / device ID",
+          "local_key": "Local key",
+          "local_host": "IP address (blank = discover automatically)",
+          "local_protocol": "LAN protocol"
+        }
+      },
+      "local_import": {
+        "title": "Choose your charger",
+        "description": "Copy the local key once from the already authorized HA Tuya integration. Subsequent reads use LAN only, with no cloud fallback.",
+        "data": {
+          "local_device_id": "Charger / device ID",
+          "local_host": "IP address (blank = discover automatically)"
+        }
+      },
+      "local_confirm": {
+        "title": "LAN connection succeeded",
+        "description": "{name} responds at {host}. Mode: read-only. Confirm to start the dashboard. An existing AmperePoint entry for this charger will migrate to LAN while keeping entity IDs. Its control automation will not be started."
       }
     },
     "error": {
@@ -192,11 +224,17 @@
       "prime_tuya_local_missing": "Tuya Local was not found. Install it through HACS, restart HA and try again.",
       "prime_profile_path_error": "The Tuya Local directory uses a redirected path. Install the profile manually using the repository instructions.",
       "prime_profile_conflict": "The profile file already exists with different contents and was preserved. Compare it with the repository profile before updating it manually.",
-      "prime_profile_write_error": "Could not write the profile. Check Tuya Local directory permissions and the Home Assistant log."
+      "prime_profile_write_error": "Could not write the profile. Check Tuya Local directory permissions and the Home Assistant log.",
+      "local_cannot_connect": "No valid LAN response. Check IP, local key and protocol. Close any other local connection to the charger.",
+      "local_not_found": "Device not discovered. Enter its IP address and retry.",
+      "local_invalid_credentials": "Check device ID, 16-character local key and protocol.",
+      "local_invalid_host": "Enter the charger private IPv4 address.",
+      "local_unsupported": "The device responds but its DP layout is not supported yet."
     },
     "abort": {
       "already_configured": "This AmperePoint source is already configured.",
-      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select the Wallbox PRIME profile matching the device data (older profile names may differ). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
+      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select the Wallbox PRIME profile matching the device data (older profile names may differ). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile.",
+      "local_migrated": "The existing charger has been migrated to AmperePoint Local. Open the dashboard."
     }
   },
   "options": {
@@ -251,16 +289,33 @@
       "prime_profile": {
         "title": "Add Wallbox Prime profile (Tuya Local)",
         "description": "Add the Wallbox PRIME profile to Tuya Local. The profile reads data provided by the charger: power, session energy, temperature, phase measurements and vehicle connection. Data availability depends on compatible device DPs. Start/stop, current control and the planner are not yet supported. Tuya Local must be installed through HACS. An existing profile with different contents will be preserved."
+      },
+      "local_connection": {
+        "title": "AmperePoint Local connection",
+        "description": "Change IP, protocol or local key. Blank key keeps the existing key; blank IP runs discovery. The connection is tested before saving.",
+        "data": {
+          "name": "Charger name",
+          "local_device_id": "Charger / device ID",
+          "local_key": "Local key",
+          "local_host": "IP address (blank = discover automatically)",
+          "local_protocol": "LAN protocol"
+        }
       }
     },
     "error": {
       "prime_tuya_local_missing": "Tuya Local was not found. Install it through HACS, restart HA and try again.",
       "prime_profile_path_error": "The Tuya Local directory uses a redirected path. Install the profile manually using the repository instructions.",
       "prime_profile_conflict": "The profile file already exists with different contents and was preserved. Compare it with the repository profile before updating it manually.",
-      "prime_profile_write_error": "Could not write the profile. Check Tuya Local directory permissions and the Home Assistant log."
+      "prime_profile_write_error": "Could not write the profile. Check Tuya Local directory permissions and the Home Assistant log.",
+      "local_cannot_connect": "No valid LAN response. Check IP, local key and protocol. Close any other local connection to the charger.",
+      "local_not_found": "Device not discovered. Enter its IP address and retry.",
+      "local_invalid_credentials": "Check device ID, 16-character local key and protocol.",
+      "local_invalid_host": "Enter the charger private IPv4 address.",
+      "local_unsupported": "The device responds but its DP layout is not supported yet."
     },
     "abort": {
-      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select the Wallbox PRIME profile matching the device data (older profile names may differ). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile."
+      "prime_profile_installed": "The Prime profile is installed. Restart Home Assistant. Then add the charger in Tuya Local using its device ID, IP, local key and protocol 3.5; select the Wallbox PRIME profile matching the device data (older profile names may differ). If the charger has a wrong profile, preserve its connection details and add its Tuya Local entry again. In AmperePoint, choose automatic setup for the detected charger. Run this installer again if a Tuya Local update removes the profile.",
+      "local_updated": "Connection settings tested and saved."
     }
   }
 }
