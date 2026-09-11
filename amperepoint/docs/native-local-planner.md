@@ -42,3 +42,32 @@ with synthetic meter readings, never by inserting fake data into live HA.
 
 This beta remains local until the LAN and load checks are complete. No extra
 Tuya Local integration is required for the native AmperePoint transport.
+
+## Verification — 11 September 2026
+
+- 170 Python tests and 10 Node frontend tests passed; JavaScript syntax checked.
+- HA-native imports passed with the official Tuya/cloud SDK and Tuya Local imports
+  blocked. The live target uses the integration-owned LAN transport.
+- Verified in the HA dashboard: all three modes, conditional target-energy input,
+  weekly planner, LAN command status, friendly charger/connection labels and
+  separate technical values. No repeated unverified-meaning warnings are rendered.
+- Live schedule: Friday 14:21–14:23 Europe/Warsaw, 8 A. At 14:21 HA set the
+  current and then enabled DP140; independent LAN readings confirmed DP150=8,
+  DP140=true, DP101=300. Start confirmation was recorded at 14:21:13.
+- Docker/HA was restarted during the active interval. The persisted plan resumed
+  without a new schedule configuration. At 14:23 HA disabled DP140; DP101=204
+  and permission=false were confirmed at 14:23:02.
+- The 3.5 kWh mode was prepared through the HA select and number entities, then
+  started with the HA switch. The planner reported target=3.5, delivered=0,
+  mode=charge_energy; LAN confirmed permission=true and DP101=300. Device
+  DP151.m remained 0 throughout (no native-mode writes).
+- The target had been changed by the user to DP152=13 A / DP150=12 A during
+  earlier UI checks. The test respected that installation limit. Final readback:
+  12 A request, 13 A installation limit, permission=false, DP101=204, CP=6.1 V,
+  power=0 kW, 22 physical DPs. Mode restored to Charge now, target=10 kWh,
+  planner disabled, test interval removed.
+
+Energy target completion, missing-meter handling, counter resets, target changes
+and energy-budget restart recovery were checked with synthetic unit-test readings.
+No fake energy was injected into the live HA instance. A real-load energy test is
+still required before production approval of kWh accuracy/stop overshoot.
