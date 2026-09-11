@@ -1,6 +1,31 @@
 # Installation
 
-## Wallbox Prime profile installer
+## Wallbox PRIME — native LAN, development 0.5.38b9
+
+Install this development build and restart HA. Choose **Add integration →
+AmperePoint → AmperePoint Local (LAN)**. Import the local connection credentials
+from your configured Tuya integration, or enter the device ID, local key and
+LAN protocol manually. Leave the IP blank to try discovery, or enter a reachable
+local address (Docker and VLAN setups may require this). Separate Tuya Local
+is **not required** for this path.
+
+The tested split `(V7.0.0)F2.0.0` and packed `(V8.0.7)F1.3.6` firmware contracts
+enable start/stop and integer current settings, conservatively capped at 16 A
+and never above DP152. An existing read-only entry can be rechecked in its
+local connection options by enabling verified controls. Unknown firmware
+remains read-only; a model name or PID alone does not unlock writes.
+
+Charge-now, target-energy and weekly-schedule modes run in **Home Assistant**,
+which must remain running. Leave the wallbox in immediate mode and disable its
+own schedules. Do not configure another integration to control the same device
+simultaneously. Tests used a zero-load EVSE tester; real-load energy cutoff and
+phase metering remain to be validated. Missing CP does not mean disconnected.
+See the [test report](amperepoint/docs/prime-packed-local-controls-20260911.md).
+
+The following installer instructions document the older **0.5.37** route,
+not the native LAN onboarding above.
+
+## Historical 0.5.37 Wallbox Prime profile installer
 
 The setup notices address the **Wallbox PRIME** family without a power rating
 or PID restriction. PRIME 11 kW names are also recognized, with a 16 A model

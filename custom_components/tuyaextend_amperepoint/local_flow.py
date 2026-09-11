@@ -5,7 +5,7 @@ import voluptuous as vol
 from homeassistant.helpers import selector, device_registry as dr
 
 from .const import DOMAIN, CONF_SOURCE_PHYSICAL_IDS
-from .local_source import (LOCAL_SOURCE, LOCAL_FIELDS, CONTROL_PROFILE,
+from .local_source import (LOCAL_SOURCE, LOCAL_FIELDS, CONTROL_PROFILES,
                            LocalConnectionError, read_local, control_supported,
                            detected_control_profile, discover_device)
 
@@ -21,7 +21,7 @@ def local_schema(current=None, *, options=False):
     fields[vol.Optional("local_host", default=current.get("local_host", ""))] = str
     fields[vol.Required("local_protocol", default=current.get("local_protocol", "3.5"))] = vol.In(["3.5", "3.4", "3.3"])
     if options:
-        fields[vol.Optional("enable_test_controls", default=current.get("local_control_profile") == CONTROL_PROFILE)] = bool
+        fields[vol.Optional("enable_test_controls", default=current.get("local_control_profile") in CONTROL_PROFILES)] = bool
     return vol.Schema(fields)
 
 
@@ -159,7 +159,9 @@ class NativeLocalOptionsMixin:
                 result = await self.hass.async_add_executor_job(read_local, credentials)
                 credentials["local_host"] = result["host"]
                 credentials["local_family"] = result["family"]
-                credentials["local_control_profile"] = CONTROL_PROFILE if user_input.get("enable_test_controls") else None
+                credentials["local_control_profile"] = (
+                    detected_control_profile(result["dps"], result["family"])
+                    if user_input.get("enable_test_controls") else None)
                 if user_input.get("enable_test_controls") and not control_supported(credentials, result["dps"], result["family"]):
                     raise LocalConnectionError("local_unsupported")
                 self.hass.config_entries.async_update_entry(

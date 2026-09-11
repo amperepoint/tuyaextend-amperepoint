@@ -29,36 +29,37 @@ Full installation manuals: [`INSTALL.en.md`](INSTALL.en.md) / [`INSTALL.pl.md`](
 
 ## Wallbox Prime setup through AmperePoint
 
-The family installer also includes a [split DP102/DP117 firmware profile](amperepoint/docs/prime-split-profile.md),
-displayed as **Ampere Point Wallbox PRIME (local)**. Profiles are selected by
-actual device DPS, not rated power. Both remain read-only; the split variant
-has been checked with an EVSE tester without load, not a real charging session.
+Development build `0.5.38b9` includes **AmperePoint Local (LAN)** directly in
+this integration; a separate Tuya Local installation is not required. After
+installing/restarting HA, choose **Add integration → AmperePoint → AmperePoint
+Local (LAN)**. Import connection details from an already configured official
+Tuya integration, or enter the device ID, local key and protocol manually.
+An empty IP requests LAN discovery; Docker/VLAN networks may require a manual IP.
 
-For **Wallbox Prime 22 kW, PID `gbmxngploofmhbjc`**, install AmperePoint and Tuya Local
-through HACS first, restart HA, then open **Add integration → AmperePoint → Add Wallbox
-Prime profile (Tuya Local)**. The same installer is available under the
-AmperePoint integration's **Configure** menu.
+Profiles are selected by the actual firmware and DP contract, not the charger
+name, rated power or PID alone. The tested split firmware `(V7.0.0)F2.0.0` and
+packed firmware `(V8.0.7)F1.3.6` expose start/stop and integer current control
+up to the smaller of 16 A and the device's installation limit. Other firmware
+remains read-only. For an existing read-only entry, reopen its local connection
+options and enable verified controls; the connection is checked again before
+applying the profile. New verified entries offer controls during onboarding.
 
-Submit the installer, restart Home Assistant, then pair the charger in Tuya
-Local using its device ID, IP, local key and protocol 3.5. Select **Ampere Point
-Wallbox Prime 22kW (local)**. In AmperePoint, choose automatic setup for the
-detected charger to create its dashboard. If a previous Tuya Local entry uses
-the wrong profile, preserve its connection details before replacing that entry.
+The panel provides charge-now, energy-target and weekly-schedule modes through
+the **Home Assistant planner**, not by programming the charger's native timer.
+HA must remain running and reachable; keep the device in immediate mode with
+its own schedules disabled. Plan windows, current limits and energy budgets
+are persisted. Only DP140/150 are written; installation limits and protections
+are not changed. Every command requires independent device-state confirmation.
 
-The bundled Prime profile provides **read-only telemetry**: power, session
-energy, temperature, phase measurements, vehicle connection and session duration.
-It does **not yet provide Q Series control parity** (start/stop, current changes
-or planner control). These require confirmed Prime command mappings and device
-tests. Energy-target charging and native schedule/mode writes are also not
-supported for PRIME. Standard Tuya cloud does not expose this Prime telemetry;
-the official HA Tuya integration is not required for this local path. Other
-Prime PIDs/firmware are not automatically covered. Measurements depend on the
-data reported by the device. See the installation manuals for LAN/key requirements.
-
-The installer preserves existing files with different contents and reports a
-conflict for manual review. If a Tuya Local update removes the profile, run the
-installer again. Removing AmperePoint does not remove a profile already in use
-by Tuya Local. For the remaining work, see the [Prime implementation plan](amperepoint/docs/prime-control-plan.md).
+Both firmware profiles have been tested with an EVSE tester **without load**.
+Energy-target cutoff accuracy and nonzero phase/energy measurements still need
+a real charging session. Available telemetry is shown in readable LAN tables;
+missing CP at zero load is unknown, not proof of disconnection. PID is displayed
+in the footer, separately from private device identity and keys.
+See the [packed PRIME test report](amperepoint/docs/prime-packed-local-controls-20260911.md)
+for the mapping, evidence and remaining limits. Older Tuya Local profile files
+remain available for existing separate installations, but are not needed for
+the native AmperePoint LAN path.
 
 ## Dashboard previews
 

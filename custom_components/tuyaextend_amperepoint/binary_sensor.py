@@ -55,5 +55,12 @@ class AmperePointBinarySensor(AmperePointEntity, BinarySensorEntity):
     entity_description: AmperePointBinarySensorDescription
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
+        data = self.coordinator.data
+        if (self.entity_description.key == "vehicle_connected"
+                and data.get("source_type") == "amperepoint_local"
+                and not data.get("vehicle_connection_known")
+                and not data.get("vehicle_connected")):
+            # Missing CP at zero load is unknown, not proof of an unplugged car.
+            return None
         return self.entity_description.value_fn(self.coordinator.data)

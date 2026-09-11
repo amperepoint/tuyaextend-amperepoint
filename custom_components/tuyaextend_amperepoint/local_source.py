@@ -17,6 +17,8 @@ from homeassistant.exceptions import HomeAssistantError
 LOCAL_SOURCE = "amperepoint_local"
 LOCAL_FIELDS = ("local_device_id", "local_key", "local_host", "local_protocol")
 CONTROL_PROFILE = "prime_split_v1"
+PACKED_CONTROL_PROFILE = "prime_packed_v1"
+CONTROL_PROFILES = {CONTROL_PROFILE, PACKED_CONTROL_PROFILE}
 PRIVATE_DPS = {"112", "113"}  # Card/authentication data, not telemetry.
 
 
@@ -59,6 +61,15 @@ def validate_snapshot(response: Any) -> tuple[dict, str]:
 
 def detected_control_profile(dps: dict, family: str) -> str | None:
     """Recognize the tested firmware/DP contract, independently of user settings."""
+    if (family == "prime_packed"
+            and as_mapping(dps.get("106")).get("fv") == "(V8.0.7)F1.3.6"
+            and type(dps.get("101")) is int
+            and isinstance(dps.get("109"), str)
+            and type(dps.get("150")) is int
+            and type(dps.get("152")) is int
+            and 6 <= dps["152"] <= 16):
+        # DP140 is write-only on this firmware. Do not require a reported value.
+        return PACKED_CONTROL_PROFILE
     verified = (family == "prime_split"
             and as_mapping(dps.get("106")).get("fv") == "(V7.0.0)F2.0.0"
             and type(dps.get("140")) is bool
@@ -70,8 +81,22 @@ def detected_control_profile(dps: dict, family: str) -> str | None:
 
 def control_supported(config: dict, dps: dict, family: str) -> bool:
     """Require both the configured profile and a fresh compatible snapshot."""
-    return (config.get("local_control_profile") == CONTROL_PROFILE
-            and detected_control_profile(dps, family) == CONTROL_PROFILE)
+    profile = config.get("local_control_profile")
+    return (profile in CONTROL_PROFILES
+            and detected_control_profile(dps, family) == profile)
+
+
+def charging_enabled(dps: dict, family: str) -> bool | None:
+    """Observed state, never a cached command or a fabricated raw DP140."""
+    if detected_control_profile(dps, family) == PACKED_CONTROL_PROFILE:
+        pair = (dps.get("101"), dps.get("109"))
+        if pair == (300, "WORKING"):
+            return True
+        if pair == (204, "PAUSE"):
+            return False
+        return None  # Other states need their own evidence; especially faults.
+    value = dps.get("140")
+    return value if type(value) is bool else None
 
 
 def current_max(dps: dict) -> int:
@@ -115,6 +140,12 @@ def write_local(config: dict, code: str, value: Any) -> dict:
     for attempt in range(3):
         time.sleep(0.5 if attempt == 0 else 1)
         after = read_local({**config, "local_host": before["host"]})
+        if not control_supported(config, after["dps"], after["family"]):
+            raise LocalConnectionError("local_control_not_verified")
+        if dp == 140 and config.get("local_control_profile") == PACKED_CONTROL_PROFILE:
+            if charging_enabled(after["dps"], after["family"]) is expected:
+                return after
+            continue
         if after["dps"].get(str(dp)) == expected:
             if dp != 140 or after["dps"].get("101") in (
                 (200, 300) if expected else (201, 204)
@@ -232,7 +263,7 @@ class NativeLocalSource:
 
     def raw(self, code):
         if code == "switch":
-            return self.dps.get("140")
+            return charging_enabled(self.dps, self.family)
         if code == "charge_cur_set":
             return self.dps.get("150")
         if code == "work_state":

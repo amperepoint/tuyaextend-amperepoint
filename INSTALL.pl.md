@@ -1,6 +1,32 @@
 # Instalacja
 
-## Wallbox Prime: instalator profilu w aplikacji
+## Wallbox PRIME — wbudowany LAN, development 0.5.38b9
+
+Zainstaluj tę wersję rozwojową i zrestartuj HA. Wybierz **Dodaj integrację →
+AmperePoint → AmperePoint Local (LAN)**. Zaimportuj dane połączenia z już
+skonfigurowanej integracji Tuya albo wpisz Device ID, local key i protokół LAN
+ręcznie. Puste IP uruchamia wykrywanie; w Dockerze lub między VLAN-ami może
+być potrzebny ręczny adres. Oddzielna integracja Tuya Local **nie jest wymagana**.
+
+Przetestowane układy DP i firmware split `(V7.0.0)F2.0.0` oraz packed
+`(V8.0.7)F1.3.6` udostępniają start/stop i regulację prądu co 1 A, maksymalnie
+do 16 A i nigdy powyżej DP152. Istniejący wpis tylko do odczytu można ponownie
+sprawdzić w opcjach połączenia LAN, włączając zweryfikowane sterowanie.
+Nieznany firmware pozostaje tylko do odczytu — sama nazwa lub PID nie odblokowuje
+komend.
+
+Tryby „Ładuj teraz”, „Do zadanej energii” i „Według harmonogramu” wykonuje
+**Home Assistant**, który musi działać przez cały czas. Ładowarkę pozostaw
+w trybie natychmiastowym, z wyłączonym własnym harmonogramem. Nie steruj tym
+samym urządzeniem jednocześnie z innej integracji. Testy wykonano na testerze
+bez poboru mocy; odcięcie po zadanej energii i pomiary faz wymagają próby pod
+obciążeniem. Brak CP nie oznacza odłączonego auta.
+[Raport testów](amperepoint/docs/prime-packed-local-controls-20260911.md).
+
+Instrukcja instalatora poniżej dokumentuje starszą ścieżkę **0.5.37**,
+a nie opisany wyżej wbudowany LAN.
+
+## Historyczna wersja 0.5.37: instalator profilu Wallbox Prime
 
 Komunikaty kreatora dotyczą całej rodziny **Wallbox PRIME**, bez ograniczenia
 do mocy lub PID. Integracja rozpoznaje też nazwę PRIME 11 kW i stosuje dla niej
