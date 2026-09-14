@@ -210,6 +210,9 @@
   },
   "entity": {
     "sensor": {
+      "charging_energy": {
+        "name": "Charging energy"
+      },
       "status": {
         "name": "Status"
       },
@@ -220,7 +223,7 @@
         "name": "Session energy"
       },
       "total_energy": {
-        "name": "Total energy"
+        "name": "Source energy counter"
       },
       "last_session_energy": {
         "name": "Last session energy"

@@ -129,6 +129,18 @@ i wstrzymując poprzedni planer. Nie usuwaj wpisów bez sprawdzenia zależności
 Xtend Tuya, Tuya Local i LocalTuya pozostają opcjonalnymi źródłami dla wcześniejszych
 konfiguracji, ale nie są zależnościami wbudowanego PRIME LAN.
 
+## 5. Panel Energia
+
+W aktualizacji z nowym licznikiem (`0.5.39b2`, wersja rozwojowa) rozwiń **Energia
+w Home Assistant** nad stopką panelu AmperePoint. Dodaj wskazaną encję **Energia
+ładowania** jako poszczególne urządzenie w ustawieniach Energii HA. Recorder musi
+ją zapisywać. Każdą fizyczną ładowarkę dodaj tylko raz.
+
+Przy aktualizacji zastąp starsze encje energii sesji/źródłowej nową — nie dodawaj
+obu. Nie scalamy ani nie usuwamy starszych statystyk. Nowa encja zaczyna od zera
+i jest niezależna od wskazania aktualnej sesji.
+[Pełna instrukcja: źródła, luki, resety, restart i migracja](amperepoint/docs/home-assistant-energy.md).
+
 ## Problemy i bezpieczeństwo
 
 - **Brak PRIME w Cloud:** użyj ścieżki LAN; nie oczekuj pełnej telemetrii PRIME z chmury.

@@ -30,6 +30,7 @@ DASHBOARD_ICON = "mdi:ev-station"
 SETTINGS_PATH = f"/config/integrations/integration/{DOMAIN}"
 
 _CARD_ENTITY_KEYS = {
+    "charging_energy": "chargingEnergy",
     "charging": "switch",
     "current_limit": "currentLimit",
     "target_energy": "targetEnergy",

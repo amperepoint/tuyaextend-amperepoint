@@ -54,6 +54,8 @@ class _EntityDescription:
     device_class: str | None = None
     entity_category: str | None = None
     native_unit_of_measurement: str | None = None
+    state_class: str | None = None
+    suggested_display_precision: int | None = None
 
 
 class _CoordinatorEntity:
@@ -63,9 +65,13 @@ class _CoordinatorEntity:
     def __class_getitem__(cls, _item):
         return cls
 
+    @property
+    def available(self):
+        return self.coordinator.last_update_success
+
 
 class _DataUpdateCoordinator:
-    def __init__(self, hass, *, logger=None, name=None, update_interval=None) -> None:
+    def __init__(self, hass, *, config_entry=None, logger=None, name=None, update_interval=None) -> None:
         self.hass = hass
 
     def __class_getitem__(cls, _item):
@@ -95,7 +101,8 @@ def install_homeassistant_stubs() -> None:
         ConfigEntry=object,
         SOURCE_INTEGRATION_DISCOVERY="integration_discovery",
     )
-    _module("homeassistant.core", HomeAssistant=object, callback=lambda func: func)
+    _module("homeassistant.core", HomeAssistant=object, callback=lambda func: func,
+            CoreState=types.SimpleNamespace(stopping="stopping", running="running"))
     _module("homeassistant.exceptions", HomeAssistantError=HomeAssistantError)
     _module(
         "homeassistant.const",
@@ -108,6 +115,8 @@ def install_homeassistant_stubs() -> None:
         UnitOfElectricPotential=types.SimpleNamespace(MILLIVOLT="mV", VOLT="V"),
         UnitOfEnergy=types.SimpleNamespace(WATT_HOUR="Wh", KILO_WATT_HOUR="kWh"),
         UnitOfPower=types.SimpleNamespace(WATT="W", KILO_WATT="kW"),
+        UnitOfTemperature=types.SimpleNamespace(CELSIUS="°C"),
+        UnitOfTime=types.SimpleNamespace(MINUTES="min"),
         Platform=types.SimpleNamespace(
             SENSOR="sensor",
             BINARY_SENSOR="binary_sensor",
@@ -124,7 +133,8 @@ def install_homeassistant_stubs() -> None:
         DeviceInfo=dict,
     )
     helpers.entity = _module(
-        "homeassistant.helpers.entity", EntityDescription=_EntityDescription
+        "homeassistant.helpers.entity", EntityDescription=_EntityDescription,
+        EntityCategory=types.SimpleNamespace(DIAGNOSTIC="diagnostic"),
     )
     helpers.entity_platform = _module(
         "homeassistant.helpers.entity_platform", AddEntitiesCallback=object
@@ -160,6 +170,13 @@ def install_homeassistant_stubs() -> None:
 
     components = _module("homeassistant.components")
     components.select = _module("homeassistant.components.select", SelectEntity=object)
+    components.sensor = _module(
+        "homeassistant.components.sensor", SensorEntity=type("SensorEntity", (), {}),
+        SensorEntityDescription=_EntityDescription,
+        SensorDeviceClass=types.SimpleNamespace(**{name: name.lower() for name in (
+            "ENERGY", "POWER", "TEMPERATURE", "VOLTAGE", "DURATION", "MONETARY", "CURRENT")}),
+        SensorStateClass=types.SimpleNamespace(MEASUREMENT="measurement", TOTAL="total", TOTAL_INCREASING="total_increasing"),
+    )
     components.number = _module(
         "homeassistant.components.number",
         NumberEntity=object,
