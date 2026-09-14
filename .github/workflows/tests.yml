@@ -43,3 +43,22 @@ jobs:
 
       - name: Check frontend syntax
         run: node --check custom_components/tuyaextend_amperepoint/frontend/amperepoint-q22-card.js
+
+  energy-home-assistant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Test real HA sensors, storage and Recorder with synthetic data
+        run: |
+          docker network create --internal amperepoint-energy-smoke
+          docker run --rm --network amperepoint-energy-smoke \
+            --mount "type=bind,source=${{ github.workspace }},target=/work,readonly" \
+            --entrypoint python ghcr.io/home-assistant/home-assistant:2026.7.2 \
+            /work/tests/ha_energy_smoke.py
+
+      - name: Remove isolated test network
+        if: always()
+        run: docker network rm amperepoint-energy-smoke

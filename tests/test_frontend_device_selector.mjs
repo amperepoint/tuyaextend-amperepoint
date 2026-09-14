@@ -28,6 +28,56 @@ const cardPath = resolve(
 await import(pathToFileURL(cardPath));
 
 const Card = customElements.get("amperepoint-q22-card");
+test("Energy guide resolves the selected charger's canonical meter", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: { chargingEnergy: "sensor.garage_energy" }, language: "en" });
+  instance._hass = {
+    entities: {
+      "sensor.garage_energy": { platform: "tuyaextend_amperepoint", device_id: "garage", translation_key: "charging_energy" },
+      "sensor.driveway_energy": { platform: "tuyaextend_amperepoint", device_id: "driveway", translation_key: "charging_energy" },
+    },
+    states: { "sensor.garage_energy": { state: "12", attributes: { measurement_method: "device_counter" } } },
+  };
+  assert.equal(instance.apRegistryEntities("garage").chargingEnergy, "sensor.garage_energy");
+  assert.equal(instance.detectEntities("garage").entities.chargingEnergy, "sensor.garage_energy");
+  const html = instance.energySetupGuide();
+  assert.match(html, /sensor.garage_energy/);
+  assert.doesNotMatch(html, /sensor.driveway_energy/);
+  assert.match(html, /href="\/config\/energy"/);
+  assert.match(html, /individual devices/);
+  assert.doesNotMatch(html, /Estimated from power/);
+});
+
+test("Energy guide translates and distinguishes estimates and missing history", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: { chargingEnergy: "sensor.energy" }, language: "pl" });
+  instance._hass = { states: { "sensor.energy": { state: "1", attributes: {
+    measurement_method: "power_estimate", incomplete_history: true,
+  } } } };
+  const html = instance.energySetupGuide();
+  assert.match(html, /Energia w Home Assistant/);
+  assert.match(html, /Pomiar szacowany z mocy/);
+  assert.match(html, /Historia zawiera niepełne dane/);
+});
+
+test("Energy guide handles an absent or malicious entity name without service calls", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: {}, language: "en" });
+  instance._hass = { states: {}, callService() { throw new Error("Energy guide must be read-only"); } };
+  assert.match(instance.energySetupGuide(), /becomes available/);
+  instance.config.entities.chargingEnergy = '<img src=x onerror="bad()">';
+  const html = instance.energySetupGuide();
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /&lt;img/);
+});
+
+test("Energy guide makes a saved-meter failure actionable", () => {
+  const instance = new Card();
+  instance.setConfig({ entities: { chargingEnergy: "sensor.energy" }, language: "en" });
+  instance._hass = { states: { "sensor.energy": { state: "unavailable", attributes: { data_quality: "storage_error" } } } };
+  assert.match(instance.energySetupGuide(), /Restore a compatible integration backup/);
+});
+
 const card = new Card();
 card.setConfig({
   entities: { power: "sensor.garage_power" },

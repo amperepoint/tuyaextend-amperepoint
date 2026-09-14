@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.38";
+const AP_Q22_DASHBOARD_VERSION = "0.5.39b1";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -710,6 +710,7 @@ class AmperePointQ22Card extends HTMLElement {
     // Language-independent mapping from the integration's entity registry
     // (translation_key) to card entity keys, mirroring dashboard.py.
     const keys = {
+      charging_energy: "chargingEnergy",
       charging: "switch",
       current_limit: "currentLimit",
       target_energy: "targetEnergy",
@@ -827,6 +828,7 @@ class AmperePointQ22Card extends HTMLElement {
   detectEntities(deviceId = null) {
     const registryDetected = this.apRegistryEntities(deviceId);
     const specs = {
+      chargingEnergy: { domains: ["sensor"], any: ["charging energy", "energia ladowania"], not: ["session", "sesji"] },
       switch: { domains: ["switch"], any: [" charging", "_charging", " ladowanie", "_switch", " start stop"], not: [] },
       currentLimit: { domains: ["number", "input_number"], any: ["current limit", "current_limit", "charging current", "charging_current", "charge cur set", "charge_cur_set", "limit pradu"], not: ["current_l1", "current_l2", "current_l3"] },
       targetEnergy: { domains: ["number", "input_number"], any: ["target energy", "target_energy", "energy charge", "energy_charge", "energia docelowa"], not: [] },
@@ -1243,6 +1245,22 @@ class AmperePointQ22Card extends HTMLElement {
     const pid = this.detectedProductId();
     const missing = this.lang() === "pl" ? "nie wykryto" : "not detected";
     return `<span class="product-id" data-render-key="product-id">PID: <strong>${this.escape(pid || missing)}</strong></span>`;
+  }
+
+  energySetupGuide() {
+    const id = this.config.entities.chargingEnergy;
+    const pl = this.lang() === "pl";
+    const method = this.attr(id, "measurement_method");
+    return `<details class="energy-setup" data-render-key="energy-setup">
+      <summary>${pl ? "Energia w Home Assistant" : "Energy in Home Assistant"}</summary>
+      <p>${pl ? "W ustawieniach panelu Energia dodaj ładowarkę w sekcji poszczególnych urządzeń. Wybierz tylko encję Energia ładowania — nie dodawaj obok niej energii sesji ani licznika źródłowego." : "In the Energy dashboard settings, add the charger under individual devices. Select only Charging energy — do not also add session energy or the source counter."}</p>
+      <p>${id ? `<code>${this.escape(id)}</code>` : (pl ? "Encja energii będzie dostępna po uruchomieniu integracji." : "The energy entity becomes available when the integration starts.")}</p>
+      <p>${pl ? "Licznik zaczyna od zera przy pierwszym odczycie i zachowuje stan po restarcie. Statystyki pojawiają się po ich przetworzeniu przez HA; Recorder musi zapisywać tę encję." : "The meter starts at zero on its first reading and survives restarts. Statistics appear after HA processes them; Recorder must include this entity."}</p>
+      ${method === "power_estimate" ? `<p>${pl ? "Pomiar szacowany z mocy. Przerwy w danych nie są uzupełniane." : "Estimated from power. Missing intervals are not filled in."}</p>` : ""}
+      ${this.attr(id, "incomplete_history") ? `<p>${pl ? "Historia zawiera niepełne dane, np. po zmianie źródła lub przerwie w pomiarach. Suma może być zaniżona." : "History includes incomplete data, for example after a source change or a measurement gap. The total may be understated."}</p>` : ""}
+      ${this.attr(id, "data_quality") === "storage_error" ? `<p>${pl ? "Nie można odczytać zapisanego stanu licznika. Przywróć zgodną kopię zapasową integracji; nie zeruj statystyk HA." : "The saved meter state cannot be read. Restore a compatible integration backup; do not reset HA statistics."}</p>` : ""}
+      <a data-navigate href="/config/energy">${pl ? "Otwórz ustawienia energii →" : "Open energy settings →"}</a>
+    </details>`;
   }
 
   navigateTo(path) {
@@ -2318,6 +2336,7 @@ class AmperePointQ22Card extends HTMLElement {
               : `<div class="empty-state">${this.icon("mdi:database-off")} ${this.t("noData")}</div>`
           }
           ${localNotice}
+          ${this.energySetupGuide()}
           <footer class="card-footer">
             ${this.productIdFooter()}
             <a class="footer-link" data-render-key="settings-link" data-navigate href="${this.escape(settingsPath)}">
@@ -3374,7 +3393,20 @@ class AmperePointQ22Card extends HTMLElement {
           gap: 10px;
           color: var(--ap-muted);
         }
+        .energy-setup {
+          margin-top: 18px;
+          padding: 14px;
+          border: 1px solid var(--ap-border);
+          border-radius: 12px;
+          color: var(--ap-muted);
+          font-size: 13px;
+          overflow-wrap: anywhere;
+        }
+        .energy-setup summary { cursor: pointer; color: var(--ap-text); font-weight: 700; }
+        .energy-setup a { color: var(--ap-text); text-decoration: underline; }
+        .energy-setup code { white-space: normal; }
         .card-footer {
+          /* Keep the standard footer separate from the optional setup guide. */
           display: flex;
           align-items: center;
           justify-content: space-between;
