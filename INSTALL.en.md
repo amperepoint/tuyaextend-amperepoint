@@ -128,7 +128,7 @@ setups, but are not dependencies of built-in PRIME LAN.
 
 ## 5. Energy dashboard
 
-For the energy-foundation update (`0.5.39b1` development), expand **Energy in
+For the energy-foundation update (`0.5.39b2` development), expand **Energy in
 Home Assistant** above the AmperePoint footer, then add the indicated **Charging
 energy** entity under individual devices in HA's Energy settings. Recorder must
 record it. Add one consumption sensor per physical charger.

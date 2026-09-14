@@ -1,22 +1,38 @@
 # Energy foundation — review and verification
 
 Scope: issue #36's agreed **energy foundation first**, not the complete session
-history/cost epic. Development version: `0.5.39b1`, based on main / `v0.5.38`.
+history/cost epic. Development version: `0.5.39b2`, based on main / `v0.5.38`.
 
 ## Automated checks
 
-- 230 Python unit/regression tests passed.
+- 241 Python unit/regression tests passed (11 added after the blocking review).
 - 16 named frontend tests plus existing inline assertions passed.
 - Python compilation, JavaScript syntax and Git whitespace checks passed.
-- Real Home Assistant **2026.7.2** smoke test passed in a separate container with
+- Real Home Assistant **2024.6.0 and 2026.7.2** smoke tests passed in separate containers with
   an internal-only network and temporary database/configuration. No real charger
   was connected to that test.
-- The real sensor exposed `kWh`, `energy`, `total_increasing`; missing data became
-  unavailable. A Store save/load, source reset and rejected stale packet preserved
-  the meter. Recorder compiled an expected sum of **3 kWh** from synthetic data.
-- The real-HA smoke test is included in CI, pinned to the tested HA version.
+- The production coordinator (not a generic test coordinator) exposed `kWh`,
+  `energy`, `total_increasing`; missing data became unavailable. Immediate reload,
+  a real Store write failure, source reset and rejected stale packet preserved
+  the meter. Recorder compiled an expected sum of **3 kWh** on both HA versions.
+- The real-HA CI matrix covers the declared minimum and our installed HA version.
 
-## Local HA verification
+## Blocking review fixes (b2)
+
+- Removed delayed meter writes. Atomic checkpoints include both total and source
+  baseline and are read back from the file before publishing. HA Store can log
+  write errors without raising; checking its cached async_load would be unsafe.
+- Write failure does not publish an uncommitted increase. The in-memory pending
+  delta remains available for a later successful retry, including a source reset.
+- Refreshes are serialized. Cancelled writes drain before releasing the lock;
+  unloading waits for the same lock and blocks stale/queued refreshes.
+- Tests cover a blocked write/crash boundary, write failure and retry, repeated
+  cancellation with reload, overlapping refreshes, missing/corrupt readback,
+  shutdown deferral, and both coordinator constructor signatures.
+- Pass config_entry only when the HA constructor supports it. Do not catch/retry
+  arbitrary TypeError. The declared HA 2024.6.0 minimum remains unchanged.
+
+## Local HA verification (initial b1 UI check)
 
 - Backed up the previously installed integration and installed this development
   build without changing charger configuration or the home's Energy settings.
@@ -30,6 +46,14 @@ history/cost epic. Development version: `0.5.39b1`, based on main / `v0.5.38`.
   entity ID wraps, instructions and link remain readable. Viewport override reset.
 - No start/stop, current, schedule or planner commands were issued in this review.
 
+### b2 deployment check
+
+- Backed up b1, verified installed files had no unrelated edits, and deployed b2.
+- HA restarted and served HTTP 200; the live footer displayed `v0.5.39b2`.
+- The charger was already reporting `local_cannot_connect` before deployment.
+  Q and PRIME currently expose unavailable energy sensors; this is not a loaded
+  hardware measurement test. No charger settings or Energy configuration changed.
+
 ## Issues caught before commit
 
 - Added the new key to full frontend detection, not only the registry mapping;
@@ -39,7 +63,7 @@ history/cost epic. Development version: `0.5.39b1`, based on main / `v0.5.38`.
 - Unknown/corrupt saved meter formats fail closed rather than reset statistics.
 - PRIME's older status-entity fallback is matched to the actual telemetry provider.
 - Explicit mapped energy/power units are validated and normalized.
-- Pass the config entry explicitly to DataUpdateCoordinator for newer HA APIs.
+- Pass the config entry explicitly for newer HA APIs, conditionally for older HA.
 
 ## Remaining limitations / release notes
 

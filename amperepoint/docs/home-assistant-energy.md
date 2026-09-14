@@ -121,8 +121,12 @@ niezgodne jednostki są odrzucane. Ręczne mapowanie bez jednostki oznacza kWh/k
   and planner state do not themselves increase this meter.
 - A Cloud/LAN/entity change preserves the sum and establishes a fresh baseline,
   skipping ambiguous overlap. The meter is persisted with existing session state
-  through HA Store, not in a second sample database. A sudden power loss can lose
-  a pending write; restoring an older HA backup also restores the older baseline.
+  through HA Store, not in a second sample database. Each checkpoint is written
+  atomically and read back from disk before a new value is published. A failed
+  write makes the sensor unavailable; it cannot publish an uncommitted increase.
+  Unloading waits for an in-flight write, so an old entry cannot overwrite its
+  replacement. This is an application-level checkpoint, not a guarantee against
+  physical disk failure. Restoring an older HA backup restores the older baseline.
 
 Pierwszy odczyt ustala punkt początkowy: licznik zaczyna od zera, bez importu
 energii sprzed instalacji. Przyrosty są sumowane, duplikaty pomijane, a reset
@@ -133,8 +137,11 @@ odtworzyć. Odzyskany przyrost HA zapisuje przy kolejnym odczycie, niekoniecznie
 w godzinie rzeczywistego zużycia. Moc jest całkowana wyłącznie pomiędzy
 nieprzerwanymi próbkami oddalonymi o maksymalnie 60 sekund. Restart lub luka
 nie powodują dopisywania domniemanej energii. Zmiana źródła zachowuje sumę,
-ale wyznacza nowy punkt odniesienia. Awaria zasilania może utracić oczekujący
-zapis; odtworzenie starszego backupu HA przywraca także starszy stan licznika.
+ale wyznacza nowy punkt odniesienia. Nowa wartość jest publikowana dopiero po
+atomowym zapisie i sprawdzeniu pliku. Błąd zapisu oznacza niedostępność sensora,
+bez publikowania niezapisanego przyrostu. Przeładowanie integracji czeka na
+zakończenie zapisu. Nie jest to ochrona przed fizyczną awarią dysku; odtworzenie
+starszego backupu HA przywraca także starszy stan licznika.
 
 Energy reported by the EVSE is not net energy stored in the battery. These are
 software accounting rules, not calibration evidence: nonzero PRIME measurements

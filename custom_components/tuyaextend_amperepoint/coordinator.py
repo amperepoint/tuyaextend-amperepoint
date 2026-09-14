@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
 import logging
+from inspect import signature
 from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
@@ -18,7 +20,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -81,6 +82,7 @@ from .source import NativeTuyaSource
 from .local_source import LOCAL_SOURCE, NativeLocalSource, LocalConnectionError
 from .prime_diagnostics import readable_rows
 from .energy import ChargingEnergy, EnergySample
+from .energy_store import EnergyStore, EnergySaveError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,12 +127,19 @@ def _has_reported_values(raw_dp: Any) -> bool:
 
 class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+        # config_entry was added after our minimum HA 2024.6. New HA versions
+        # require it explicitly; older constructors reject the keyword.
+        entry_kwargs = (
+            {"config_entry": config_entry}
+            if "config_entry" in signature(DataUpdateCoordinator.__init__).parameters
+            else {}
+        )
         super().__init__(
             hass,
-            config_entry=config_entry,
             logger=_LOGGER,
             name=DOMAIN,
             update_interval=DEFAULT_SCAN_INTERVAL,
+            **entry_kwargs,
         )
         self.config_entry = config_entry
         self.model = get_model(self._config(CONF_MODEL))
@@ -148,9 +157,12 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._handle_native_update,
                 )
             )
-        self._store = Store[dict[str, Any]](
-            hass, STORAGE_VERSION, f"{DOMAIN}.{config_entry.entry_id}.session"
+        self._store = EnergyStore(
+            hass, STORAGE_VERSION, f"{DOMAIN}.{config_entry.entry_id}.session",
+            atomic_writes=True,
         )
+        self._refresh_lock = asyncio.Lock()
+        self._unloading = False
         self._session_energy_kwh = 0.0
         self._total_energy_baseline_kwh: float | None = None
         self._last_total_energy_kwh: float | None = None
@@ -191,6 +203,18 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._charging_energy = ChargingEnergy(data.get("charging_energy"))
 
     async def _async_update_data(self) -> dict[str, Any]:
+        async with self._refresh_lock:
+            if self._unloading:
+                raise UpdateFailed("AmperePoint entry is unloading")
+            return await self._async_collect_data()
+
+    async def async_prepare_unload(self) -> None:
+        """Do not let an old entry write after its replacement has loaded."""
+        self._unloading = True
+        async with self._refresh_lock:
+            pass
+
+    async def _async_collect_data(self) -> dict[str, Any]:
         if isinstance(self.native_source, NativeLocalSource):
             try:
                 await self.native_source.async_refresh()
@@ -347,7 +371,13 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_update = now
         self._was_charging = is_charging
         self._was_connected = connected
-        self._schedule_state_save()
+        # Commit the total AND its source baseline before HA can publish it.
+        # If storage fails, keep the pending in-memory accumulation for retry,
+        # but do not return a new state to Recorder / TOTAL_INCREASING.
+        try:
+            await self._store.async_save(self._store_state())
+        except (EnergySaveError, OSError) as err:
+            raise UpdateFailed(f"Cannot checkpoint charging energy: {err}") from err
 
         return {
             "model": self.model.name,
@@ -789,9 +819,6 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "was_connected": self._was_connected,
             "charging_energy": self._charging_energy.dump(),
         }
-
-    def _schedule_state_save(self) -> None:
-        self._store.async_delay_save(self._store_state, 2)
 
     def _calculate_session_energy(
         self,

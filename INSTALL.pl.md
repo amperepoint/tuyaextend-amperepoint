@@ -131,7 +131,7 @@ konfiguracji, ale nie są zależnościami wbudowanego PRIME LAN.
 
 ## 5. Panel Energia
 
-W aktualizacji z nowym licznikiem (`0.5.39b1`, wersja rozwojowa) rozwiń **Energia
+W aktualizacji z nowym licznikiem (`0.5.39b2`, wersja rozwojowa) rozwiń **Energia
 w Home Assistant** nad stopką panelu AmperePoint. Dodaj wskazaną encję **Energia
 ładowania** jako poszczególne urządzenie w ustawieniach Energii HA. Recorder musi
 ją zapisywać. Każdą fizyczną ładowarkę dodaj tylko raz.

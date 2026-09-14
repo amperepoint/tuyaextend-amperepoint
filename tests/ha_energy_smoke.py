@@ -14,15 +14,15 @@ from pathlib import Path
 import sys
 import tempfile
 import types
+from unittest.mock import patch
 
 from homeassistant import bootstrap, loader
 from homeassistant.core import HomeAssistant
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder import statistics
 from homeassistant.components.recorder.tasks import StatisticsTask
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-from homeassistant.helpers.storage import Store
 from homeassistant.const import __version__
+from homeassistant.util.file import WriteError
 
 
 async def main():
@@ -33,7 +33,7 @@ async def main():
     package = types.ModuleType(package_name)
     package.__path__ = [str(root / "custom_components" / "tuyaextend_amperepoint")]
     sys.modules[package_name] = package
-    energy = importlib.import_module(f"{package_name}.energy")
+    coordinator_module = importlib.import_module(f"{package_name}.coordinator")
     sensor = importlib.import_module(f"{package_name}.sensor")
 
     with tempfile.TemporaryDirectory(prefix="amperepoint-energy-") as directory:
@@ -48,26 +48,30 @@ async def main():
         await hass.async_start()
         print("HA started", flush=True)
         try:
-            coordinator = DataUpdateCoordinator(hass, config_entry=None, logger=logging.getLogger(__name__), name="energy-smoke")
-            coordinator.config_entry = types.SimpleNamespace(entry_id="energy-smoke", title="Energy smoke")
-            coordinator.model = types.SimpleNamespace(name="Synthetic Q/PRIME")
+            entry = types.SimpleNamespace(entry_id="energy-smoke", title="Energy smoke",
+                data={"source_total_energy": "sensor.synthetic_source"}, options={},
+                pref_disable_polling=True, async_on_unload=lambda fn: None)
+            coordinator = coordinator_module.AmperePointCoordinator(hass, entry)
             coordinator.data = {}
             desc = next(item for item in sensor.SENSORS if item.key == "charging_energy")
             entity = sensor.AmperePointSensor(coordinator, desc)
             entity.entity_id = "sensor.amperepoint_energy_smoke"
-            meter = energy.ChargingEnergy()
             timestamp = datetime.now(UTC).timestamp()
 
-            def update(value, offset):
-                total = meter.update(energy.EnergySample("synthetic:dp1", "device_counter", value), timestamp + offset, 25)
-                coordinator.async_set_updated_data({
-                    "charging_energy_kwh": total,
-                    "charging_energy_method": meter.method,
-                    "charging_energy_quality": meter.quality,
-                    "charging_energy_incomplete": meter.incomplete,
-                })
+            async def update(value, offset):
+                hass.states.async_set("sensor.synthetic_source", value if value is not None else "unavailable",
+                                      {"unit_of_measurement": "kWh"})
+                # Only advance the integration's sample clock. Patching HA's
+                # shared dt module would also move Recorder's event timestamps.
+                with patch.object(coordinator_module, "dt_util", types.SimpleNamespace(
+                    utcnow=lambda: datetime.fromtimestamp(timestamp + offset, UTC)
+                )):
+                    data = await coordinator._async_update_data()
+                # Read the actual file before publishing, not a Store cache.
+                assert coordinator._store._read_checkpoint()["data"]["charging_energy"] == coordinator._charging_energy.dump()
+                coordinator.async_set_updated_data(data)
 
-            update(100, 0)
+            await update(100, 0)
             await hass.data["sensor"].async_add_entities([entity])
             print("Sensor added", flush=True)
             await hass.async_block_till_done()
@@ -77,27 +81,46 @@ async def main():
             assert state.attributes["device_class"] == "energy", state
             assert state.attributes["state_class"] == "total_increasing", state
 
-            update(101, 3600)
+            await update(101, 3600)
             await hass.async_block_till_done()
-            update(None, 3615)
+            # Exercise HA Store's real error-swallowing behavior. The wrapper
+            # must detect the failed write before the sensor can publish 1.1.
+            async def failed_write(*_args):
+                raise WriteError("synthetic disk failure (expected by smoke test)")
+
+            with patch.object(coordinator._store, "_async_write_data", side_effect=failed_write):
+                try:
+                    await update(101.1, 3615)
+                except coordinator_module.UpdateFailed:
+                    pass
+                else:
+                    raise AssertionError("Uncommitted energy was published")
+            assert float(hass.states.get(entity.entity_id).state) == 1
+            assert coordinator._store._read_checkpoint()["data"]["charging_energy"]["total"] == 1
+            await update(None, 3630)
             await hass.async_block_till_done()
             assert hass.states.get(entity.entity_id).state == "unavailable"
-            update(102, 7200)
+            await update(102, 7200)
             await hass.async_block_till_done()
             assert float(hass.states.get(entity.entity_id).state) == 2
 
-            store = Store(hass, 1, "amperepoint_energy_smoke")
-            await store.async_save(meter.dump())
-            meter = energy.ChargingEnergy(await store.async_load())
-            update(102, 7215)
+            # Reload the production coordinator immediately, without a sleep or
+            # explicit test-only save (the old test hid the delayed-write bug).
+            await coordinator.async_prepare_unload()
+            restored = coordinator_module.AmperePointCoordinator(hass, entry)
+            await restored.async_load_state()
+            coordinator._charging_energy = restored._charging_energy
+            coordinator._store = restored._store
+            coordinator._unloading = False
+            await update(102, 7215)
             await hass.async_block_till_done()
             assert float(hass.states.get(entity.entity_id).state) == 2
-            update(0, 7300)
+            await update(0, 7300)
             await hass.async_block_till_done()
-            update(103, 7315)  # implausible stale pre-reset packet
+            await update(103, 7315)  # implausible stale pre-reset packet
             await hass.async_block_till_done()
             assert hass.states.get(entity.entity_id).state == "unavailable"
-            update(1, 10900)
+            await update(1, 10900)
             await hass.async_block_till_done()
             assert float(hass.states.get(entity.entity_id).state) == 3
 
@@ -117,7 +140,7 @@ async def main():
             assert row["sum"] == 3, row
             assert row["state"] == 3, row
             print(f"PASS: HA {__version__}: real SensorEntity kWh/energy/total_increasing; "
-                  "unavailable handling; Store round-trip; reset/stale packet; Recorder sum=3 kWh")
+                  "production coordinator/checkpoints/reload; reset/stale packet; Recorder sum=3 kWh")
         except Exception:
             logging.exception("Real HA energy smoke failed")
             raise

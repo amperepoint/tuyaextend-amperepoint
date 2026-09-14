@@ -10,7 +10,7 @@ from unittest.mock import patch
 from datetime import datetime, UTC
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from support import load_integration_module
+from support import load_integration_module, _Store
 
 energy = load_integration_module("energy")
 const = load_integration_module("const")
@@ -252,7 +252,9 @@ class CoordinatorPipelineTests(unittest.TestCase):
         entry = types.SimpleNamespace(data=config, options={}, entry_id="test-entry", title="Test")
         hass = types.SimpleNamespace(states=types.SimpleNamespace(get=states.get))
         with patch.object(source_module.NativeTuyaSource, "resolve", return_value=None):
-            return coordinator_module.AmperePointCoordinator(hass, entry)
+            obj = coordinator_module.AmperePointCoordinator(hass, entry)
+        obj._store = _Store()
+        return obj
 
     def update(self, obj, timestamp):
         with patch.object(coordinator_module.dt_util, "utcnow", return_value=datetime.fromtimestamp(timestamp, UTC)):
@@ -266,7 +268,7 @@ class CoordinatorPipelineTests(unittest.TestCase):
         self.assertEqual(self.update(obj, 100)["charging_energy_kwh"], 0)
         states["sensor.source"] = state(52, unit_of_measurement="kWh")
         self.assertEqual(self.update(obj, 3700)["charging_energy_kwh"], 2)
-        saved = json.loads(json.dumps(obj._store_state()))
+        saved = json.loads(json.dumps(obj._store._data))
         obj = self.make(config, states)
         obj._store._data = saved
         asyncio.run(obj.async_load_state())

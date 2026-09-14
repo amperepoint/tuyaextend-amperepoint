@@ -101,7 +101,8 @@ def install_homeassistant_stubs() -> None:
         ConfigEntry=object,
         SOURCE_INTEGRATION_DISCOVERY="integration_discovery",
     )
-    _module("homeassistant.core", HomeAssistant=object, callback=lambda func: func)
+    _module("homeassistant.core", HomeAssistant=object, callback=lambda func: func,
+            CoreState=types.SimpleNamespace(stopping="stopping", running="running"))
     _module("homeassistant.exceptions", HomeAssistantError=HomeAssistantError)
     _module(
         "homeassistant.const",
