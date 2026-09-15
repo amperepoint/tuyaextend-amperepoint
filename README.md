@@ -2,6 +2,38 @@
 
 Home Assistant / HACS workspace for AmperePoint EV chargers using Tuya.
 
+## Installation counts / Statystyki instalacji
+
+This integration reports its first successful activation of each version to
+AmperePoint at `tools.emaxima.pl`. Reporting is enabled by default and sends only
+a randomly generated, locally stored installation ID and the integration version.
+It does not send charger IDs, Tuya keys, charging readings or HA account details.
+The server receives the connection IP; the collector does not store it in its
+statistics table. This is pseudonymous telemetry, separate from HA Analytics.
+
+Reporting starts in the background after HA has started, with a 60-second delay
+and a 3-second request timeout. Offline operation, a missing endpoint, server
+errors and storage errors do not block setup or charger operation. At most three
+attempts run per reporting task, with retries after 1 and 6 hours. Server-side
+deduplication prevents retries and multiple chargers from increasing the count.
+These are activation counts, not a measurement of ongoing dashboard usage.
+
+To disable reporting for the entire HA installation, add this to
+`configuration.yaml` and restart HA before the first reported activation:
+
+```yaml
+tuyaextend_amperepoint:
+  usage_reporting: false
+```
+
+It can also be disabled later with the same setting. Disabling stops future
+reports; it does not remove previously recorded activations.
+
+**PL:** Domyślnie wysyłamy jednorazowe zgłoszenie uruchomienia każdej wersji:
+losowy identyfikator instalacji i numer wersji. Brak internetu lub awaria naszego
+serwera nie blokuje instalacji ani działania dodatku. Powyższy wpis w
+`configuration.yaml` wyłącza wysyłanie dla całego HA po restarcie.
+
 ## Q Series and Wallbox PRIME
 
 | Series | Recommended connection | Why |
