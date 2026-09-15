@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers import config_validation as cv
 
 from .adoption import async_start_auto_adoption
 from .const import DOMAIN, PLATFORMS
@@ -14,6 +17,14 @@ from .planner import AmperePointPlanner
 from .planner_model import PlannerConfigError
 from .local_source import NativeLocalSource
 from .local_planner import AmperePointLocalPlanner
+from . import usage_reporting
+
+CONFIG_SCHEMA = vol.Schema(
+    {vol.Optional(DOMAIN): vol.Schema({
+        vol.Optional(usage_reporting.CONF_USAGE_REPORTING, default=True): cv.boolean,
+    })},
+    extra=vol.ALLOW_EXTRA,
+)
 
 
 SERVICE_SET_PLANNER = "set_planner"
@@ -22,6 +33,9 @@ _SERVICES_REGISTERED = f"{DOMAIN}_planner_services_registered"
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    hass.data[usage_reporting.ENABLED_KEY] = config.get(DOMAIN, {}).get(
+        usage_reporting.CONF_USAGE_REPORTING, True
+    )
     await async_register_frontend(hass)
     _async_register_planner_services(hass)
     return True
@@ -58,6 +72,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not isinstance(coordinator.native_source, NativeLocalSource):
         entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    usage_reporting.register_entry(hass, entry)
     return True
 
 
