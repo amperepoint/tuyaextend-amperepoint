@@ -37,7 +37,7 @@ class _States:
 
 
 class _Store:
-    def async_delay_save(self, *_args, **_kwargs) -> None:
+    async def async_save(self, *_args, **_kwargs) -> None:
         pass
 
 
@@ -75,6 +75,8 @@ def _make_coordinator() -> object:
     instance.model = models.get_model("prime_22kw")
     instance.native_source = None
     instance._store = _Store()
+    instance._refresh_lock = asyncio.Lock()
+    instance._unloading = False
     instance._session_energy_kwh = 0.0
     instance._total_energy_baseline_kwh = None
     instance._last_total_energy_kwh = None

@@ -77,6 +77,25 @@ for the mapping, evidence and remaining limits. Older Tuya Local profile files
 remain available for existing separate installations, but are not needed for
 the native AmperePoint LAN path.
 
+## Home Assistant Energy (development: 0.5.39b3)
+
+Each charger now provides **Charging energy / Energia ładowania**, a persisted
+`kWh` / `total_increasing` consumption sensor for HA Energy and Recorder.
+Expand **Energy in Home Assistant** above the dashboard footer to find its exact
+entity ID and setup link. Add it once under individual devices, not grid import.
+
+**Upgrade note:** use this new sensor instead of the old session/source-energy
+entities in Energy. Their values and IDs remain, but those snapshots no longer
+generate long-term statistics. Old statistics are not deleted or merged.
+The new meter starts at zero; gaps and source changes have explicit limitations.
+
+**PL:** Nowa **Energia ładowania** współpracuje z panelem Energia HA. Nie dodawaj
+obok niej energii sesji ani licznika źródłowego — powodowałoby to podwójne liczenie.
+Stare identyfikatory i odczyty pozostają; nowa encja tworzy osobną historię.
+
+[Setup, migration and measurement limitations (EN/PL)](amperepoint/docs/home-assistant-energy.md).
+This is the energy foundation for #36, not yet a session-history or tariff release.
+
 ## Dashboard previews
 
 ### Wallbox PRIME — native LAN controls and planner

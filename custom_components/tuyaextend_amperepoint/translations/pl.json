@@ -210,6 +210,12 @@
   },
   "entity": {
     "sensor": {
+      "power_energy": {
+        "name": "Energia obliczona z mocy"
+      },
+      "charging_energy": {
+        "name": "Energia ładowania"
+      },
       "status": {
         "name": "Status"
       },
@@ -220,7 +226,7 @@
         "name": "Energia sesji"
       },
       "total_energy": {
-        "name": "Energia calkowita"
+        "name": "Źródłowy licznik energii"
       },
       "last_session_energy": {
         "name": "Energia ostatniej sesji"

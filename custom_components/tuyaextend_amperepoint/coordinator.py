@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import json
 import logging
-from datetime import datetime, time, timedelta
+from inspect import signature
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -18,7 +20,6 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -80,6 +81,9 @@ from .models import (
 from .source import NativeTuyaSource
 from .local_source import LOCAL_SOURCE, NativeLocalSource, LocalConnectionError
 from .prime_diagnostics import readable_rows
+from .energy import ChargingEnergy, EnergySample, PowerSample
+from .power_observer import PowerReportObserver
+from .energy_store import EnergyStore, EnergySaveError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -124,18 +128,29 @@ def _has_reported_values(raw_dp: Any) -> bool:
 
 class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+        # config_entry was added after our minimum HA 2024.6. New HA versions
+        # require it explicitly; older constructors reject the keyword.
+        entry_kwargs = (
+            {"config_entry": config_entry}
+            if "config_entry" in signature(DataUpdateCoordinator.__init__).parameters
+            else {}
+        )
         super().__init__(
             hass,
             logger=_LOGGER,
             name=DOMAIN,
             update_interval=DEFAULT_SCAN_INTERVAL,
+            **entry_kwargs,
         )
         self.config_entry = config_entry
         self.model = get_model(self._config(CONF_MODEL))
         self.native_source = (NativeLocalSource(hass, config_entry)
                               if self._config(CONF_SOURCE_INTEGRATION) == LOCAL_SOURCE
                               else NativeTuyaSource.resolve(hass, config_entry))
+        self._power_observer = None
         if self.native_source is not None and not isinstance(self.native_source, NativeLocalSource):
+            self._power_observer = PowerReportObserver(self.native_source.device.id)
+            config_entry.async_on_unload(self._power_observer.close)
             # A LAN-only installation must not import the optional Tuya cloud SDK.
             from homeassistant.components.tuya.const import TUYA_HA_SIGNAL_UPDATE_ENTITY
 
@@ -146,9 +161,12 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._handle_native_update,
                 )
             )
-        self._store = Store[dict[str, Any]](
-            hass, STORAGE_VERSION, f"{DOMAIN}.{config_entry.entry_id}.session"
+        self._store = EnergyStore(
+            hass, STORAGE_VERSION, f"{DOMAIN}.{config_entry.entry_id}.session",
+            atomic_writes=True,
         )
+        self._refresh_lock = asyncio.Lock()
+        self._unloading = False
         self._session_energy_kwh = 0.0
         self._total_energy_baseline_kwh: float | None = None
         self._last_total_energy_kwh: float | None = None
@@ -159,6 +177,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Datapoints the charger reported at least once in this run, so the
         # raw view keeps them when the charger stops sending them.
         self._seen_datapoints: dict[str, tuple[Any, dict[str, Any]]] = {}
+        self._charging_energy = ChargingEnergy()
 
     @callback
     def _handle_native_update(self, *_: Any) -> None:
@@ -185,12 +204,31 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._last_total_energy_kwh = _as_float(data.get("last_total_energy_kwh"))
         self._was_charging = bool(data.get("was_charging", False))
         self._was_connected = bool(data.get("was_connected", False))
+        self._charging_energy = ChargingEnergy(data.get("charging_energy"))
 
     async def _async_update_data(self) -> dict[str, Any]:
+        async with self._refresh_lock:
+            if self._unloading:
+                raise UpdateFailed("AmperePoint entry is unloading")
+            return await self._async_collect_data()
+
+    async def async_prepare_unload(self) -> None:
+        """Do not let an old entry write after its replacement has loaded."""
+        self._unloading = True
+        if self._power_observer is not None:
+            self._power_observer.close()
+        async with self._refresh_lock:
+            pass
+
+    async def _async_collect_data(self) -> dict[str, Any]:
+        observer = getattr(self, "_power_observer", None)
+        if observer is not None:
+            observer.attach(getattr(self.native_source.manager, "mq", None))
         if isinstance(self.native_source, NativeLocalSource):
             try:
                 await self.native_source.async_refresh()
             except LocalConnectionError as err:
+                self._charging_energy.missing()
                 raise UpdateFailed(str(err)) from None
         now = dt_util.utcnow()
         prime_telemetry = _decode_prime_telemetry(self._prime_telemetry_source())
@@ -327,13 +365,46 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         raw_dp, dp_metadata = self._datapoint_view(prime_telemetry is not None)
         schedule_window = _decode_schedule_window(self._native_value("local_timer"))
 
+        # This meter does not depend on session detection, CP or the planner.
+        # Preserve the pure test/legacy construction path that bypasses __init__.
+        if not hasattr(self, "_charging_energy"):
+            self._charging_energy = ChargingEnergy()
+        energy_sample = self._energy_sample(prime_telemetry)
+        charging_energy = self._charging_energy.update(
+            energy_sample, now.timestamp(),
+            # Family-only PRIME may use a conservative 16 A UI model on a
+            # 32 A unit. This is an upper sanity bound, not a power estimate.
+            3 * max(32, self.model.max_current_a) * 260 / 1000,
+            power=self._energy_power_sample(prime_telemetry, now.timestamp()),
+        )
+
         self._last_update = now
         self._was_charging = is_charging
         self._was_connected = connected
-        self._schedule_state_save()
+        # Commit the total AND its source baseline before HA can publish it.
+        # If storage fails, keep the pending in-memory accumulation for retry,
+        # but do not return a new state to Recorder / TOTAL_INCREASING.
+        try:
+            await self._store.async_save(self._store_state())
+        except (EnergySaveError, OSError) as err:
+            raise UpdateFailed(f"Cannot checkpoint charging energy: {err}") from err
 
         return {
             "model": self.model.name,
+            "charging_energy_kwh": round(charging_energy, 6) if charging_energy is not None else None,
+            "charging_energy_method": self._charging_energy.method,
+            "charging_energy_quality": self._charging_energy.quality,
+            "charging_energy_incomplete": self._charging_energy.incomplete,
+            "power_energy_kwh": (round(self._charging_energy.power_total, 6)
+                                 if self._charging_energy.quality != "storage_error" else None),
+            "power_energy_incomplete": self._charging_energy.power_incomplete,
+            "power_validation": self._charging_energy.validation,
+            "energy_corrections": self._charging_energy.corrections,
+            "excluded_energy_kwh": round(self._charging_energy.excluded_energy, 6),
+            "charging_energy_since": (
+                datetime.fromtimestamp(self._charging_energy.started_at, UTC).isoformat()
+                if self._charging_energy.started_at is not None else None
+            ),
             "product_id": self._product_id(),
             "status": status,
             "vehicle_connected": connected,
@@ -427,6 +498,117 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.native_source.available if self.native_source else True
             ),
         }
+
+    def _energy_power_sample(self, prime_telemetry: dict | None, now: float) -> PowerSample | None:
+        """A power value with evidence of a report, not a coordinator poll."""
+        native = self.native_source
+        if isinstance(native, NativeLocalSource):
+            # async_refresh just obtained a complete, validated LAN snapshot.
+            return PowerSample("lan:power", prime_telemetry.get("power_kw"), now) if native.available and prime_telemetry else None
+        entity_id = self._config(CONF_SOURCE_POWER)
+        if entity_id:
+            return self._mapped_power_sample(entity_id, self._energy_entity_value(CONF_SOURCE_POWER, power=True))
+        for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
+            entity_id = self._config(key)
+            state = self.hass.states.get(entity_id) if entity_id else None
+            if state is None or state.state in {"unknown", "unavailable"}:
+                continue
+            telemetry = _decode_prime_telemetry(state.attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+            if telemetry:
+                return self._mapped_power_sample(entity_id, telemetry.get("power_kw"))
+            value = _as_float(state.attributes.get("power_total_kw"))
+            if value is not None:
+                # Raw aggregate attributes lack per-DP freshness. They remain
+                # displayable but cannot authorize an automatic correction.
+                return PowerSample(f"entity:{entity_id}:power", value, None)
+        observer = getattr(self, "_power_observer", None)
+        if native is not None and native.available and observer is not None:
+            return PowerSample(f"tuya:{native.device.id}:power", self._native_numeric("power_total"),
+                               observer.reported_at(native.raw("power_total")))
+        return None
+
+    def _mapped_power_sample(self, entity_id: str, value: float | None) -> PowerSample | None:
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in {"unknown", "unavailable"}:
+            return None
+        # last_reported includes unchanged reports (HA >= 2024.4). Older or
+        # nonstandard entities with no timestamp cannot certify coverage.
+        stamp = getattr(state, "last_reported", None)
+        return PowerSample(f"entity:{entity_id}:power", value,
+                           stamp.timestamp() if isinstance(stamp, datetime) else None)
+
+    def _energy_sample(self, prime_telemetry: dict | None) -> EnergySample:
+        """Choose one live input; a missing counter never falls back to power.
+
+        Configured source identities are part of the private persisted baseline,
+        so switching Cloud/LAN or a mapped entity cannot add overlapping energy.
+        DP25 (last completed session) is deliberately never a candidate.
+        """
+        previous = self._charging_energy.source or ""
+        native = self.native_source
+        if isinstance(native, NativeLocalSource):
+            source = f"lan:{native.config.get('local_device_id', '')}:dp102.e"
+            return EnergySample(source, "session_counter",
+                                prime_telemetry.get("session_energy_kwh") if prime_telemetry and native.available else None, 0.1)
+        for key, method in ((CONF_SOURCE_TOTAL_ENERGY, "device_counter"),
+                            (CONF_SOURCE_SESSION_ENERGY, "session_counter")):
+            entity_id = self._config(key)
+            if entity_id:
+                return EnergySample(f"entity:{entity_id}", method,
+                                    self._energy_entity_value(key))
+        raw_id = self._config(CONF_SOURCE_RAW_DP) or self._config(CONF_SOURCE_STATUS)
+        if prime_telemetry:
+            # Match _prime_telemetry_source's actual provider. An old raw-DP
+            # mapping may have disappeared while the status fallback works.
+            for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
+                candidate_id = self._config(key)
+                candidate = self.hass.states.get(candidate_id) if candidate_id else None
+                if candidate is not None and candidate.attributes.get(PRIME_TELEMETRY_ATTRIBUTE) is not None:
+                    raw_id = candidate_id
+                    break
+        raw_state = self.hass.states.get(raw_id) if raw_id else None
+        raw_available = raw_state is not None and raw_state.state not in {"unknown", "unavailable"}
+        prime_key = f"entity:{raw_id}:dp102.e"
+        if raw_id and (prime_telemetry or previous == prime_key):
+            return EnergySample(prime_key, "session_counter",
+                                prime_telemetry.get("session_energy_kwh") if prime_telemetry and raw_available else None, 0.1)
+        if native is not None:
+            prefix = f"tuya:{getattr(native.device, 'id', '')}"
+            key = prefix + ":dp1"
+            if native.has("forward_energy_total") or previous == key:
+                definition = native.definition("forward_energy_total")
+                scale = definition.get("scale", 2)
+                resolution = 10 ** -scale if isinstance(scale, int) and 0 <= scale <= 6 else 0.01
+                return EnergySample(key, "device_counter",
+                                    self._native_numeric("forward_energy_total") if native.available else None, resolution)
+            return EnergySample(prefix + ":power", "power_estimate",
+                                self._native_numeric("power_total") if native.available else None)
+        raw_key = f"entity:{raw_id}:dp1"
+        if raw_id and (self._numeric_raw_attr("forward_energy_total_kwh") is not None or previous == raw_key):
+            return EnergySample(raw_key, "device_counter",
+                                self._numeric_raw_attr("forward_energy_total_kwh") if raw_available else None)
+        power_id = self._config(CONF_SOURCE_POWER)
+        if power_id:
+            return EnergySample(f"entity:{power_id}:power", "power_estimate",
+                                self._energy_entity_value(CONF_SOURCE_POWER, power=True))
+        return EnergySample(f"entity:{raw_id}:power", "power_estimate",
+                            self._numeric_raw_attr("power_total_kw") if raw_available else None)
+
+    def _energy_entity_value(self, key: str, *, power: bool = False) -> float | None:
+        """Normalize mapped meters without accepting incompatible units.
+
+        Unitless manually mapped sensors retain the integration's existing
+        kWh/kW contract. Explicit unknown units never enter the new statistics.
+        """
+        entity_id = self._config(key)
+        state = self.hass.states.get(entity_id) if entity_id else None
+        if state is None:
+            return None
+        factors = ({None: 1, "kW": 1, "W": 0.001, "MW": 1000} if power
+                   else {None: 1, "kWh": 1, "Wh": 0.001, "MWh": 1000})
+        factor = factors.get(state.attributes.get(ATTR_UNIT_OF_MEASUREMENT))
+        value = _as_float(state.state)
+        return value * factor if value is not None and factor is not None else None
 
     def _product_id(self) -> str | None:
         if self.native_source:
@@ -689,10 +871,8 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "last_total_energy_kwh": self._last_total_energy_kwh,
             "was_charging": self._was_charging,
             "was_connected": self._was_connected,
+            "charging_energy": self._charging_energy.dump(),
         }
-
-    def _schedule_state_save(self) -> None:
-        self._store.async_delay_save(self._store_state, 2)
 
     def _calculate_session_energy(
         self,

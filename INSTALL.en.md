@@ -126,6 +126,18 @@ and pausing its previous planner. Check dependencies before deleting entries.
 Xtend Tuya, Tuya Local and LocalTuya remain optional entity sources for existing
 setups, but are not dependencies of built-in PRIME LAN.
 
+## 5. Energy dashboard
+
+For the energy-foundation update (`0.5.39b3` development), expand **Energy in
+Home Assistant** above the AmperePoint footer, then add the indicated **Charging
+energy** entity under individual devices in HA's Energy settings. Recorder must
+record it. Add one consumption sensor per physical charger.
+
+When upgrading, replace old session/source-energy selections with the new sensor;
+do not add both. Historical statistics are not merged or deleted. The new sensor
+starts at zero and is separate from the current-session display.
+[Full guide: sources, gaps, resets, restart and migration](amperepoint/docs/home-assistant-energy.md).
+
 ## Troubleshooting and security
 
 - **PRIME missing in Cloud:** use LAN; do not expect full PRIME telemetry from cloud.

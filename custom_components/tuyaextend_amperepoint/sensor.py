@@ -36,6 +36,25 @@ class AmperePointSensorDescription(SensorEntityDescription):
 
 SENSORS: tuple[AmperePointSensorDescription, ...] = (
     AmperePointSensorDescription(
+        key="power_energy",
+        translation_key="power_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=3,
+        value_fn=lambda data: data.get("power_energy_kwh"),
+    ),
+    AmperePointSensorDescription(
+        key="charging_energy",
+        translation_key="charging_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=3,
+        value_fn=lambda data: data.get("charging_energy_kwh"),
+    ),
+    AmperePointSensorDescription(
         key="status",
         translation_key="status",
         icon="mdi:ev-station",
@@ -55,7 +74,7 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         translation_key="session_energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        # Session snapshots are not a continuous consumption series.
         suggested_display_precision=2,
         value_fn=lambda data: data.get("session_energy_kwh"),
     ),
@@ -64,7 +83,7 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         translation_key="total_energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        # Legacy raw DP1 can reset on Q/VE; use charging_energy for statistics.
         suggested_display_precision=2,
         value_fn=lambda data: data.get("total_energy_kwh"),
     ),
@@ -73,7 +92,6 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         translation_key="last_session_energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=lambda data: data.get("last_session_energy_kwh"),
     ),
@@ -109,7 +127,7 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         key="session_cost",
         translation_key="session_cost",
         device_class=SensorDeviceClass.MONETARY,
-        state_class=SensorStateClass.TOTAL,
+        # A current-session estimate is not an accumulating money counter.
         suggested_display_precision=2,
         value_fn=lambda data: data.get("session_cost"),
     ),
@@ -260,6 +278,12 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
         return self.entity_description.value_fn(self.coordinator.data)
 
     @property
+    def available(self) -> bool:
+        if self.entity_description.key in {"charging_energy", "power_energy"}:
+            return super().available and self.native_value is not None
+        return super().available
+
+    @property
     def native_unit_of_measurement(self) -> str | None:
         if self.entity_description.key == "session_cost":
             return self.coordinator.data.get("currency")
@@ -269,6 +293,24 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.key == "power_energy":
+            return {
+                "measurement_method": "power_estimate",
+                "incomplete_history": self.coordinator.data.get("power_energy_incomplete", True),
+                "power_validation": self.coordinator.data.get("power_validation"),
+            }
+        if self.entity_description.key == "charging_energy":
+            data = self.coordinator.data
+            return {
+                "measurement_method": data.get("charging_energy_method"),
+                "data_quality": data.get("charging_energy_quality"),
+                "incomplete_history": data.get("charging_energy_incomplete", False),
+                "recording_since": data.get("charging_energy_since"),
+                "power_validation": data.get("power_validation"),
+                "correction_count": data.get("energy_corrections", 0),
+                "excluded_energy_kwh": data.get("excluded_energy_kwh", 0),
+                "power_tolerance_percent": 10,
+            }
         if self.entity_description.key != "raw_dp":
             return None
 
