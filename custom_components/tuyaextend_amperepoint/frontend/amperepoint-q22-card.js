@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.39b3";
+const AP_Q22_DASHBOARD_VERSION = "0.5.39";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -511,6 +511,7 @@ const AP_Q22_LOCALES = {
 
 class AmperePointQ22Card extends HTMLElement {
   setConfig(config) {
+    this._currentLimitEditing = false;
     this.config = {
       title: "AmperePoint",
       subtitle: "Ampere Point - Tuya dashboard",
@@ -793,6 +794,7 @@ class AmperePointQ22Card extends HTMLElement {
   }
 
   resetDeviceTransientState() {
+    this._currentLimitEditing = false;
     this.clearPendingCharging();
     this.clearPendingCurrentLimit();
     this.clearPendingChargingMode();
@@ -1126,6 +1128,48 @@ class AmperePointQ22Card extends HTMLElement {
     this._pendingCurrentLimit = null;
     clearTimeout(this._pendingCurrentLimitTimer);
     this._pendingCurrentLimitTimer = null;
+  }
+
+  currentLimitValue() {
+    return this._pendingCurrentLimit ?? this.num(this.config.entities.currentLimit, 6);
+  }
+
+  bindCurrentLimitSlider() {
+    const slider = this.querySelector(".current-slider");
+    const valueLabel = this.querySelector(".current-limit-value");
+    if (!slider || !valueLabel) return;
+
+    const finish = () => {
+      if (!this._currentLimitEditing) return;
+      this._currentLimitEditing = false;
+      this.requestRender();
+    };
+    const cancel = () => {
+      if (!this._currentLimitEditing) return;
+      // A cancelled gesture must not leave an unsent value on the control.
+      slider.value = String(this.currentLimitValue());
+      valueLabel.textContent = `${slider.value} A`;
+      finish();
+    };
+    slider.addEventListener("pointerdown", (event) => {
+      this._currentLimitEditing = true;
+      slider.setPointerCapture?.(event.pointerId);
+    });
+    slider.addEventListener("input", () => {
+      // Also covers keyboard input. Update only the label, never the range
+      // element or the charger, while the user is choosing a value.
+      this._currentLimitEditing = true;
+      valueLabel.textContent = `${slider.value} A`;
+    });
+    slider.addEventListener("change", () => {
+      this._currentLimitEditing = false;
+      this.setCurrentLimit(slider.value);
+      this.requestRender();
+    });
+    slider.addEventListener("pointerup", finish);
+    slider.addEventListener("lostpointercapture", cancel);
+    slider.addEventListener("pointercancel", cancel);
+    slider.addEventListener("blur", cancel);
   }
 
   async setChargingMode(value) {
@@ -2049,6 +2093,9 @@ class AmperePointQ22Card extends HTMLElement {
 
   render() {
     if (!this.config || !this._hass) return;
+    // HA can report other readings during a drag. Replacing the DOM here
+    // would interrupt pointer capture and overwrite the value being chosen.
+    if (this._currentLimitEditing) return;
 
     const deviceOptions = this.apDeviceOptions();
     const selectedDeviceId = this.apSelectedDeviceId();
@@ -2096,11 +2143,7 @@ class AmperePointQ22Card extends HTMLElement {
     const scheduleEndTime = hasScheduleEnd ? String(this.state(scheduleEndEntity)).slice(0, 5) : "";
     const scheduleCrossesMidnight =
       hasScheduleWindow && Number(scheduleEndTime.slice(0, 2)) < Number(scheduleStartTime.slice(0, 2));
-    const reportedCurrent = this.num(e.currentLimit, 6);
-    const current =
-      this._pendingCurrentLimit !== null && this._pendingCurrentLimit !== undefined
-        ? this._pendingCurrentLimit
-        : reportedCurrent;
+    const current = this.currentLimitValue();
     const minCurrent = Number(currentEntity?.attributes?.min ?? 6);
     const maxCurrent = Number(currentEntity?.attributes?.max ?? 32);
     const stepCurrent = Number(currentEntity?.attributes?.step ?? 1);
@@ -2160,9 +2203,9 @@ class AmperePointQ22Card extends HTMLElement {
               ? `
                 <label class="slider-label">
                   <span>${this.t("currentLimit")}</span>
-                  <b>${current} A</b>
+                  <b class="current-limit-value">${current} A</b>
                 </label>
-                <input class="current-slider" data-render-key="current-limit" type="range" min="${minCurrent}" max="${maxCurrent}" step="${stepCurrent}" value="${current}" />
+                <input class="current-slider" data-render-key="current-limit" aria-label="${this.t("currentLimit")}" type="range" min="${minCurrent}" max="${maxCurrent}" step="${stepCurrent}" value="${current}" />
                 <div class="slider-scale"><span>${minCurrent} A</span><span>${maxCurrent} A</span></div>
               `
               : ""
@@ -2374,9 +2417,7 @@ class AmperePointQ22Card extends HTMLElement {
       });
     });
     this.querySelector(".power-button")?.addEventListener("click", () => this.toggleCharging());
-    this.querySelector(".current-slider")?.addEventListener("change", (event) => {
-      this.setCurrentLimit(event.target.value);
-    });
+    this.bindCurrentLimitSlider();
     this.querySelector(".charging-mode")?.addEventListener("change", (event) => {
       this.setChargingMode(event.target.value);
     });
@@ -3683,6 +3724,7 @@ class AmperePointQ22Card extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._currentLimitEditing = false;
     if (this._renderFrame !== null && this._renderFrame !== undefined) {
       this.cancelAnimationFrame(this._renderFrame);
     }
