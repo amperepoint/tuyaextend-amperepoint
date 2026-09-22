@@ -203,6 +203,94 @@ clearTimeout(limitCard._pendingCurrentLimitTimer);
 
 console.log("current limit tests passed");
 
+function currentSliderFixture() {
+  const instance = new Card();
+  instance.setConfig({ entities: { currentLimit: "number.limit" } });
+  const calls = [];
+  instance._hass = {
+    states: { "number.limit": { state: "6", attributes: { min: 6, max: 32, step: 1 } } },
+    callService: async (...args) => calls.push(args),
+  };
+  const handlers = new Map();
+  const slider = {
+    value: "6",
+    addEventListener: (name, handler) => handlers.set(name, handler),
+    setPointerCapture: () => {},
+  };
+  const label = { textContent: "6 A" };
+  instance.querySelector = (selector) => selector === ".current-slider" ? slider : label;
+  instance.requestRender = () => {}; // simulate a queued browser frame
+  instance.bindCurrentLimitSlider();
+  return { instance, calls, slider, label, fire: (name) => handlers.get(name)({ pointerId: 1 }) };
+}
+
+test("drag previews amperes without commands and release sends the chosen value once", () => {
+  const { instance, calls, slider, label, fire } = currentSliderFixture();
+  try {
+    fire("pointerdown");
+    for (const value of [15, 17, 16]) {
+      slider.value = String(value);
+      fire("input");
+      assert.equal(label.textContent, `${value} A`);
+      assert.equal(calls.length, 0);
+    }
+    // A queued HA render must not replace the range under an active pointer.
+    instance.innerHTML = "original DOM";
+    instance.render();
+    assert.equal(instance.innerHTML, "original DOM");
+    fire("pointerup");
+    fire("change");
+    fire("lostpointercapture");
+    fire("blur");
+    assert.deepEqual(calls, [["number", "set_value", { entity_id: "number.limit", value: 16 }]]);
+    assert.equal(instance.currentLimitValue(), 16);
+    assert.equal(label.textContent, "16 A");
+    assert.equal(instance._currentLimitEditing, false);
+  } finally {
+    instance.disconnectedCallback();
+  }
+});
+
+test("cancelled or interrupted slider gestures restore the reported value without commands", () => {
+  for (const ending of ["pointercancel", "lostpointercapture", "blur"]) {
+    const { instance, calls, slider, label, fire } = currentSliderFixture();
+    fire("pointerdown");
+    slider.value = "23";
+    fire("input");
+    fire(ending);
+    assert.equal(slider.value, "6");
+    assert.equal(label.textContent, "6 A");
+    assert.equal(instance._currentLimitEditing, false);
+    assert.equal(calls.length, 0);
+  }
+});
+
+test("keyboard input previews fractional ampere steps before committing", () => {
+  const { instance, calls, slider, label, fire } = currentSliderFixture();
+  try {
+    slider.value = "6.5";
+    fire("input");
+    assert.equal(label.textContent, "6.5 A");
+    assert.equal(calls.length, 0);
+    fire("change");
+    assert.equal(calls[0][2].value, 6.5);
+  } finally {
+    instance.disconnectedCallback();
+  }
+});
+
+test("switching device or detaching the card ends an uncommitted preview", () => {
+  for (const reset of ["resetDeviceTransientState", "disconnectedCallback"]) {
+    const { instance, calls, slider, fire } = currentSliderFixture();
+    fire("pointerdown");
+    slider.value = "16";
+    fire("input");
+    instance[reset]();
+    assert.equal(instance._currentLimitEditing, false);
+    assert.equal(calls.length, 0);
+  }
+});
+
 // The charger's switch permits charging; it is on with no vehicle attached,
 // so the button must follow the session instead of the switch.
 const btnCard = new Card();
