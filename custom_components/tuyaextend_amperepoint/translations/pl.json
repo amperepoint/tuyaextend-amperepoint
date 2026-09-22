@@ -210,6 +210,9 @@
   },
   "entity": {
     "sensor": {
+      "power_energy": {
+        "name": "Energia obliczona z mocy"
+      },
       "charging_energy": {
         "name": "Energia ładowania"
       },

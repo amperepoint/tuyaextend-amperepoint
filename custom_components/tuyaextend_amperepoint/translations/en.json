@@ -1,6 +1,9 @@
 {
   "entity": {
     "sensor": {
+      "power_energy": {
+        "name": "Energy estimated from power"
+      },
       "charging_energy": {
         "name": "Charging energy"
       },

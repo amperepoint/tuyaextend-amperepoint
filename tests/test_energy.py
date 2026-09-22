@@ -329,7 +329,7 @@ class SensorContractTests(unittest.TestCase):
         entity = sensor.AmperePointSensor(coord, desc)
         self.assertEqual(entity._attr_unique_id, "first_charging_energy")
         self.assertTrue(entity.available)
-        self.assertEqual(len(entity.extra_state_attributes), 4)
+        self.assertEqual(entity.extra_state_attributes["power_tolerance_percent"], 10)
         coord.data["charging_energy_kwh"] = None
         self.assertFalse(entity.available)
         coord.data["charging_energy_kwh"] = 1

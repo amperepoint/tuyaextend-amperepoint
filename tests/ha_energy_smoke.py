@@ -139,8 +139,55 @@ async def main():
             row = rows[entity.entity_id][-1]
             assert row["sum"] == 3, row
             assert row["state"] == 3, row
+
+            # A second real coordinator uses a real HA power entity (including
+            # last_reported). Correct a bogus counter increase and verify both
+            # source baseline and correction evidence survive immediate reload.
+            checked_entry = types.SimpleNamespace(entry_id="energy-power-smoke", title="Power check",
+                data={"source_total_energy": "sensor.checked_counter", "source_power": "sensor.checked_power"},
+                options={}, pref_disable_polling=True, async_on_unload=lambda fn: None)
+            checked = coordinator_module.AmperePointCoordinator(hass, checked_entry)
+            checked_at = datetime.now(UTC).timestamp()
+            hass.states.async_set("sensor.checked_power", 0, {"unit_of_measurement": "kW"})
+            hass.states.async_set("sensor.checked_counter", 0, {"unit_of_measurement": "kWh"})
+            # The real state was written just after checked_at; start after it.
+            checked_at = datetime.now(UTC).timestamp()
+            with patch.object(coordinator_module, "dt_util", types.SimpleNamespace(
+                utcnow=lambda: datetime.fromtimestamp(checked_at, UTC)
+            )):
+                checked.async_set_updated_data(await checked._async_update_data())
+            checked_entity = sensor.AmperePointSensor(checked, desc)
+            checked_entity.entity_id = "sensor.amperepoint_checked_energy_smoke"
+            power_desc = next(item for item in sensor.SENSORS if item.key == "power_energy")
+            power_entity = sensor.AmperePointSensor(checked, power_desc)
+            power_entity.entity_id = "sensor.amperepoint_power_estimate_smoke"
+            await hass.data["sensor"].async_add_entities([checked_entity, power_entity])
+            await hass.async_block_till_done()
+            hass.states.async_set("sensor.checked_counter", 5, {"unit_of_measurement": "kWh"})
+            with patch.object(coordinator_module, "dt_util", types.SimpleNamespace(
+                utcnow=lambda: datetime.fromtimestamp(checked_at + 15, UTC)
+            )):
+                checked.async_set_updated_data(await checked._async_update_data())
+            await hass.async_block_till_done()
+            corrected_state = hass.states.get(checked_entity.entity_id)
+            assert float(corrected_state.state) == 0, corrected_state
+            assert corrected_state.attributes["correction_count"] == 1, corrected_state
+            assert corrected_state.attributes["excluded_energy_kwh"] == 5, corrected_state
+            assert corrected_state.attributes["data_quality"] == "power_corrected", corrected_state
+            assert float(hass.states.get(power_entity.entity_id).state) == 0
+            await checked.async_prepare_unload()
+            reloaded = coordinator_module.AmperePointCoordinator(hass, checked_entry)
+            await reloaded.async_load_state()
+            with patch.object(coordinator_module, "dt_util", types.SimpleNamespace(
+                utcnow=lambda: datetime.fromtimestamp(checked_at + 30, UTC)
+            )):
+                reloaded_data = await reloaded._async_update_data()
+            assert reloaded_data["charging_energy_kwh"] == 0, reloaded_data
+            assert reloaded_data["energy_corrections"] == 1, reloaded_data
+            assert reloaded._charging_energy.baseline == 5
             print(f"PASS: HA {__version__}: real SensorEntity kWh/energy/total_increasing; "
-                  "production coordinator/checkpoints/reload; reset/stale packet; Recorder sum=3 kWh")
+                  "production coordinator/checkpoints/reload; reset/stale packet; Recorder sum=3 kWh; "
+                  "power correction/diagnostic sensor/freshness/reload")
         except Exception:
             logging.exception("Real HA energy smoke failed")
             raise

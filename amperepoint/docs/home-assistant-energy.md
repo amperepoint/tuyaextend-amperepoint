@@ -4,6 +4,80 @@ Energy foundation for issue #36, part 1. This adds a consumption stream for
 Home Assistant Energy and Recorder. It does **not** implement a session archive,
 historical price calculation, CSV export or PV allocation.
 
+## Power cross-check (0.5.39b3)
+
+**Charging energy** now checks counter increases against a parallel integral
+of reported power. **Energy estimated from power** is a separate diagnostic
+sensor; do not add both sensors for the same charger to the Energy dashboard.
+The original device counter remains unchanged and visible.
+
+Correction is deliberately conservative: the counter's accumulated increase
+must exceed the power estimate by **10%**, **plus** the larger of 0.1 kWh or two
+counter ticks, **plus** one minute at the conservative maximum power allowed by the integration. These absolute margins avoid correcting rounding and short reporting
+delays. Only excess consumption is corrected; a lower counter is not topped up.
+Comparison windows normally re-anchor on a counter advance after an hour;
+an unchanged counter retains its window so delayed reports can catch up.
+
+For a covered interval, an excessive counter increase is replaced with the
+remaining energy estimated from power. The raw-counter baseline is advanced
+at the same checkpoint, so the excluded amount cannot be added on a later poll
+or restart. The published total never decreases. Corrections are estimates,
+not calibrated measurements or modifications to charger firmware / Tuya.
+
+Freshness is required throughout the comparison window (maximum 60 seconds
+between observations and maximum 60-second power-report age):
+
+- Direct PRIME LAN: successful validated snapshots.
+- Native Tuya cloud: passive observation of actual `power_total` MQTT reports,
+  including repeated zeros. Reading the SDK cache or a device-wide update does
+  not renew freshness. Reconnection clears the previous report. Unsupported
+  MQTT adapters / encoded `dpId` reports cannot authorize correction.
+- Mapped power entities / packed PRIME telemetry: provider reports timestamped
+  by HA `last_reported`. This relies on the provider reporting actual samples;
+  a provider that republishes cached data cannot be detected here. Generic Q
+  raw-DP aggregate attributes lack per-power timestamps and cannot authorize
+  correction.
+
+Missing/stale power, source changes, offline periods and restarts invalidate
+the comparison window. The next usable counter advance starts a new window;
+unknown intervals retain counter handling and are not automatically corrected.
+The power estimate skips uncovered intervals and records incomplete history.
+If the charger reports zero only once for a long pause, automatic correction
+is intentionally unavailable for that pause. A 15-second coordinator poll is
+not proof of a fresh device measurement. Small fluctuations/errors inside the
+tolerance remain possible; a false but fresh power report can also mislead
+the cross-check. This is not a substitute for a separate calibrated meter.
+
+Charging-energy attributes expose `power_validation`, `correction_count`,
+`excluded_energy_kwh` and `power_tolerance_percent`. A correction publishes
+`data_quality: power_corrected` and marks `incomplete_history: true`; the
+persistent correction count remains visible after subsequent normal readings.
+The diagnostic power sensor identifies itself as `power_estimate` and exposes
+its own `incomplete_history` flag. Both totals use the existing acknowledged
+checkpoint before publication. No old Recorder statistics are rewritten.
+
+## Kontrola mocy — po polsku
+
+Od wersji rozwojowej **0.5.39b3** licznik **Energia ładowania** porównuje przyrosty
+z równoległym obliczeniem mocy × czasu. Osobny sensor diagnostyczny **Energia
+obliczona z mocy** pozwala sprawdzić wynik. W panelu Energia wybieramy tylko
+**Energia ładowania**, żeby nie liczyć tego samego zużycia dwa razy.
+
+Korekta nadmiernego przyrostu wymaga przekroczenia **10%** oraz dodatkowego
+marginesu: minimum **0,1 kWh / dwa kroki licznika** i energii jednej minuty przy
+konserwatywnej maksymalnej mocy przyjętej przez integrację. Nie podnosimy automatycznie zaniżonych wskazań.
+Odrzucony przyrost jest zapisywany razem z nowym punktem odniesienia, więc nie
+wróci po kolejnym odczycie lub restarcie. Surowy licznik urządzenia pozostaje
+bez zmian. Wynik skorygowany jest szacunkiem.
+
+Wymagamy ciągłości danych i raportów mocy nie starszych niż 60 sekund.
+Ponowne czytanie pamięci Tuya co 15 sekund nie odświeża pomiaru. Przy utracie
+danych, restarcie lub nieobsługiwanym źródle świeżości nie korygujemy nieznanego
+okresu. Dotyczy to również ładowarki, która przez wielogodzinną przerwę wysyła
+zero tylko raz. Encje mapowane muszą dostarczać rzeczywiste raporty, a nie
+odświeżać stare wartości. Liczba korekt i pominięte kWh są widoczne w atrybutach
+sensora. Wcześniejsze statystyki HA nie są zmieniane.
+
 ## English — setup
 
 1. Back up Home Assistant, install the integration update and restart HA.

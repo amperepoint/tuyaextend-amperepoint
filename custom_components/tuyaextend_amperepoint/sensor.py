@@ -36,6 +36,16 @@ class AmperePointSensorDescription(SensorEntityDescription):
 
 SENSORS: tuple[AmperePointSensorDescription, ...] = (
     AmperePointSensorDescription(
+        key="power_energy",
+        translation_key="power_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=3,
+        value_fn=lambda data: data.get("power_energy_kwh"),
+    ),
+    AmperePointSensorDescription(
         key="charging_energy",
         translation_key="charging_energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
@@ -269,7 +279,7 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
 
     @property
     def available(self) -> bool:
-        if self.entity_description.key == "charging_energy":
+        if self.entity_description.key in {"charging_energy", "power_energy"}:
             return super().available and self.native_value is not None
         return super().available
 
@@ -283,6 +293,12 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self.entity_description.key == "power_energy":
+            return {
+                "measurement_method": "power_estimate",
+                "incomplete_history": self.coordinator.data.get("power_energy_incomplete", True),
+                "power_validation": self.coordinator.data.get("power_validation"),
+            }
         if self.entity_description.key == "charging_energy":
             data = self.coordinator.data
             return {
@@ -290,6 +306,10 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
                 "data_quality": data.get("charging_energy_quality"),
                 "incomplete_history": data.get("charging_energy_incomplete", False),
                 "recording_since": data.get("charging_energy_since"),
+                "power_validation": data.get("power_validation"),
+                "correction_count": data.get("energy_corrections", 0),
+                "excluded_energy_kwh": data.get("excluded_energy_kwh", 0),
+                "power_tolerance_percent": 10,
             }
         if self.entity_description.key != "raw_dp":
             return None

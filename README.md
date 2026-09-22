@@ -77,7 +77,7 @@ for the mapping, evidence and remaining limits. Older Tuya Local profile files
 remain available for existing separate installations, but are not needed for
 the native AmperePoint LAN path.
 
-## Home Assistant Energy (development: 0.5.39b2)
+## Home Assistant Energy (development: 0.5.39b3)
 
 Each charger now provides **Charging energy / Energia ładowania**, a persisted
 `kWh` / `total_increasing` consumption sensor for HA Energy and Recorder.

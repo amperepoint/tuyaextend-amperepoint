@@ -81,7 +81,8 @@ from .models import (
 from .source import NativeTuyaSource
 from .local_source import LOCAL_SOURCE, NativeLocalSource, LocalConnectionError
 from .prime_diagnostics import readable_rows
-from .energy import ChargingEnergy, EnergySample
+from .energy import ChargingEnergy, EnergySample, PowerSample
+from .power_observer import PowerReportObserver
 from .energy_store import EnergyStore, EnergySaveError
 
 _LOGGER = logging.getLogger(__name__)
@@ -146,7 +147,10 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.native_source = (NativeLocalSource(hass, config_entry)
                               if self._config(CONF_SOURCE_INTEGRATION) == LOCAL_SOURCE
                               else NativeTuyaSource.resolve(hass, config_entry))
+        self._power_observer = None
         if self.native_source is not None and not isinstance(self.native_source, NativeLocalSource):
+            self._power_observer = PowerReportObserver(self.native_source.device.id)
+            config_entry.async_on_unload(self._power_observer.close)
             # A LAN-only installation must not import the optional Tuya cloud SDK.
             from homeassistant.components.tuya.const import TUYA_HA_SIGNAL_UPDATE_ENTITY
 
@@ -211,10 +215,15 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_prepare_unload(self) -> None:
         """Do not let an old entry write after its replacement has loaded."""
         self._unloading = True
+        if self._power_observer is not None:
+            self._power_observer.close()
         async with self._refresh_lock:
             pass
 
     async def _async_collect_data(self) -> dict[str, Any]:
+        observer = getattr(self, "_power_observer", None)
+        if observer is not None:
+            observer.attach(getattr(self.native_source.manager, "mq", None))
         if isinstance(self.native_source, NativeLocalSource):
             try:
                 await self.native_source.async_refresh()
@@ -366,6 +375,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Family-only PRIME may use a conservative 16 A UI model on a
             # 32 A unit. This is an upper sanity bound, not a power estimate.
             3 * max(32, self.model.max_current_a) * 260 / 1000,
+            power=self._energy_power_sample(prime_telemetry, now.timestamp()),
         )
 
         self._last_update = now
@@ -385,6 +395,12 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "charging_energy_method": self._charging_energy.method,
             "charging_energy_quality": self._charging_energy.quality,
             "charging_energy_incomplete": self._charging_energy.incomplete,
+            "power_energy_kwh": (round(self._charging_energy.power_total, 6)
+                                 if self._charging_energy.quality != "storage_error" else None),
+            "power_energy_incomplete": self._charging_energy.power_incomplete,
+            "power_validation": self._charging_energy.validation,
+            "energy_corrections": self._charging_energy.corrections,
+            "excluded_energy_kwh": round(self._charging_energy.excluded_energy, 6),
             "charging_energy_since": (
                 datetime.fromtimestamp(self._charging_energy.started_at, UTC).isoformat()
                 if self._charging_energy.started_at is not None else None
@@ -482,6 +498,44 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.native_source.available if self.native_source else True
             ),
         }
+
+    def _energy_power_sample(self, prime_telemetry: dict | None, now: float) -> PowerSample | None:
+        """A power value with evidence of a report, not a coordinator poll."""
+        native = self.native_source
+        if isinstance(native, NativeLocalSource):
+            # async_refresh just obtained a complete, validated LAN snapshot.
+            return PowerSample("lan:power", prime_telemetry.get("power_kw"), now) if native.available and prime_telemetry else None
+        entity_id = self._config(CONF_SOURCE_POWER)
+        if entity_id:
+            return self._mapped_power_sample(entity_id, self._energy_entity_value(CONF_SOURCE_POWER, power=True))
+        for key in (CONF_SOURCE_RAW_DP, CONF_SOURCE_STATUS):
+            entity_id = self._config(key)
+            state = self.hass.states.get(entity_id) if entity_id else None
+            if state is None or state.state in {"unknown", "unavailable"}:
+                continue
+            telemetry = _decode_prime_telemetry(state.attributes.get(PRIME_TELEMETRY_ATTRIBUTE))
+            if telemetry:
+                return self._mapped_power_sample(entity_id, telemetry.get("power_kw"))
+            value = _as_float(state.attributes.get("power_total_kw"))
+            if value is not None:
+                # Raw aggregate attributes lack per-DP freshness. They remain
+                # displayable but cannot authorize an automatic correction.
+                return PowerSample(f"entity:{entity_id}:power", value, None)
+        observer = getattr(self, "_power_observer", None)
+        if native is not None and native.available and observer is not None:
+            return PowerSample(f"tuya:{native.device.id}:power", self._native_numeric("power_total"),
+                               observer.reported_at(native.raw("power_total")))
+        return None
+
+    def _mapped_power_sample(self, entity_id: str, value: float | None) -> PowerSample | None:
+        state = self.hass.states.get(entity_id)
+        if state is None or state.state in {"unknown", "unavailable"}:
+            return None
+        # last_reported includes unchanged reports (HA >= 2024.4). Older or
+        # nonstandard entities with no timestamp cannot certify coverage.
+        stamp = getattr(state, "last_reported", None)
+        return PowerSample(f"entity:{entity_id}:power", value,
+                           stamp.timestamp() if isinstance(stamp, datetime) else None)
 
     def _energy_sample(self, prime_telemetry: dict | None) -> EnergySample:
         """Choose one live input; a missing counter never falls back to power.
