@@ -13,11 +13,12 @@ import json
 import logging
 from pathlib import Path
 import shutil
-import sys
 import tempfile
 from unittest.mock import patch
 
 from homeassistant import bootstrap, loader
+from homeassistant.components import frontend
+from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import __version__
 from homeassistant.core import HomeAssistant
@@ -99,17 +100,24 @@ async def main():
             assert entry.state is ConfigEntryState.LOADED, entry.state
             print("Reload OK", flush=True)
 
-            # A failure after the platforms are set up must not leave them
-            # registered, or every retry fails with "has already been setup".
-            integration = sys.modules[f"custom_components.{DOMAIN}"]
+            # Fail inside dashboard creation, after its storage object has
+            # been constructed. Retrying must recover both platforms and the
+            # frontend panel, not mistake partial setup for an existing panel.
             assert await hass.config_entries.async_unload(ENTRY_ID)
-            with patch.object(integration, "async_create_dashboard",
+            frontend.async_remove_panel(hass, PANEL)
+            hass.data[LOVELACE_DATA].dashboards.pop(PANEL)
+            with patch.object(frontend, "async_register_built_in_panel",
                               side_effect=RuntimeError("simulated panel failure")):
                 await hass.config_entries.async_setup(ENTRY_ID)
             assert entry.state is ConfigEntryState.SETUP_ERROR, entry.state
+            assert ENTRY_ID not in hass.data[DOMAIN], "coordinator was not cleaned up"
+            assert PANEL not in hass.data["frontend_panels"]
+            assert PANEL not in hass.data[LOVELACE_DATA].dashboards, "partial dashboard remains"
             errors.messages.clear()
             assert await hass.config_entries.async_reload(ENTRY_ID)
             assert entry.state is ConfigEntryState.LOADED, entry.state
+            assert hass.data["frontend_panels"][PANEL].sidebar_title
+            assert PANEL in hass.data[LOVELACE_DATA].dashboards
             assert not errors.messages, errors.messages
             print("Recovery after a failed setup OK", flush=True)
             print(f"Setup smoke passed on HA {__version__}", flush=True)
