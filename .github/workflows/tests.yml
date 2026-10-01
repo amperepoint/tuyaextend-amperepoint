@@ -65,3 +65,23 @@ jobs:
       - name: Remove isolated test network
         if: always()
         run: docker network rm amperepoint-energy-smoke
+
+  setup-home-assistant:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        # Oldest release the integration loads on (hacs.json) and a current one.
+        home-assistant: ["2025.2.0", "2026.7.2"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up the config entry in real HA, with frontend and Lovelace
+        run: |
+          docker network create --internal amperepoint-setup-smoke
+          docker run --rm --network amperepoint-setup-smoke             --mount "type=bind,source=${{ github.workspace }},target=/work,readonly"             --entrypoint python ghcr.io/home-assistant/home-assistant:${{ matrix.home-assistant }}             /work/tests/ha_setup_smoke.py
+
+      - name: Remove isolated test network
+        if: always()
+        run: docker network rm amperepoint-setup-smoke
