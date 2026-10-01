@@ -263,12 +263,13 @@ async def async_create_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> str
         }
         storage = LovelaceStorage(hass, item)
         hass.data[LOVELACE_DATA].dashboards[DASHBOARD_URL_PATH] = storage
+        # No show_in_sidebar: HA before 2026.3 rejects it, and its default
+        # (True) is what a panel with a sidebar title gets everywhere.
         frontend.async_register_built_in_panel(
             hass,
             "lovelace",
             frontend_url_path=DASHBOARD_URL_PATH,
             require_admin=False,
-            show_in_sidebar=True,
             sidebar_title=DASHBOARD_TITLE,
             sidebar_icon=DASHBOARD_ICON,
             config={"mode": MODE_STORAGE},
