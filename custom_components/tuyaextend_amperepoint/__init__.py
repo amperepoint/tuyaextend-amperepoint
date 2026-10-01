@@ -50,11 +50,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    if planner is not None:
-        await planner.async_start()
+    try:
+        if planner is not None:
+            await planner.async_start()
 
-    await async_create_dashboard(hass, entry)
-    await async_start_auto_adoption(hass)
+        await async_create_dashboard(hass, entry)
+        await async_start_auto_adoption(hass)
+    except Exception:
+        # HA does not unload an entry whose setup failed. Platforms left
+        # behind would make every retry fail with "has already been setup".
+        await async_unload_entry(hass, entry)
+        raise
 
     if not isinstance(coordinator.native_source, NativeLocalSource):
         entry.async_on_unload(entry.add_update_listener(_async_update_listener))
