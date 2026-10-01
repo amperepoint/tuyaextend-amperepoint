@@ -2,5 +2,5 @@
   "name": "TuyaExtend AmperePoint",
   "render_readme": true,
   "domains": ["tuyaextend_amperepoint"],
-  "homeassistant": "2024.6.0"
+  "homeassistant": "2025.2.0"
 }
