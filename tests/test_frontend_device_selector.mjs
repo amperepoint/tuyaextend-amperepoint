@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -735,4 +736,66 @@ test("disconnect cancels queued rendering and delayed restoration", () => {
     if (originalCancel === undefined) delete globalThis.cancelAnimationFrame;
     else globalThis.cancelAnimationFrame = originalCancel;
   }
+});
+
+// The integration publishes these sensor states in Polish whatever the HA
+// language is (models.py). A label the card does not recognise reaches the
+// dashboard verbatim, and an unrecognised "no fault" is drawn as a fault.
+const modelsSource = readFileSync(
+  resolve(here, "../custom_components/tuyaextend_amperepoint/models.py"),
+  "utf-8",
+);
+const publishedLabels = (mapName) => {
+  const body = modelsSource.match(new RegExp(`^${mapName} = \\{([\\s\\S]*?)^\\}`, "m"))[1];
+  return [...body.matchAll(/:\s*"([^"]+)"/g)].map((match) => match[1]);
+};
+const integrationLabels = [
+  ...new Set([
+    ...publishedLabels("STATUS_MAP"),
+    ...publishedLabels("ERROR_MAP"),
+    ...[...modelsSource.matchAll(/^def normalize_(?:status|error)\b[\s\S]*?(?=^def )/gm)].flatMap((fn) =>
+      [...fn[0].matchAll(/return "([^"]+)"/g)].map((match) => match[1]),
+    ),
+  ]),
+];
+
+test("every status and fault label published by the integration is translated", () => {
+  assert.ok(integrationLabels.includes("Gotowy"));
+  assert.ok(integrationLabels.includes("Brak bledu"));
+  assert.ok(integrationLabels.includes("Brak danych"));
+  for (const language of ["en", "de", "cs", "es", "fr", "hu"]) {
+    const card = new Card();
+    card.setConfig({ entities: {}, language });
+    for (const label of integrationLabels) {
+      if (label === "Offline") continue;
+      assert.notEqual(card.human(label), label, `${language}: ${label}`);
+    }
+  }
+});
+
+test("Polish labels keep their meaning and gain diacritics in Polish", () => {
+  const card = new Card();
+  card.setConfig({ entities: {}, language: "pl" });
+  assert.equal(card.human("Gotowy"), "Gotowy");
+  assert.equal(card.human("Brak bledu"), "Brak błędów");
+  assert.equal(card.human("Zbyt niskie napiecie"), "Zbyt niskie napięcie");
+  assert.equal(card.human("charger_wait"), "charger_wait");
+});
+
+test("an English dashboard shows a healthy idle charger as ready without a fault", () => {
+  const card = new Card();
+  card.setConfig({ entities: { status: "sensor.ap_status", faults: "sensor.ap_blad" }, language: "en" });
+  card._hass = {
+    states: {
+      "sensor.ap_status": { state: "Gotowy", attributes: {} },
+      "sensor.ap_blad": { state: "Brak bledu", attributes: {} },
+    },
+  };
+  card.querySelector = () => null;
+  card.querySelectorAll = () => [];
+  card.render();
+  const html = card.innerHTML.replace(/\s+/g, " ");
+  assert.match(html, /<span>Status<\/span> <strong>Ready<\/strong>/);
+  assert.match(html, /class="status-row good">[^]*?<span>Diagnostics<\/span> <strong>No faults<\/strong>/);
+  assert.doesNotMatch(html, /Gotowy|Brak bledu/);
 });

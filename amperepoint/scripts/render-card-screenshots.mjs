@@ -153,7 +153,7 @@ function buildStates(scenario) {
     [entities.scheduleEndTime]: state("07:00:00"),
     [entities.status]: state(scenario.status),
     [entities.cp]: state(scenario.connection),
-    [entities.faults]: state("Brak błędów"),
+    [entities.faults]: state("Brak bledu"),
     [entities.power]: state(scenario.power, { unit_of_measurement: "kW" }),
     [entities.sessionEnergy]: state(scenario.session, { unit_of_measurement: "kWh" }),
     [entities.totalEnergy]: state("928.66", { unit_of_measurement: "kWh" }),
