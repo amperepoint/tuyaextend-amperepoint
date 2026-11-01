@@ -54,8 +54,7 @@ async def main():
                 assert result["step_id"] == "local_manual", result
                 values = {"name": "Synthetic PRIME", "local_device_id": "PRIVATE_DEVICE_ID",
                           "local_key": "PRIVATE_KEY_1234", "local_host": "192.168.0.20", "local_protocol": "3.5"}
-                # 16 characters, and never placed in a request URL or log.
-                values["local_key"] += "X"
+                assert len(values["local_key"]) == 16
                 result = await hass.config_entries.flow.async_configure(flow_id, values)
                 assert result["step_id"] == "local_manual_error", result
                 assert result["errors"]["base"] == "local_unsupported", result
@@ -88,7 +87,7 @@ async def main():
                 with patch.object(local_flow, "discover_device", return_value={"product_id": "public-test-product"}):
                     result = await hass.config_entries.flow.async_configure(flow_id, values)
                 assert result["step_id"] == "local_confirm_read_only", result
-                await hass.config_entries.flow.async_abort(flow_id)
+                hass.config_entries.flow.async_abort(flow_id)
                 assert not hass.config_entries.async_entries(DOMAIN)
                 print("Retry from error form succeeds without creating an entry or sending commands", flush=True)
         finally:
