@@ -8,6 +8,26 @@ from .const import DOMAIN, CONF_SOURCE_PHYSICAL_IDS
 from .local_source import (LOCAL_SOURCE, LOCAL_FIELDS, CONTROL_PROFILES,
                            LocalConnectionError, read_local, control_supported,
                            detected_control_profile, discover_device)
+from .setup_diagnostics import describe_response
+from .setup_diagnostics_download import create_download
+
+
+def diagnostic_form(flow, step, schema, error, config):
+    """Keep retry fields usable and offer a download without creating an entry."""
+    url = create_download(flow.hass, error, config, step)
+    return flow.async_show_form(
+        step_id=f"{step}_error", errors={"base": str(error)}, data_schema=schema,
+        description_placeholders={"diagnostic_url": url},
+    )
+
+
+def import_schema(candidates, user_input=None):
+    current = user_input or {}
+    device_field = vol.Required("local_device_id", default=current["local_device_id"]) if current.get("local_device_id") in candidates else vol.Required("local_device_id")
+    return vol.Schema({
+        device_field: vol.In({k: v["name"] for k, v in candidates.items()}),
+        vol.Optional("local_host", default=current.get("local_host", "")): str,
+    })
 
 
 def local_schema(current=None, *, options=False):
@@ -86,15 +106,16 @@ class NativeLocalFlowMixin:
                     self._local_pending = await self._async_probe_local(credentials)
                     return await self.async_step_local_confirm()
                 except LocalConnectionError as err:
-                    errors["base"] = str(err)
+                    return diagnostic_form(self, "local_import", import_schema(candidates, user_input), err, credentials)
             else:
                 errors["base"] = "device_not_found"
         if not candidates:
             return await self.async_step_local_manual()
-        return self.async_show_form(step_id="local_import", errors=errors, data_schema=vol.Schema({
-            vol.Required("local_device_id"): vol.In({k:v["name"] for k,v in candidates.items()}),
-            vol.Optional("local_host", default=(user_input or {}).get("local_host", "")): str,
-        }))
+        return self.async_show_form(step_id="local_import", errors=errors,
+                                    data_schema=import_schema(candidates, user_input))
+
+    async def async_step_local_import_error(self, user_input=None):
+        return await self.async_step_local_import(user_input)
 
     async def _async_probe_local(self, credentials):
         result = await self.hass.async_add_executor_job(read_local, credentials)
@@ -118,9 +139,12 @@ class NativeLocalFlowMixin:
                 self._local_pending = await self._async_probe_local(dict(user_input))
                 return await self.async_step_local_confirm()
             except LocalConnectionError as err:
-                errors["base"] = str(err)
+                return diagnostic_form(self, "local_manual", local_schema(user_input), err, user_input)
         return self.async_show_form(step_id="local_manual", errors=errors,
                                     data_schema=local_schema(user_input))
+
+    async def async_step_local_manual_error(self, user_input=None):
+        return await self.async_step_local_manual(user_input)
 
     async def async_step_local_confirm(self, user_input=None):
         pending = self._local_pending
@@ -163,12 +187,18 @@ class NativeLocalOptionsMixin:
                     detected_control_profile(result["dps"], result["family"])
                     if user_input.get("enable_test_controls") else None)
                 if user_input.get("enable_test_controls") and not control_supported(credentials, result["dps"], result["family"]):
-                    raise LocalConnectionError("local_unsupported")
+                    err = LocalConnectionError("local_unsupported")
+                    err.diagnostics = describe_response({"dps": result["dps"]}, credentials)
+                    err.diagnostics["controls_verified"] = False
+                    raise err
                 self.hass.config_entries.async_update_entry(
                     self._config_entry, data=local_entry_data(current, credentials), options={})
                 await self.hass.config_entries.async_reload(self._config_entry.entry_id)
                 return self.async_abort(reason="local_updated")
             except LocalConnectionError as err:
-                errors["base"] = str(err)
+                return diagnostic_form(self, "local_connection", local_schema(credentials, options=True), err, credentials)
         return self.async_show_form(step_id="local_connection", errors=errors,
                                     data_schema=local_schema(current, options=True))
+
+    async def async_step_local_connection_error(self, user_input=None):
+        return await self.async_step_local_connection(user_input)

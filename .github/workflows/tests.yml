@@ -82,6 +82,13 @@ jobs:
           docker network create --internal amperepoint-setup-smoke
           docker run --rm --network amperepoint-setup-smoke             --mount "type=bind,source=${{ github.workspace }},target=/work,readonly"             --entrypoint python ghcr.io/home-assistant/home-assistant:${{ matrix.home-assistant }}             /work/tests/ha_setup_smoke.py
 
+      - name: Download diagnostics from failed setup through real HA authentication
+        run: |
+          docker run --rm --network amperepoint-setup-smoke \
+            --mount "type=bind,source=${{ github.workspace }},target=/work,readonly" \
+            --entrypoint python ghcr.io/home-assistant/home-assistant:${{ matrix.home-assistant }} \
+            /work/tests/ha_setup_diagnostics_smoke.py
+
       - name: Remove isolated test network
         if: always()
         run: docker network rm amperepoint-setup-smoke

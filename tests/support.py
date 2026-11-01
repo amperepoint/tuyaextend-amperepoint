@@ -106,6 +106,7 @@ def install_homeassistant_stubs() -> None:
     _module("homeassistant.exceptions", HomeAssistantError=HomeAssistantError)
     _module(
         "homeassistant.const",
+        __version__="test-ha",
         CONF_ICON="icon",
         CONF_NAME="name",
         EVENT_HOMEASSISTANT_STARTED="homeassistant_started",
@@ -169,6 +170,11 @@ def install_homeassistant_stubs() -> None:
     ha.util = util
 
     components = _module("homeassistant.components")
+    components.http = _module("homeassistant.components.http", HomeAssistantView=object)
+    components.http.auth = _module(
+        "homeassistant.components.http.auth",
+        async_sign_path=lambda hass, path, expiration: path + "?authSig=test",
+    )
     components.select = _module("homeassistant.components.select", SelectEntity=object)
     components.sensor = _module(
         "homeassistant.components.sensor", SensorEntity=type("SensorEntity", (), {}),
