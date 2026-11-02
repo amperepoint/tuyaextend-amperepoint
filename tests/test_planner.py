@@ -27,9 +27,16 @@ class _Coordinator:
             max_current_a=32.0,
         )
         self.charging_commands = []
+        self.current_commands = []
 
     async def async_set_charging(self, value: bool) -> None:
         self.charging_commands.append(value)
+
+    async def async_set_current_limit(self, value: float) -> None:
+        self.current_commands.append(value)
+
+    async def async_set_work_mode(self, value: str) -> None:
+        self.data["work_mode"] = value
 
     async def async_request_refresh(self) -> None:
         return None
@@ -204,6 +211,192 @@ class PlannerCommandStatusTests(unittest.TestCase):
         self.assertFalse(planner.managed_charging)
         self.assertEqual(planner.command_status, "idle")
         self.assertEqual(planner.coordinator.charging_commands, [])
+
+
+class PlannerExternalChangeTests(unittest.TestCase):
+    """The planner applies a current once per episode and follows later changes.
+
+    Reproduces a customer's Tuya log: a current set from the app or an
+    automation came back about 10 s later because the planner kept sending its
+    own value, and a start from the app slipped through after a stop.
+    """
+
+    def _planner(self):
+        planner = PlannerCommandStatusTests._planner(self)
+        planner.coordinator.data.update(
+            {"vehicle_connection_known": True, "vehicle_connected": True}
+        )
+        return planner
+
+    @staticmethod
+    def _window_now(current_a: float = 16.0):
+        now = datetime.now(timezone.utc)
+        return planner_module.normalize_windows(
+            [
+                {
+                    "id": "now",
+                    "days": [0, 1, 2, 3, 4, 5, 6],
+                    "start": (now - timedelta(minutes=2)).strftime("%H:%M"),
+                    "end": (now + timedelta(minutes=30)).strftime("%H:%M"),
+                    "current_a": current_a,
+                }
+            ],
+            min_current=6.0,
+            max_current=32.0,
+        )
+
+    @staticmethod
+    def _requested_at(planner) -> datetime:
+        return datetime.fromisoformat(planner.pending["requested_at"])
+
+    def test_current_changed_outside_during_override_is_not_reverted(self) -> None:
+        planner = self._planner()
+        planner.config = {"enabled": True, "windows": []}
+        asyncio.run(planner.async_set_override("charge", duration_minutes=60))
+        self.assertEqual(planner.coordinator.current_commands, [])
+
+        planner.coordinator.data["current_limit_a"] = 6.0
+        asyncio.run(planner.async_evaluate("coordinator"))
+        asyncio.run(planner.async_evaluate("minute"))
+
+        self.assertEqual(planner.coordinator.current_commands, [])
+        self.assertEqual(planner.override["current_a"], 6.0)
+        self.assertEqual(planner.state, "override_charging")
+
+    def test_override_applies_its_own_current_once_then_follows(self) -> None:
+        planner = self._planner()
+        planner.coordinator.data["current_limit_a"] = 10.0
+        asyncio.run(planner.async_set_override("charge", current_a=16.0))
+        self.assertEqual(planner.coordinator.current_commands, [16.0])
+
+        planner.coordinator.data["current_limit_a"] = 16.0
+        asyncio.run(planner.async_evaluate("coordinator"))
+        self.assertIsNone(planner.pending)
+
+        planner.coordinator.data["current_limit_a"] = 12.0
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(planner.coordinator.current_commands, [16.0])
+        self.assertEqual(planner.override["current_a"], 12.0)
+
+    def test_window_current_is_applied_at_start_and_then_followed(self) -> None:
+        planner = self._planner()
+        planner.config = {"enabled": True, "windows": self._window_now(16.0)}
+        planner.coordinator.data["current_limit_a"] = 10.0
+
+        asyncio.run(planner.async_evaluate("minute"))
+        self.assertEqual(planner.coordinator.current_commands, [16.0])
+        planner.coordinator.data["current_limit_a"] = 16.0
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        planner.coordinator.data["current_limit_a"] = 13.0
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(planner.coordinator.current_commands, [16.0])
+        self.assertEqual(planner.state, "scheduled_charging")
+
+    def test_returning_to_plan_applies_the_window_current_again(self) -> None:
+        planner = self._planner()
+        planner.config = {"enabled": True, "windows": self._window_now(16.0)}
+        asyncio.run(planner.async_set_override("charge", current_a=16.0))
+        planner.coordinator.data["current_limit_a"] = 8.0
+        asyncio.run(planner.async_evaluate("coordinator"))
+        self.assertEqual(planner.coordinator.current_commands, [])
+
+        asyncio.run(planner.async_set_override("clear"))
+
+        self.assertEqual(planner.coordinator.current_commands, [16.0])
+
+    def test_followed_current_survives_a_restart(self) -> None:
+        planner = self._planner()
+        windows = self._window_now(16.0)
+        asyncio.run(planner.async_set_config(True, windows))
+        self.assertEqual(planner.coordinator.current_commands, [])
+        planner.coordinator.data["current_limit_a"] = 9.0
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        restored = self._planner()
+        restored._store = planner._store
+        restored.coordinator.data["current_limit_a"] = 9.0
+        asyncio.run(restored.async_load())
+        asyncio.run(restored.async_evaluate("startup"))
+
+        self.assertEqual(restored.coordinator.current_commands, [])
+        self.assertEqual(restored.state, "scheduled_charging")
+
+    def test_pending_current_overtaken_from_outside_is_followed(self) -> None:
+        planner = self._planner()
+        planner.coordinator.data["current_limit_a"] = 10.0
+        asyncio.run(planner.async_set_override("charge", current_a=16.0))
+        planner.coordinator.data["current_limit_a"] = 12.0
+        planner._data_updated_at = self._requested_at(planner) + timedelta(seconds=10)
+
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(planner.coordinator.current_commands, [16.0])
+        self.assertIsNone(planner.pending)
+        self.assertEqual(planner.override["current_a"], 12.0)
+
+    def test_current_that_did_not_land_is_sent_again(self) -> None:
+        planner = self._planner()
+        planner.coordinator.data["current_limit_a"] = 10.0
+        asyncio.run(planner.async_set_override("charge", current_a=16.0))
+        planner._data_updated_at = self._requested_at(planner) + timedelta(seconds=10)
+
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(planner.coordinator.current_commands, [16.0, 16.0])
+
+    def test_charging_started_again_after_a_stop_is_stopped_again(self) -> None:
+        planner = self._planner()
+        planner.config = {"enabled": True, "windows": []}
+        asyncio.run(planner.async_evaluate("coordinator"))
+        self.assertEqual(planner.coordinator.charging_commands, [False])
+
+        # The stop landed for a moment, then charging was switched on again
+        # from the app before the next refresh, which shows it on.
+        planner._data_updated_at = self._requested_at(planner) + timedelta(seconds=10)
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(planner.coordinator.charging_commands, [False, False])
+        self.assertEqual(planner.pending["action"], "stop")
+
+    def test_disabled_planner_does_not_repeat_its_cleanup_stop(self) -> None:
+        planner = self._planner()
+        planner.config = {"enabled": False, "windows": []}
+        planner.managed_charging = True
+        asyncio.run(planner.async_evaluate("config"))
+        self.assertEqual(planner.coordinator.charging_commands, [False])
+
+        planner._data_updated_at = self._requested_at(planner) + timedelta(seconds=10)
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(planner.coordinator.charging_commands, [False])
+
+    def test_refresh_right_after_a_command_does_not_resend_it(self) -> None:
+        planner = self._planner()
+        planner.config = {"enabled": True, "windows": []}
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        planner._data_updated_at = self._requested_at(planner) + timedelta(seconds=1)
+        asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(planner.coordinator.charging_commands, [False])
+        self.assertEqual(planner.command_status, "pending")
+
+    def test_resends_are_limited_and_then_fall_back_to_the_timeout(self) -> None:
+        planner = self._planner()
+        planner.config = {"enabled": True, "windows": []}
+        asyncio.run(planner.async_evaluate("coordinator"))
+        for _ in range(planner_module.MAX_COMMAND_RESENDS + 2):
+            planner._data_updated_at = self._requested_at(planner) + timedelta(seconds=10)
+            asyncio.run(planner.async_evaluate("coordinator"))
+
+        self.assertEqual(
+            len(planner.coordinator.charging_commands),
+            1 + planner_module.MAX_COMMAND_RESENDS,
+        )
+        self.assertEqual(planner.command_status, "pending")
 
 
 if __name__ == "__main__":
