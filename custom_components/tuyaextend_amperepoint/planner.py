@@ -26,10 +26,24 @@ from .planner_model import (
 PLANNER_STORAGE_VERSION = 1
 COMMAND_TIMEOUT = timedelta(seconds=45)
 COMMAND_RETRY_DELAY = timedelta(minutes=5)
+# Data refreshed at least this long after a command shows its result. Home
+# Assistant spaces coordinator refreshes at least 10 s apart, so the refresh
+# that follows a command right away can still carry the state from before it.
+COMMAND_SETTLE = timedelta(seconds=6)
+# Sends of one command against fresh data that still contradicts it, before
+# the planner falls back to the timeout and retry delay.
+MAX_COMMAND_RESENDS = 3
 
 
 class AmperePointPlanner:
     """Persistent minute-accurate planner above the charger command adapter."""
+
+    # Class defaults keep instances built without __init__ (tests) consistent.
+    # current_episode is the window occurrence or override whose current the
+    # planner has already applied; later changes from outside are followed.
+    current_episode: str | None = None
+    _data_updated_at: datetime | None = None
+    _command_resends = 0
 
     def __init__(
         self,
@@ -76,6 +90,8 @@ class AmperePointPlanner:
         }
         self.override = stored.get("override")
         self.managed_charging = bool(stored.get("managed_charging", False))
+        episode = stored.get("current_episode")
+        self.current_episode = episode if isinstance(episode, str) else None
         stored_pending = stored.get("pending")
         self.last_confirmation = stored.get("last_confirmation")
         if isinstance(stored_pending, dict) and matches_expected(
@@ -120,6 +136,7 @@ class AmperePointPlanner:
 
     @callback
     def _handle_coordinator_update(self) -> None:
+        self._data_updated_at = dt_util.now()
         self.hass.async_create_task(self.async_evaluate("coordinator"))
 
     @callback
@@ -145,6 +162,7 @@ class AmperePointPlanner:
         )
         self.config = {"enabled": bool(enabled), "windows": normalized}
         self.pending = None
+        self._command_resends = 0
         if self.command_status == "pending":
             self.command_status = "idle"
         self.retry_after = None
@@ -167,6 +185,7 @@ class AmperePointPlanner:
             duration = max(1, min(int(duration_minutes or 60), 24 * 60))
             self.override = {
                 "mode": "charge",
+                "started_at": now.isoformat(),
                 "until": (now + timedelta(minutes=duration)).isoformat(),
                 "duration_minutes": duration,
                 "current_a": self._validated_override_current(current_a),
@@ -180,6 +199,7 @@ class AmperePointPlanner:
                 raise PlannerConfigError("No reliable energy meter is available")
             self.override = {
                 "mode": "energy",
+                "started_at": now.isoformat(),
                 "target_kwh": target,
                 "meter_key": meter_key,
                 "baseline_kwh": baseline,
@@ -195,6 +215,7 @@ class AmperePointPlanner:
             raise PlannerConfigError(f"Unsupported override: {mode}")
 
         self.pending = None
+        self._command_resends = 0
         if self.command_status == "pending":
             self.command_status = "idle"
         self.retry_after = None
@@ -259,17 +280,32 @@ class AmperePointPlanner:
                     return
                 current_a = float(desired["current_a"])
                 actual_current = self.coordinator.data.get("current_limit_a")
-                if (
+                differs = (
                     actual_current is None
                     or abs(float(actual_current) - current_a) > 0.11
-                ):
-                    await self._async_send(
-                        "set_current",
-                        {"current_limit_a": current_a},
-                        self.coordinator.async_set_current_limit,
-                        current_a,
-                    )
-                    return
+                )
+                episode = self._control_episode(desired, now)
+                if episode is None or episode != self.current_episode:
+                    # A window occurrence or an override starts: apply its
+                    # current once.
+                    if differs:
+                        await self._async_send(
+                            "set_current",
+                            {"current_limit_a": current_a},
+                            self.coordinator.async_set_current_limit,
+                            current_a,
+                            episode=episode,
+                            previous=actual_current,
+                        )
+                        return
+                    if episode is not None:
+                        self.current_episode = episode
+                        await self._async_save()
+                elif differs and actual_current is not None:
+                    # The current was changed outside the planner during this
+                    # episode - the Tuya app, Tuya Local, an automation. Follow
+                    # it instead of reverting it.
+                    await self._async_follow_current(float(actual_current))
                 if self.coordinator.data.get("switch_enabled") is not True:
                     await self._async_send(
                         "start",
@@ -321,11 +357,14 @@ class AmperePointPlanner:
         if not self.pending:
             return False
         if matches_expected(self.coordinator.data, self.pending.get("expected", {})):
+            if self.pending.get("action") == "set_current" and self.pending.get("episode"):
+                self.current_episode = self.pending["episode"]
             self.last_confirmation = {
                 "action": self.pending.get("action"),
                 "confirmed_at": now.isoformat(),
             }
             self.pending = None
+            self._command_resends = 0
             self.command_status = "confirmed"
             await self._async_save()
             self._notify()
@@ -348,9 +387,13 @@ class AmperePointPlanner:
             return False
 
         requested_at = _as_datetime(self.pending.get("requested_at")) or now
+        if self._data_is_fresh(requested_at) and await self._async_settle_contradicted():
+            return False
+
         if now - requested_at >= COMMAND_TIMEOUT:
             self.command_status = "failed"
             self.pending = None
+            self._command_resends = 0
             self.retry_after = now + COMMAND_RETRY_DELAY
             self._state = "failed"
             await self._async_save()
@@ -363,6 +406,86 @@ class AmperePointPlanner:
             self.coordinator.data.get("vehicle_connection_known") is True
             and self.coordinator.data.get("vehicle_connected") is False
         )
+
+    def _data_is_fresh(self, requested_at: datetime) -> bool:
+        """Whether the charger data was refreshed after the command could land."""
+        updated = self._data_updated_at
+        return updated is not None and updated - requested_at >= COMMAND_SETTLE
+
+    async def _async_settle_contradicted(self) -> bool:
+        """Release a pending command that fresh data still contradicts.
+
+        Returns True when the command was released, so the evaluation acts on
+        the state the charger reports now instead of waiting for the timeout
+        and then pausing for the retry delay.
+        """
+        pending = self.pending
+        action = pending.get("action")
+        if action == "set_current":
+            previous = pending.get("previous")
+            actual = self.coordinator.data.get("current_limit_a")
+            if previous is not None and not _same_current(actual, previous):
+                # Another current was set after the command. The episode's
+                # current counts as applied and the newer value is followed.
+                if pending.get("episode"):
+                    self.current_episode = pending["episode"]
+                self.pending = None
+                self._command_resends = 0
+                self.command_status = "idle"
+                await self._async_save()
+                return True
+        elif action != "stop" or not self._blocks_charging():
+            return False
+        if self._command_resends >= MAX_COMMAND_RESENDS:
+            return False
+        # The charger kept, or returned to, the state the command was meant to
+        # change - e.g. charging switched on again from the app right after a
+        # stop. A brief state between two refreshes is never seen, so waiting
+        # for it would leave the charger unsupervised. Send the command again.
+        self._command_resends += 1
+        self.pending = None
+        self.command_status = "idle"
+        await self._async_save()
+        return True
+
+    def _blocks_charging(self) -> bool:
+        """Whether charging is meant to stay off: outside the plan or paused.
+
+        A disabled planner only switches off a session it started itself; when
+        the user switches charging on again after that, it is not repeated.
+        """
+        return bool(self.config.get("enabled")) or bool(
+            self.override and self.override.get("mode") == "pause"
+        )
+
+    def _control_episode(self, desired: dict[str, Any], now: datetime) -> str | None:
+        """Identify the window occurrence or override that sets the current."""
+        if desired.get("state") == "override_charging" and self.override:
+            override = self.override
+            parts = (
+                override.get("mode"),
+                override.get("started_at"),
+                override.get("until"),
+                override.get("target_kwh"),
+                override.get("baseline_kwh"),
+            )
+            return "override:" + "|".join("" if part is None else str(part) for part in parts)
+        if desired.get("state") == "scheduled_charging":
+            active = active_window(self.config["windows"], now)
+            if active:
+                return f"window:{active.get('id', '')}:{active['active_start'].isoformat()}"
+        return None
+
+    async def _async_follow_current(self, current: float) -> None:
+        """Keep a running override in line with a current set from outside."""
+        if (
+            self.override
+            and self.override.get("mode") in {"charge", "energy"}
+            and not _same_current(self.override.get("current_a"), current)
+        ):
+            self.override["current_a"] = current
+            await self._async_save()
+            self._notify()
 
     async def _async_desired(self, now: datetime) -> dict[str, Any] | None:
         if self.override:
@@ -415,6 +538,9 @@ class AmperePointPlanner:
         expected: dict[str, Any],
         command: Callable[..., Any],
         value: Any,
+        *,
+        episode: str | None = None,
+        previous: Any = None,
     ) -> None:
         now = dt_util.now()
         self.pending = {
@@ -422,6 +548,10 @@ class AmperePointPlanner:
             "expected": expected,
             "requested_at": now.isoformat(),
         }
+        if episode is not None:
+            self.pending["episode"] = episode
+        if previous is not None:
+            self.pending["previous"] = previous
         if action == "start":
             self.managed_charging = True
         self.command_status = "pending"
@@ -510,6 +640,7 @@ class AmperePointPlanner:
                 if self.retry_after
                 else None,
                 "managed_charging": self.managed_charging,
+                "current_episode": self.current_episode,
                 **self._storage_extra(),
             }
         )
@@ -534,6 +665,15 @@ def _serialize_event(event: dict[str, Any] | None) -> dict[str, Any] | None:
         **event,
         "at": event["at"].isoformat(),
     }
+
+
+def _same_current(first: Any, second: Any) -> bool:
+    if first is None or second is None:
+        return first is None and second is None
+    try:
+        return abs(float(first) - float(second)) <= 0.11
+    except (TypeError, ValueError):
+        return False
 
 
 def _as_datetime(value: Any) -> datetime | None:
