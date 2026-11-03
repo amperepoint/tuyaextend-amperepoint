@@ -23,8 +23,8 @@ CONFIG = {"local_device_id": "private-device-identifier", "local_key": "private-
 
 class SnapshotTests(unittest.TestCase):
     def test_real_fixtures_keep_firmware_telemetry_and_types(self):
-        for family in ("split", "packed"):
-            fixture = json.loads((ROOT / f"amperepoint/observations/prime-{family}-tester-20260911.json").read_text())
+        for name in ("split-tester-20260911", "packed-tester-20260911", "split-v11-22-20-charging-20261102"):
+            fixture = json.loads((ROOT / f"amperepoint/observations/prime-{name}.json").read_text())
             report = diagnostics.describe_response({"dps": fixture["dps"]}, CONFIG)
             self.assertTrue(report["checks"]["dp109_is_string"])
             self.assertEqual(report["checks"]["dp102_missing_required_fields"], [])

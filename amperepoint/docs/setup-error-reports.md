@@ -1,7 +1,7 @@
 # Downloadable LAN setup diagnostics
 
 After a failed manual LAN setup, Tuya credential import, or LAN options check,
-the same form offers **Download error report / Pobierz log błędów**. It works
+the same form offers **Download error report / Pobierz raport błędu**. It works
 before a config entry exists. The user can download the JSON and attach it to
 a support ticket, correct the fields, and retry without leaving the wizard.
 Downloading does not contact AmperePoint or query the charger again.

@@ -156,4 +156,4 @@ Integracja nie zastępuje zabezpieczeń elektrycznych ani prawidłowej konfigura
 
 ### Raport błędu podczas konfiguracji LAN
 
-Po nieudanej próbie importu, ręcznego dodania lub zmiany połączenia LAN kliknij **Pobierz log błędów** w tym samym formularzu. Raport JSON można przesłać pomocy technicznej także wtedy, gdy urządzenia nie udało się jeszcze dodać. Link działa przez 15 minut; ponowna próba tworzy nowy raport. Plik zawiera wynik połączenia i zanonimizowane dane DP, bez local key, Device ID i adresu IP. Samo pobranie nie wysyła pliku do AmperePoint.
+Po nieudanej próbie importu, ręcznego dodania lub zmiany połączenia LAN kliknij **Pobierz raport błędu** w tym samym formularzu. Raport JSON można przesłać pomocy technicznej także wtedy, gdy urządzenia nie udało się jeszcze dodać. Link działa przez 15 minut; ponowna próba tworzy nowy raport. Plik zawiera wynik połączenia i zanonimizowane dane DP, bez local key, Device ID i adresu IP. Samo pobranie nie wysyła pliku do AmperePoint.

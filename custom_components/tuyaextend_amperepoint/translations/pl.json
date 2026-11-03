@@ -110,7 +110,7 @@
       },
       "local_import_error": {
         "title": "Wybierz ładowarkę",
-        "description": "Jednorazowo skopiujemy local key z już autoryzowanej integracji Tuya w HA. Późniejsze odczyty będą wyłącznie po LAN, bez chmurowego źródła zapasowego.\n\n[Pobierz log błędów]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
+        "description": "Jednorazowo skopiujemy local key z już autoryzowanej integracji Tuya w HA. Późniejsze odczyty będą wyłącznie po LAN, bez chmurowego źródła zapasowego.\n\n[Pobierz raport błędu]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
         "data": {
           "local_device_id": "Ładowarka / Device ID",
           "local_host": "Adres IP (puste = wykryj automatycznie)"
@@ -118,7 +118,7 @@
       },
       "local_manual_error": {
         "title": "AmperePoint Local",
-        "description": "Dane zostaną zapisane w konfiguracji HA. Odczyt działa lokalnie, bez konta Tuya w HA. Puste IP uruchomi wykrywanie; w Dockerze lub między VLAN-ami może być potrzebny ręczny adres.\n\n[Pobierz log błędów]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
+        "description": "Dane zostaną zapisane w konfiguracji HA. Odczyt działa lokalnie, bez konta Tuya w HA. Puste IP uruchomi wykrywanie; w Dockerze lub między VLAN-ami może być potrzebny ręczny adres.\n\n[Pobierz raport błędu]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
         "data": {
           "name": "Nazwa ładowarki",
           "local_device_id": "Ładowarka / Device ID",
@@ -212,7 +212,7 @@
       },
       "local_connection_error": {
         "title": "Połączenie AmperePoint Local",
-        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie jest dostępne dla zweryfikowanego układu firmware PRIME, do 16 A i nie powyżej DP152. Tryby ładowania i plan tygodniowy wykonuje Home Assistant przez LAN — HA musi być uruchomiony. W aplikacji ładowarki pozostaw tryb natychmiastowy.\n\n[Pobierz log błędów]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
+        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie jest dostępne dla zweryfikowanego układu firmware PRIME, do 16 A i nie powyżej DP152. Tryby ładowania i plan tygodniowy wykonuje Home Assistant przez LAN — HA musi być uruchomiony. W aplikacji ładowarki pozostaw tryb natychmiastowy.\n\n[Pobierz raport błędu]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
         "data": {
           "name": "Nazwa ładowarki",
           "local_device_id": "Ładowarka / Device ID",
