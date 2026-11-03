@@ -31,6 +31,8 @@ def public_dps(dps: dict) -> dict:
 class LocalConnectionError(Exception):
     """Safe error code, without device response or credentials."""
 
+    diagnostics: dict | None = None
+
 
 def as_mapping(value: Any) -> dict:
     if isinstance(value, str):
@@ -203,9 +205,13 @@ def read_local(config: dict, rediscover: bool = False) -> dict:
                             version=float(config.get("local_protocol", "3.5")),
                             connection_timeout=4, connection_retry_limit=1,
                             connection_retry_delay=0, persist=False)
+    response = None
     try:
-        dps, family = validate_snapshot(device.status())
-    except LocalConnectionError:
+        response = device.status()
+        dps, family = validate_snapshot(response)
+    except LocalConnectionError as err:
+        from .setup_diagnostics import describe_response
+        err.diagnostics = describe_response(response, config)
         raise
     except Exception:
         # Never put protocol responses, credentials or a device repr in logs.

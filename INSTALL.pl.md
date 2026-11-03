@@ -153,3 +153,7 @@ i jest niezależna od wskazania aktualnej sesji.
 Nie publikuj local keys, tokenów, plików HA `.storage`, danych kont ani surowych
 niezanonimizowanych dumpów. Dane kart/autoryzacji są redagowane w diagnostyce.
 Integracja nie zastępuje zabezpieczeń elektrycznych ani prawidłowej konfiguracji instalacji.
+
+### Raport błędu podczas konfiguracji LAN
+
+Po nieudanej próbie importu, ręcznego dodania lub zmiany połączenia LAN kliknij **Pobierz raport błędu** w tym samym formularzu. Raport JSON można przesłać pomocy technicznej także wtedy, gdy urządzenia nie udało się jeszcze dodać. Link działa przez 15 minut; ponowna próba tworzy nowy raport. Plik zawiera wynik połączenia i zanonimizowane dane DP, bez local key, Device ID i adresu IP. Samo pobranie nie wysyła pliku do AmperePoint.

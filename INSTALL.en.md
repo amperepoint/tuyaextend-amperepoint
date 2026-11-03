@@ -150,3 +150,7 @@ starts at zero and is separate from the current-session display.
 Never publish local keys, tokens, HA `.storage`, account details or unsanitized
 raw dumps. Card/authentication data is redacted in diagnostics. The integration
 does not replace electrical protections or correct installation settings.
+
+### Error report during LAN setup
+
+After a failed import, manual setup or LAN options check, click **Download error report** in the same form. Send the JSON to support even if no device entry could be created. The link lasts 15 minutes; retrying creates a new report. It contains the connection result and sanitized DP data, without the local key, device ID or IP address. Downloading does not send the file to AmperePoint.
