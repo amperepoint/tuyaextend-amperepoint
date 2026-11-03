@@ -58,7 +58,9 @@ async def main():
                 result = await hass.config_entries.flow.async_configure(flow_id, values)
                 assert result["step_id"] == "local_manual_error", result
                 assert result["errors"]["base"] == "local_unsupported", result
-                assert calls == ["status", "close"], calls
+                # An incomplete answer is re-read, a bounded number of times, on one device.
+                from custom_components.tuyaextend_amperepoint.local_source import SNAPSHOT_ATTEMPTS
+                assert calls == ["status"] * SNAPSHOT_ATTEMPTS + ["close"], calls
                 assert not hass.config_entries.async_entries(DOMAIN)
                 path = result["description_placeholders"]["diagnostic_url"]
                 async with ClientSession() as client:
