@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import re
 import time
 import math
 from typing import Any
@@ -18,8 +19,14 @@ LOCAL_SOURCE = "amperepoint_local"
 LOCAL_FIELDS = ("local_device_id", "local_key", "local_host", "local_protocol")
 CONTROL_PROFILE = "prime_split_v1"
 PACKED_CONTROL_PROFILE = "prime_packed_v1"
-CONTROL_PROFILES = {CONTROL_PROFILE, PACKED_CONTROL_PROFILE}
+V11_CONTROL_PROFILE = "prime_split_v11"
+CONTROL_PROFILES = {CONTROL_PROFILE, PACKED_CONTROL_PROFILE, V11_CONTROL_PROFILE}
 PRIVATE_DPS = {"112", "113"}  # Card/authentication data, not telemetry.
+# Firmware V11.22 (app panel 2.0) uses the split layout under its own product ID.
+V11_PRODUCT_IDS = {"skkg3zksmiibll2r"}
+V11_FIRMWARE = re.compile(r"\(V11\.22\.\d+\)F2\.0\.\d+")
+SNAPSHOT_DPS = ("102", "106", "109")
+SNAPSHOT_ATTEMPTS = 3
 
 
 def public_dps(dps: dict) -> dict:
@@ -43,26 +50,39 @@ def as_mapping(value: Any) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def validate_snapshot(response: Any) -> tuple[dict, str]:
+def is_v11_firmware(dps: dict) -> bool:
+    firmware = as_mapping(dps.get("106")).get("fv")
+    return isinstance(firmware, str) and V11_FIRMWARE.match(firmware) is not None
+
+
+def validate_snapshot(response: Any, product_id: str | None = None) -> tuple[dict, str]:
     if not isinstance(response, dict) or response.get("Error") or response.get("Err"):
         raise LocalConnectionError("local_cannot_connect")
     dps = response.get("dps")
     if not isinstance(dps, dict):
         raise LocalConnectionError("local_cannot_connect")
     payload = as_mapping(dps.get("102"))
-    if not all(k in payload for k in ("p", "e", "t")) or not isinstance(dps.get("109"), str):
-        raise LocalConnectionError("local_unsupported")
-    if isinstance(payload.get("L"), list):
-        family = "prime_split"
-    elif isinstance(payload.get("L1"), list):
-        family = "prime_packed"
-    else:
-        raise LocalConnectionError("local_unsupported")
-    return public_dps(dps), family
+    if all(k in payload for k in ("p", "e", "t")) and isinstance(dps.get("109"), str):
+        if isinstance(payload.get("L"), list):
+            return public_dps(dps), "prime_split"
+        if isinstance(payload.get("L1"), list):
+            return public_dps(dps), "prime_packed"
+    # V11.22 is identified by its firmware or product ID: a read outside a
+    # session or from an earlier build need not carry every telemetry field.
+    if is_v11_firmware(dps) or product_id in V11_PRODUCT_IDS:
+        return public_dps(dps), "prime_split"
+    raise LocalConnectionError("local_unsupported")
 
 
 def detected_control_profile(dps: dict, family: str) -> str | None:
     """Recognize the tested firmware/DP contract, independently of user settings."""
+    if (family == "prime_split"
+            and is_v11_firmware(dps)
+            and type(dps.get("140")) is bool
+            and type(dps.get("150")) is int
+            and type(dps.get("152")) is int
+            and 6 <= dps["152"] <= 80):
+        return V11_CONTROL_PROFILE
     if (family == "prime_packed"
             and as_mapping(dps.get("106")).get("fv") == "(V8.0.7)F1.3.6"
             and type(dps.get("101")) is int
@@ -148,6 +168,12 @@ def write_local(config: dict, code: str, value: Any) -> dict:
             if charging_enabled(after["dps"], after["family"]) is expected:
                 return after
             continue
+        if dp == 140 and config.get("local_control_profile") == V11_CONTROL_PROFILE:
+            # V11.22 reports DP140 itself; DP101 reads 370 while power flows.
+            if after["dps"].get("140") is expected and (
+                    not expected or after["dps"].get("101") not in (201, 204)):
+                return after
+            continue
         if after["dps"].get(str(dp)) == expected:
             if dp != 140 or after["dps"].get("101") in (
                 (200, 300) if expected else (201, 204)
@@ -189,7 +215,7 @@ def discover_host(device_id: str) -> str:
 
 
 def read_local(config: dict, rediscover: bool = False) -> dict:
-    """Run only in an executor; one bounded connection, closed even on failure."""
+    """Run only in an executor; at most three bounded reads, closed even on failure."""
     import tinytuya
 
     validate_credentials(config)
@@ -206,9 +232,19 @@ def read_local(config: dict, rediscover: bool = False) -> dict:
                             connection_timeout=4, connection_retry_limit=1,
                             connection_retry_delay=0, persist=False)
     response = None
+    merged: dict = {}
     try:
-        response = device.status()
-        dps, family = validate_snapshot(response)
+        for _ in range(SNAPSHOT_ATTEMPTS):
+            response = device.status()
+            if not (isinstance(response, dict) and isinstance(response.get("dps"), dict)):
+                break
+            # TinyTuya returns the first message with data, which can be an
+            # unsolicited update of a few DPs. Merge reads until the layout DPs arrive.
+            merged.update(response["dps"])
+            response = {**response, "dps": dict(merged)}
+            if all(dp in merged for dp in SNAPSHOT_DPS):
+                break
+        dps, family = validate_snapshot(response, config.get("local_product_id"))
     except LocalConnectionError as err:
         from .setup_diagnostics import describe_response
         err.diagnostics = describe_response(response, config)
