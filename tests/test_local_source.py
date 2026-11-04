@@ -39,12 +39,12 @@ class LocalSourceTests(unittest.TestCase):
         self.assertEqual(dps["112"], "[redacted: card/auth data]")
         self.assertEqual(dps["999"], "unknown")
 
-    def test_v11_firmware_is_accepted_as_split_without_unverified_controls(self):
+    def test_v11_firmware_is_accepted_as_split_with_its_own_control_profile(self):
         fixture = json.loads((Path(__file__).resolve().parents[1] /
             "amperepoint/observations/prime-split-v11-22-20-charging-20261102.json").read_text(encoding="utf-8"))
         dps, family = local.validate_snapshot({"dps": fixture["dps"]})
         self.assertEqual(family, "prime_split")
-        self.assertIsNone(local.detected_control_profile(dps, family))
+        self.assertEqual(local.detected_control_profile(dps, family), local.V11_CONTROL_PROFILE)
 
     def test_unknown_devices_and_authentication_errors_are_rejected(self):
         for value in ({"dps": {"1": True}}, {"Error": "secret response", "Err": "914"}, None):
