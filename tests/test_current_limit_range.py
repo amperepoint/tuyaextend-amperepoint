@@ -173,5 +173,12 @@ class AmbiguousTextTests(unittest.TestCase):
             "q_series",
         )
 
+    def test_names_written_by_earlier_profile_versions_stay_safe(self) -> None:
+        # Devices and entries created before the rename keep these strings.
+        for name in ("Ampere Point Q Series - all models (local)",
+                     "Ampere Point EV Charger (local)"):
+            with self.subTest(name=name):
+                self.assertEqual(models.detect_model_key(name), "q_series")
+
     def test_a_single_model_still_identifies(self) -> None:
         self.assertEqual(models.detect_model_key("Q22 charger"), "q22")

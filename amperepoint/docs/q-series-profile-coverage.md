@@ -1,13 +1,12 @@
 # One profile for the Q Series: what it covers and what decides the rest
 
-`amperepoint_q_series_local` is one profile for the whole Q Series. This
+`amperepoint_q11_pro_evcharger` is one profile for the whole Q Series. This
 file records which models it covers, what was measured, and why the two
 per-model differences are resolved outside the profile.
 
-The file was renamed from amperepoint_q11_pro_evcharger once all four
-generations were measured. tuya-local stores the file name as the entry's
-`config_type`, so entries created under the old name have to be repointed
-or re-created - the rename is not backwards compatible.
+The file name still says q11_pro. tuya-local stores the file name as the
+entry's `config_type`, so renaming it would orphan every existing tuya-local
+entry created with this profile; that waits for a deliberate migration.
 
 ## Models
 

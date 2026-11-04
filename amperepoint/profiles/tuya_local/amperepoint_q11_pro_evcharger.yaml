@@ -15,7 +15,9 @@
 #   4. Add integration -> Tuya Local -> enter device id, IP, local key and
 #      protocol version.
 #   5. In the device-type step choose
-#      "Ampere Point Q Series (local) (amperepoint_q_series_local)".
+#      "Ampere Point Q Series (local) (amperepoint_q11_pro_evcharger)".
+#      The file keeps its first name because tuya-local stores it as each
+#      entry's config_type; a rename would orphan existing entries.
 #   6. Name the entry after the model - "Q22", "Q74" and so on. The profile
 #      deliberately names no model, so that name is the only thing telling
 #      the AmperePoint integration the phase count and current limit.
