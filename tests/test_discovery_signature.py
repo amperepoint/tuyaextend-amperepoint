@@ -110,3 +110,36 @@ class ChargerSignatureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConnectedWithoutControlPilotTests(unittest.TestCase):
+    """A charger without DP13 has only its work state to answer with."""
+
+    def setUp(self) -> None:
+        self.models = load_integration_module("models")
+
+    def test_work_states_that_mean_something_is_plugged_in(self) -> None:
+        for value in (
+            "charger_wait",
+            "waiting",
+            "charger_insert",
+            "plugged_in",
+            "charger_pause",
+            "paused",
+            "charger_end",
+            "charged",
+            "charger_charging",
+            "charging",
+        ):
+            with self.subTest(value=value):
+                self.assertTrue(self.models.normalize_connected(value))
+
+    def test_work_states_that_mean_an_empty_socket(self) -> None:
+        for value in ("charger_free", "available", "charger_free_fault",
+                      "fault_unplugged", "controlpi_12v", "standby"):
+            with self.subTest(value=value):
+                self.assertFalse(self.models.normalize_connected(value, fallback=True))
+
+    def test_unknown_text_still_falls_back(self) -> None:
+        self.assertTrue(self.models.normalize_connected("cos_nowego", fallback=True))
+        self.assertFalse(self.models.normalize_connected("cos_nowego", fallback=False))

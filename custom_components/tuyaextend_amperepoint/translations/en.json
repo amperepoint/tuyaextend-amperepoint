@@ -78,6 +78,18 @@
       },
       "planner": {
         "name": "Charging planner"
+      },
+      "pv_surplus": {
+        "name": "PV surplus"
+      },
+      "session_pv_energy": {
+        "name": "Session solar energy"
+      },
+      "session_pv_share": {
+        "name": "Session solar share"
+      },
+      "daily_pv_energy": {
+        "name": "Daily solar energy"
       }
     },
     "binary_sensor": {
@@ -102,6 +114,9 @@
       },
       "charging_mode": {
         "name": "Charging mode"
+      },
+      "pv_mode": {
+        "name": "PV mode"
       }
     },
     "switch": {

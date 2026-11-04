@@ -12,6 +12,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
+    PERCENTAGE,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -122,6 +123,41 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda data: data.get("session_duration_min"),
+    ),
+    AmperePointSensorDescription(
+        key="pv_surplus",
+        translation_key="pv_surplus",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda data: data.get("surplus_available_w"),
+    ),
+    AmperePointSensorDescription(
+        key="session_pv_energy",
+        translation_key="session_pv_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        value_fn=lambda data: data.get("session_pv_energy_kwh"),
+    ),
+    AmperePointSensorDescription(
+        key="session_pv_share",
+        translation_key="session_pv_share",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=0,
+        value_fn=lambda data: data.get("session_pv_share_pct"),
+    ),
+    AmperePointSensorDescription(
+        key="daily_pv_energy",
+        translation_key="daily_pv_energy",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=2,
+        value_fn=lambda data: data.get("daily_pv_energy_kwh"),
     ),
     AmperePointSensorDescription(
         key="session_cost",

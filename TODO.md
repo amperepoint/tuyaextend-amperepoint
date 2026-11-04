@@ -42,7 +42,7 @@ custom_components/tuyaextend_amperepoint/
 
 - [x] Document first-run setup for selecting existing Tuya/Xtend/Tuya Local
       entities and turning them into AmperePoint EVSE entities.
-- [ ] Add a first-run generated dashboard/view helper.
+- [x] Add a first-run generated dashboard/view helper.
 - [ ] Add tests for entity discovery and raw phase payload decoding.
 
 ## Tuya Local

@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "tuyaextend_amperepoint"
 NAME = "AmperePoint"
-VERSION = "0.5.44"
+VERSION = "0.6.1"
 
 PLATFORMS = [
     Platform.SENSOR,
@@ -96,6 +96,26 @@ PHASE_RAW_KEYS = (
     CONF_SOURCE_PHASE_B,
     CONF_SOURCE_PHASE_C,
 )
+
+CONF_PV_MODE = "pv_mode"
+CONF_SOURCE_PV_POWER = "source_pv_power"
+CONF_SOURCE_GRID_POWER = "source_grid_power"
+CONF_SOURCE_GRID_IMPORT = "source_grid_import"
+CONF_SOURCE_GRID_EXPORT = "source_grid_export"
+CONF_SOURCE_HOUSE_POWER = "source_house_power"
+CONF_SOURCE_BATTERY_POWER = "source_battery_power"
+CONF_SOURCE_BATTERY_SOC = "source_battery_soc"
+CONF_GRID_IMPORT_POSITIVE = "grid_import_positive"
+CONF_BATTERY_CHARGE_POSITIVE = "battery_charge_positive"
+CONF_PV_RESERVE_W = "pv_reserve_w"
+CONF_PV_MAX_IMPORT_W = "pv_max_import_w"
+CONF_PV_BATTERY_MIN_SOC = "pv_battery_min_soc"
+
+DEFAULT_PV_RESERVE_W = 0
+DEFAULT_PV_MAX_IMPORT_W = 0
+DEFAULT_PV_BATTERY_MIN_SOC = 100
+DEFAULT_GRID_IMPORT_POSITIVE = True
+DEFAULT_BATTERY_CHARGE_POSITIVE = True
 
 FRONTEND_URL = "/tuyaextend_amperepoint/frontend"
 FRONTEND_MODULE = f"{FRONTEND_URL}/amperepoint-q22-card.js?v={VERSION}"

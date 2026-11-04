@@ -13,6 +13,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import AmperePointCoordinator
+from .surplus import STATE_DISABLED as SURPLUS_DISABLED, STATE_NO_DATA as SURPLUS_NO_DATA
 from .planner_model import (
     PlannerConfigError,
     active_window,
@@ -519,11 +520,16 @@ class AmperePointPlanner:
                 if mode == "pause":
                     return {"charging": False, "state": "override_paused"}
 
-        if not self.config.get("enabled"):
+        plan_enabled = bool(self.config.get("enabled"))
+        active = active_window(self.config["windows"], now) if plan_enabled else None
+        surplus = self._surplus_desired(now, plan_enabled, active)
+        if surplus is not None:
+            return surplus
+
+        if not plan_enabled:
             if self.managed_charging:
                 return {"charging": False, "state": "override_paused"}
             return None
-        active = active_window(self.config["windows"], now)
         if active:
             return {
                 "charging": True,
@@ -531,6 +537,40 @@ class AmperePointPlanner:
                 "state": "scheduled_charging",
             }
         return {"charging": False, "state": "waiting"}
+
+    def _surplus_desired(
+        self, now: datetime, plan_enabled: bool, active: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Let PV surplus own the decision, below any manual override.
+
+        A weekly plan that is enabled acts as a permission window rather than a
+        second owner: surplus charging only runs while a window is active, and
+        the window's current limit caps what the surplus may request.
+        """
+        decision = getattr(self.coordinator, "surplus_decision", None)
+        if decision is None or decision.state in {SURPLUS_DISABLED, SURPLUS_NO_DATA}:
+            if decision is not None and decision.state == SURPLUS_NO_DATA:
+                # Measurements went missing: stop instead of guessing.
+                if self.managed_charging:
+                    return {"charging": False, "state": "surplus_no_data"}
+            return None
+
+        if plan_enabled and self.config.get("windows") and active is None:
+            if self.managed_charging:
+                return {"charging": False, "state": "waiting"}
+            return None
+
+        if not decision.charging:
+            return {"charging": False, "state": decision.state}
+
+        current_a = float(decision.current_a or self.coordinator.model_limits.min_current_a)
+        if active:
+            current_a = min(current_a, float(active["current_a"]))
+        return {
+            "charging": True,
+            "current_a": current_a,
+            "state": decision.state,
+        }
 
     async def _async_send(
         self,

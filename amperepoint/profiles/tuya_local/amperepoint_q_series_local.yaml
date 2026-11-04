@@ -1,8 +1,9 @@
-# Canonical tuya-local profile for Ampere Point Q11 PRO (11 kW Q Series).
+# Canonical tuya-local profile for the Ampere Point Q Series: measured
+# against a Q11 PRO, a Q37, a Q22 and a Q74.
 #
-# Protocol: Tuya LAN 3.5
+# Protocol: Tuya LAN 3.4 on every unit captured so far.
 #
-# Installation - all five steps are required:
+# Installation - all six steps are required:
 #   1. Copy this file into config/custom_components/tuya_local/devices/.
 #   2. Restart Home Assistant so tuya-local loads the new profile.
 #   3. DELETE any existing tuya-local entry for this charger. tuya-local can
@@ -12,9 +13,12 @@
 #      matches the same datapoints but names and scales them differently)
 #      cannot be repointed at this one.
 #   4. Add integration -> Tuya Local -> enter device id, IP, local key and
-#      protocol version 3.5.
+#      protocol version.
 #   5. In the device-type step choose
-#      "Ampere Point Q11 PRO (amperepoint_q11_pro_evcharger)".
+#      "Ampere Point Q Series (local) (amperepoint_q_series_local)".
+#   6. Name the entry after the model - "Q22", "Q74" and so on. The profile
+#      deliberately names no model, so that name is the only thing telling
+#      the AmperePoint integration the phase count and current limit.
 #
 # Datapoint types are taken from a real "LOCAL DPS:" capture logged by
 # tuya-local during the device-type step on 2026-07-25, with the charger
@@ -74,7 +78,7 @@
 
 ---
 
-name: Ampere Point EV Charger (local)
+name: Ampere Point Q Series (local)
 products:
   # One entry only, so the device-type list shows one row for the series
   # instead of one per model. tuya-local builds that row from manufacturer +
@@ -94,10 +98,19 @@ products:
   # product. jhlyzpk5nfk28nrh is the Q11 PRO.
   - id: fdfjiphjxtc9qyhd
     manufacturer: Ampere Point
-    model: Q Series - all models (local)
+    model: Q Series (local)
   - id: jhlyzpk5nfk28nrh
     manufacturer: Ampere Point
-    model: Q Series - all models (local)
+    model: Q Series (local)
+  # bktb3jskdic1ar2t is an OEM base sold under several brands - the Wada
+  # Power, Noeifevo and Nine profiles all declare it too. A Q74 on it was
+  # captured charging: 218.0 V x 7.3 A on L1 against 1.526 kW on DP9, so the
+  # watt scale and the phase masks hold here as well. Declaring the id also
+  # restores the list label, which otherwise falls back to `name:` for every
+  # profile once a device's id is known and unclaimed.
+  - id: bktb3jskdic1ar2t
+    manufacturer: Ampere Point
+    model: Q Series (local)
 
 entities:
   - entity: sensor

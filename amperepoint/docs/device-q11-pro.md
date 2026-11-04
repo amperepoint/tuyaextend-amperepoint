@@ -34,7 +34,7 @@ source is mapped.
 ## tuya-local profile
 
 ```text
-amperepoint/profiles/tuya_local/amperepoint_q11_pro_evcharger.yaml
+amperepoint/profiles/tuya_local/amperepoint_q_series_local.yaml
 ```
 
 tuya-local auto-selects the unrelated third-party `aimiler_11kW_evcharger`
@@ -42,7 +42,7 @@ config for this charger: it declares the same eight datapoints, so it also
 scores a 100% match, but it names and scales them differently and produces
 entities that do not correspond to this device. The shipped profile must be
 picked explicitly in the device-type step; it appears as
-`Ampere Point Q11 PRO (amperepoint_q11_pro_evcharger)`.
+`Ampere Point Q11 PRO (amperepoint_q_series_local)`.
 
 Replaying tuya-local's matcher over the capture above scores the profile at
 `matches=True, quality=100%`.

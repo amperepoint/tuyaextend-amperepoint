@@ -2,7 +2,7 @@
 
 Companion to `device-q37-ve.md`, which describes the same charger as seen
 through the Tuya cloud. This file records what the unit reports over the LAN
-while paired with `amperepoint_q11_pro_evcharger`, because that profile is
+while paired with `amperepoint_q_series_local`, because that profile is
 being grown into a single profile for the whole Q Series.
 
 Two of the open questions in the cloud document are answered here, and the
@@ -10,7 +10,7 @@ answers go the other way than the cloud observations suggested. Both are
 called out below.
 
 - Product/model id: `fdfjiphjxtc9qyhd`
-- Profile used while capturing: `amperepoint_q11_pro_evcharger`
+- Profile used while capturing: `amperepoint_q_series_local`
 - Method: `LOCAL DPS` line logged by tuya-local at the device-type step, plus
   the recorder history of the resulting entities across two charge sessions.
 
