@@ -98,4 +98,26 @@ assert.ok(
   "missing energy data is stated explicitly",
 );
 
+// The integration publishes the decision and its PV reading on the surplus
+// sensor; a card without its own production entity shows that reading.
+const fromIntegration = makeCard(
+  {
+    "sensor.charger_pv_surplus": {
+      state: "1800",
+      attributes: { surplus_state: "charging_pv_grid", pv_power_w: 4100 },
+    },
+  },
+  { pvSurplus: "sensor.charger_pv_surplus" },
+);
+const integrationHtml = fromIntegration.pvCard();
+assert.ok(integrationHtml.includes("4100"), "production falls back to the integration's reading");
+assert.ok(integrationHtml.includes("PV + sieć"), "the decision comes from the surplus sensor");
+
+// While the surplus owns charging, the planner reports the PV decision.
+assert.equal(card.plannerStateLabel("charging_from_pv"), "Ładowanie z PV");
+assert.equal(card.plannerStateLabel("surplus_no_data"), "Brak danych energetycznych");
+
+// A re-render must not close the mode picker while it is being used.
+assert.ok(html.includes('data-render-key="pv-mode-select"'), "the mode picker keeps its focus across renders");
+
 console.log("PV card tests passed");

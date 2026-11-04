@@ -1637,6 +1637,12 @@ class AmperePointQ22Card extends HTMLElement {
       source_unavailable: "plannerSourceUnavailable",
       pending: "plannerPending",
       failed: "plannerFailed",
+      // The planner reports the PV decision while the surplus owns charging.
+      waiting_for_surplus: "pvWaiting",
+      charging_from_pv: "pvCharging",
+      charging_pv_grid: "pvChargingMixed",
+      target_needs_grid: "pvTargetNeedsGrid",
+      surplus_no_data: "pvNoData",
     }[value];
     return this.t(key || "plannerIdle");
   }
@@ -1997,7 +2003,8 @@ class AmperePointQ22Card extends HTMLElement {
     const grid = this.num(e.pvSurplus, null);
     const share = this.hasEntity(e.sessionPvShare) ? this.num(e.sessionPvShare) : null;
     const flows = [
-      this.pvFlow("pvProduction", this.state(e.pvProduction, null), "W", "mdi:solar-power"),
+      // Without a card-level production entity, use the source the integration reads.
+      this.pvFlow("pvProduction", this.state(e.pvProduction, null) ?? this.attr(e.pvSurplus, "pv_power_w"), "W", "mdi:solar-power"),
       this.pvFlow("pvSurplusLabel", grid, "W", "mdi:transmission-tower-export"),
     ]
       .filter(Boolean)
@@ -2016,7 +2023,7 @@ class AmperePointQ22Card extends HTMLElement {
         ${flows ? `<div class="pv-flows">${flows}</div>` : ""}
         ${
           modeOptions.length
-            ? `<label class="pv-mode"><span>${this.t("pvMode")}</span><select class="pv-mode-select">${modeOptions
+            ? `<label class="pv-mode"><span>${this.t("pvMode")}</span><select class="pv-mode-select" data-render-key="pv-mode-select">${modeOptions
                 .map(
                   (option) =>
                     `<option value="${this.escape(option)}" ${option === modeEntity.state ? "selected" : ""}>${this.escape(option)}</option>`

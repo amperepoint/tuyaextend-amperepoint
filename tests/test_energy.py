@@ -317,7 +317,8 @@ class SensorContractTests(unittest.TestCase):
         self.assertEqual(canonical.native_unit_of_measurement, "kWh")
         self.assertEqual(canonical.device_class, "energy")
         self.assertEqual(canonical.state_class, "total_increasing")
-        for key in ("session_energy", "last_session_energy", "total_energy", "session_cost"):
+        for key in ("session_energy", "last_session_energy", "total_energy", "session_cost",
+                    "session_pv_energy", "daily_pv_energy"):
             self.assertIsNone(descriptions[key].state_class)
         self.assertEqual(descriptions["power"].state_class, "measurement")
 

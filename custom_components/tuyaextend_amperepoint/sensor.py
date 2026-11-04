@@ -35,6 +35,9 @@ class AmperePointSensorDescription(SensorEntityDescription):
     value_fn: Callable[[dict[str, Any]], Any]
 
 
+# Created only for entries whose PV sources can be configured.
+PV_SENSOR_KEYS = frozenset({"pv_surplus", "session_pv_energy", "session_pv_share", "daily_pv_energy"})
+
 SENSORS: tuple[AmperePointSensorDescription, ...] = (
     AmperePointSensorDescription(
         key="power_energy",
@@ -133,12 +136,14 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         suggested_display_precision=0,
         value_fn=lambda data: data.get("surplus_available_w"),
     ),
+    # The solar energies are a share of charging_energy, so like the session
+    # energies they carry no statistics state class: only the canonical meter
+    # may be offered to HA Energy, where a second one would count twice.
     AmperePointSensorDescription(
         key="session_pv_energy",
         translation_key="session_pv_energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
         suggested_display_precision=2,
         value_fn=lambda data: data.get("session_pv_energy_kwh"),
     ),
@@ -155,7 +160,6 @@ SENSORS: tuple[AmperePointSensorDescription, ...] = (
         translation_key="daily_pv_energy",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
         suggested_display_precision=2,
         value_fn=lambda data: data.get("daily_pv_energy_kwh"),
     ),
@@ -290,8 +294,11 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: AmperePointCoordinator = hass.data[DOMAIN][entry.entry_id]
+    surplus = getattr(coordinator, "supports_surplus", True)
     entities: list[SensorEntity] = [
-        AmperePointSensor(coordinator, description) for description in SENSORS
+        AmperePointSensor(coordinator, description)
+        for description in SENSORS
+        if surplus or description.key not in PV_SENSOR_KEYS
     ]
     if planner := getattr(coordinator, "planner", None):
         entities.append(AmperePointPlannerSensor(coordinator, planner))
@@ -347,6 +354,14 @@ class AmperePointSensor(AmperePointEntity, SensorEntity):
                 "excluded_energy_kwh": data.get("excluded_energy_kwh", 0),
                 "power_tolerance_percent": 10,
             }
+        if self.entity_description.key == "pv_surplus":
+            # The dashboard's solar section reads the decision and the flows here.
+            data = self.coordinator.data
+            return {key: data.get(key) for key in (
+                "surplus_mode", "surplus_state", "surplus_reason", "surplus_charging",
+                "surplus_current_a", "pv_power_w", "grid_power_w", "house_power_w",
+                "battery_power_w", "battery_soc",
+            )}
         if self.entity_description.key != "raw_dp":
             return None
 

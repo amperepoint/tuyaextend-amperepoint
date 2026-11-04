@@ -100,7 +100,9 @@ This is the energy foundation for #36, not yet a session-history or tariff relea
 
 From version `0.6.1` the integration can charge from photovoltaic surplus using
 the energy entities that already exist in Home Assistant, without depending on a
-particular inverter, meter or battery.
+particular inverter, meter or battery. It is available for chargers added
+through the official Tuya integration or by entity mapping; an **AmperePoint
+Local (LAN)** entry has no PV source settings yet and gets no PV entities.
 
 Point it at your sensors in the integration options: PV production, either a
 signed grid-power sensor or separate import and export sensors, and optionally
@@ -127,8 +129,12 @@ Modes:
 Control is deliberately unhurried: readings are averaged so passing clouds do
 not stop a session, a start delay debounces brief sunny spells, a stop delay
 and a minimum run time carry a session through house-load spikes, and the
-current ramps in steps instead of jumping. Missing or stale measurements stop
-the mode rather than guessing.
+current ramps in steps instead of jumping, in whole amperes rounded down.
+Missing or stale measurements stop the mode rather than guessing.
+
+Session and daily solar energy are a share of **Charging energy**, so they
+record no statistics and are not offered to HA Energy, where the same energy
+would count twice.
 
 A manual override always outranks the surplus. An enabled weekly plan acts as a
 permission window - surplus charging runs only inside its windows and its

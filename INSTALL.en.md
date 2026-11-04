@@ -138,6 +138,43 @@ do not add both. Historical statistics are not merged or deleted. The new sensor
 starts at zero and is separate from the current-session display.
 [Full guide: sources, gaps, resets, restart and migration](amperepoint/docs/home-assistant-energy.md).
 
+## 6. Solar surplus charging
+
+From `0.6.1` the integration can charge from photovoltaic surplus using energy
+entities already in Home Assistant, whatever the inverter, meter or battery brand.
+It works for chargers added through the official Tuya integration or by entity
+mapping. An **AmperePoint Local (LAN)** entry has no PV source settings yet, so it
+gets no PV entities and no PV section on the panel.
+
+In the integration options, select the **PV production entity**, either a signed
+**grid power entity** or separate **grid import** and **grid export** entities,
+and optionally the house consumption, battery power and battery state of charge.
+Clear **Grid sensor is positive while importing** if your meter reports import as
+negative (Huawei inverters through `huawei_solar` report export as positive). W and
+kW are converted automatically.
+
+- **The grid meter should measure the whole house, charger included.** The
+  charger's own draw counts as available surplus; otherwise raising the current
+  would look like a deficit and the control would oscillate.
+- **Select the PV production entity.** It caps the surplus at what is actually
+  produced, so a meter that does not see the charger cannot feed the accounting
+  back on itself.
+
+Modes, in **PV surplus mode** and on the panel's **PV mode** entity: `PV surplus
+only` charges strictly from what would be exported, `PV + grid` adds grid power
+up to **Maximum grid import (W)**, and `Reach target` puts a pending energy target
+first and takes the rest from the grid. `Off` disables the mode. **House reserve
+(W)** keeps power for other loads; below **Use battery above state of charge (%)**
+a charging home battery has priority over the car.
+
+Readings are averaged, starts are delayed, and a stop delay plus a minimum run
+time carry a session through house-load spikes. The current ramps in whole
+amperes, rounded down. Missing or stale measurements stop the mode instead of
+guessing. A manual override always wins; an enabled weekly plan is a permission
+window whose current limit caps the request. Session and daily solar energy are a
+share of **Charging energy**, so they record no statistics and are not offered to
+HA Energy.
+
 ## Troubleshooting and security
 
 - **PRIME missing in Cloud:** use LAN; do not expect full PRIME telemetry from cloud.

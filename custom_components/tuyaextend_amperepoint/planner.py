@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
@@ -563,9 +564,14 @@ class AmperePointPlanner:
         if not decision.charging:
             return {"charging": False, "state": decision.state}
 
-        current_a = float(decision.current_a or self.coordinator.model_limits.min_current_a)
+        min_current = float(self.coordinator.model_limits.min_current_a)
+        current_a = float(decision.current_a or min_current)
         if active:
             current_a = min(current_a, float(active["current_a"]))
+        # The engine ramps in fractions; chargers take whole amperes (the cloud
+        # rounds, LAN refuses). Round down so the request never exceeds the
+        # surplus and a rounded readback is not taken for a change still pending.
+        current_a = max(min_current, float(math.floor(current_a)))
         return {
             "charging": True,
             "current_a": current_a,

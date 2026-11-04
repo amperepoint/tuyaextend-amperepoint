@@ -38,10 +38,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: AmperePointCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[SelectEntity] = [
-        AmperePointModelSelect(coordinator),
-        AmperePointPvModeSelect(coordinator),
-    ]
+    entities: list[SelectEntity] = [AmperePointModelSelect(coordinator)]
+    if getattr(coordinator, "supports_surplus", True):
+        entities.append(AmperePointPvModeSelect(coordinator))
     mode_source = entry.options.get(CONF_SOURCE_WORK_MODE) or entry.data.get(
         CONF_SOURCE_WORK_MODE
     )

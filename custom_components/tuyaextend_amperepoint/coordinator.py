@@ -924,6 +924,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not values:
             return None
         return values, metadata
+
     def _entity_updated_at(self, *keys: str) -> datetime | None:
         """Return the oldest update time of the configured measurement entities."""
         oldest: datetime | None = None
@@ -932,7 +933,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if not entity_id:
                 continue
             state = self.hass.states.get(entity_id)
-            updated = getattr(state, "last_updated", None) if state else None
+            # last_reported (HA >= 2024.4) also moves when a sensor repeats its
+            # value, so a steady reading - a clipped inverter, zero export -
+            # is not mistaken for a stale one.
+            updated = (getattr(state, "last_reported", None)
+                       or getattr(state, "last_updated", None)) if state else None
             if isinstance(updated, datetime) and (oldest is None or updated < oldest):
                 oldest = updated
         return oldest
@@ -976,10 +981,21 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ),
         )
 
+    @property
+    def supports_surplus(self) -> bool:
+        """Whether PV surplus can be configured for this entry.
+
+        AmperePoint Local (LAN) entries have no options step for the PV
+        sources, and their current range comes from the device rather than
+        the model, so the surplus stays off for them.
+        """
+        return not isinstance(getattr(self, "native_source", None), NativeLocalSource)
+
     def surplus_settings(self) -> Any:
         limits = self.model_limits
+        mode = str(self._config(CONF_PV_MODE, MODE_OFF) or MODE_OFF)
         return SurplusSettings(
-            mode=str(self._config(CONF_PV_MODE, MODE_OFF) or MODE_OFF),
+            mode=mode if self.supports_surplus else MODE_OFF,
             phases=limits.phases,
             min_current_a=float(limits.min_current_a),
             max_current_a=float(limits.max_current_a),
