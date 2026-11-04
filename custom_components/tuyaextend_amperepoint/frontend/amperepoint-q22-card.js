@@ -1,4 +1,4 @@
-const AP_Q22_DASHBOARD_VERSION = "0.5.44";
+const AP_Q22_DASHBOARD_VERSION = "0.6.1";
 const AP_Q22_INTEGRATION_DOMAIN = "tuyaextend_amperepoint";
 const AP_Q22_HACS_PATH = "/hacs/repository?owner=amperepoint&repository=tuyaextend-amperepoint&category=integration";
 
@@ -91,6 +91,18 @@ const AP_Q22_I18N = {
     plannerStartAction: "Start charging",
     plannerStopAction: "Stop charging",
     deviceSelect: "Charger",
+    pvTitle: "Solar charging",
+    pvSubtitle: "Photovoltaic surplus",
+    pvMode: "Mode",
+    pvShare: "Solar share of this session",
+    pvProduction: "PV production",
+    pvSurplusLabel: "Available surplus",
+    pvDisabled: "Off",
+    pvNoData: "No energy data",
+    pvWaiting: "Waiting for surplus",
+    pvCharging: "Charging from PV",
+    pvChargingMixed: "PV + grid",
+    pvTargetNeedsGrid: "Target needs grid",
     deviceSwitchBlocked: "Save or discard planner changes before switching charger",
     plannerCommand: "Tuya command",
     plannerManual: "Manual override",
@@ -247,6 +259,18 @@ const AP_Q22_I18N = {
     plannerStartAction: "Rozpocznij ładowanie",
     plannerStopAction: "Zatrzymaj ładowanie",
     deviceSelect: "Ładowarka",
+    pvTitle: "Ładowanie ze słońca",
+    pvSubtitle: "Nadwyżka fotowoltaiki",
+    pvMode: "Tryb",
+    pvShare: "Udział słońca w tej sesji",
+    pvProduction: "Produkcja PV",
+    pvSurplusLabel: "Dostępna nadwyżka",
+    pvDisabled: "Wyłączone",
+    pvNoData: "Brak danych energetycznych",
+    pvWaiting: "Czekam na nadwyżkę",
+    pvCharging: "Ładowanie z PV",
+    pvChargingMixed: "PV + sieć",
+    pvTargetNeedsGrid: "Cel wymaga sieci",
     deviceSwitchBlocked: "Zapisz lub odrzuć zmiany planera przed zmianą ładowarki",
     plannerCommand: "Komenda Tuya",
     plannerManual: "Sterowanie ręczne",
@@ -890,6 +914,11 @@ class AmperePointQ22Card extends HTMLElement {
       power: "power",
       session_energy: "sessionEnergy",
       session_duration: "sessionDuration",
+      pv_mode: "pvMode",
+      pv_surplus: "pvSurplus",
+      session_pv_energy: "sessionPvEnergy",
+      session_pv_share: "sessionPvShare",
+      daily_pv_energy: "dailyPvEnergy",
       total_energy: "totalEnergy",
       last_session_energy: "lastSessionDp25",
       temperature: "temperature",
@@ -1008,6 +1037,12 @@ class AmperePointQ22Card extends HTMLElement {
       power: { domains: ["sensor"], any: [" power", "_power", "total power", "total_power", "moc chwilowa", "moc teraz"], not: ["power_l1", "power_l2", "power_l3", "moc_l1", "moc_l2", "moc_l3", "phase", "faza"] },
       sessionEnergy: { domains: ["sensor"], any: ["session energy", "session_energy", "energia biezacej sesji", "energia_biezacej_sesji"], not: ["last", "ostatniej", "charge_energy_once"] },
       sessionDuration: { domains: ["sensor"], any: ["session duration", "session_duration", "czas sesji", "czas biezacej sesji", "czas_biezacej_sesji"], not: [] },
+      pvMode: { domains: ["select"], any: ["pv mode", "pv_mode", "tryb pv"], not: [] },
+      pvSurplus: { domains: ["sensor"], any: ["pv surplus", "pv_surplus", "nadwyzka pv"], not: [] },
+      sessionPvEnergy: { domains: ["sensor"], any: ["session solar energy", "energia sloneczna sesji"], not: [] },
+      sessionPvShare: { domains: ["sensor"], any: ["session solar share", "udzial sloneczny sesji"], not: [] },
+      dailyPvEnergy: { domains: ["sensor"], any: ["daily solar energy", "dzienna energia sloneczna"], not: [] },
+      pvProduction: { domains: ["sensor"], any: ["pv production", "produkcja pv", "solar power"], not: [] },
       totalEnergy: { domains: ["sensor"], any: ["total energy", "total_energy", "forward energy total", "forward_energy_total", "energia calkowita"], not: [] },
       dailyEnergy: { domains: ["sensor"], any: ["daily energy", "daily_energy", "daily total energy", "daily_total_energy", "energia dzienna"], not: [] },
       lastSessionDelta: { domains: ["sensor"], any: ["last session delta", "ostatniej sesji delta", "energia_ostatniej_sesji_delta"], not: [] },
@@ -1602,6 +1637,12 @@ class AmperePointQ22Card extends HTMLElement {
       source_unavailable: "plannerSourceUnavailable",
       pending: "plannerPending",
       failed: "plannerFailed",
+      // The planner reports the PV decision while the surplus owns charging.
+      waiting_for_surplus: "pvWaiting",
+      charging_from_pv: "pvCharging",
+      charging_pv_grid: "pvChargingMixed",
+      target_needs_grid: "pvTargetNeedsGrid",
+      surplus_no_data: "pvNoData",
     }[value];
     return this.t(key || "plannerIdle");
   }
@@ -1921,6 +1962,82 @@ class AmperePointQ22Card extends HTMLElement {
             <td><code>${this.escape(source)}</code></td></tr>`;
         }).join("")}</tbody></table></div></div>`;
     }).join("")}</section>`;
+  }
+
+  pvStateLabel(state) {
+    return this.t(
+      {
+        disabled: "pvDisabled",
+        no_data: "pvNoData",
+        waiting_for_surplus: "pvWaiting",
+        charging_from_pv: "pvCharging",
+        charging_pv_grid: "pvChargingMixed",
+        target_needs_grid: "pvTargetNeedsGrid",
+      }[state] || "pvDisabled"
+    );
+  }
+
+  pvFlow(labelKey, value, unit, icon) {
+    if (value === null || value === undefined || value === "") return "";
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "";
+    return `
+      <div class="pv-flow">
+        <div class="pv-flow-icon">${this.icon(icon)}</div>
+        <div>
+          <small>${this.t(labelKey)}</small>
+          <b>${Math.round(numeric)}<span> ${unit}</span></b>
+        </div>
+      </div>
+    `;
+  }
+
+  pvCard() {
+    const e = this.config.entities;
+    const modeEntity = this.stateObj(e.pvMode);
+    const surplus = this.stateObj(e.pvSurplus);
+    if (!modeEntity && !surplus) return "";
+
+    const attributes = this.stateObj(e.planner)?.attributes || {};
+    const state = attributes.surplus_state || this.attr(e.pvSurplus, "surplus_state");
+    const grid = this.num(e.pvSurplus, null);
+    const share = this.hasEntity(e.sessionPvShare) ? this.num(e.sessionPvShare) : null;
+    const flows = [
+      // Without a card-level production entity, use the source the integration reads.
+      this.pvFlow("pvProduction", this.state(e.pvProduction, null) ?? this.attr(e.pvSurplus, "pv_power_w"), "W", "mdi:solar-power"),
+      this.pvFlow("pvSurplusLabel", grid, "W", "mdi:transmission-tower-export"),
+    ]
+      .filter(Boolean)
+      .join("");
+
+    const modeOptions = modeEntity?.attributes?.options || [];
+    return `
+      <section class="pv-card">
+        <div class="panel-head">
+          <div>
+            <span>${this.t("pvSubtitle")}</span>
+            <strong>${this.t("pvTitle")}</strong>
+          </div>
+          <em class="pv-state ${this.escape(state || "")}">${this.pvStateLabel(state)}</em>
+        </div>
+        ${flows ? `<div class="pv-flows">${flows}</div>` : ""}
+        ${
+          modeOptions.length
+            ? `<label class="pv-mode"><span>${this.t("pvMode")}</span><select class="pv-mode-select" data-render-key="pv-mode-select">${modeOptions
+                .map(
+                  (option) =>
+                    `<option value="${this.escape(option)}" ${option === modeEntity.state ? "selected" : ""}>${this.escape(option)}</option>`
+                )
+                .join("")}</select></label>`
+            : ""
+        }
+        ${
+          share !== null
+            ? `<div class="pv-share"><span>${this.t("pvShare")}</span><b>${share}%</b></div>`
+            : ""
+        }
+      </section>
+    `;
   }
 
   rawRows() {
@@ -2461,7 +2578,8 @@ class AmperePointQ22Card extends HTMLElement {
       : "";
 
     const contentPanels = [phasePanel, statusPanel].filter(Boolean);
-    const hasAnyData = powerCard || controlCard || plannerCard || metrics || contentPanels.length || hasRaw;
+    const pvCard = this.pvCard();
+    const hasAnyData = powerCard || controlCard || plannerCard || pvCard || metrics || contentPanels.length || hasRaw;
     const versionInfo = this.dashboardVersionInfo();
     const settingsPath = this.integrationSettingsPath();
     const localOnline = nativeLocal && localAttrs.source_online && !["unavailable", "unknown"].includes(this.state(e.rawDp));
@@ -2510,6 +2628,7 @@ class AmperePointQ22Card extends HTMLElement {
                   ${controlCard}
                   ${metrics ? `<div class="metrics-grid">${metrics}</div>` : ""}
                 </section>
+                ${pvCard}
                 ${plannerCard}
                 ${contentPanels.length ? `<section class="content-grid ${contentPanels.length === 1 ? "single" : ""}">${contentPanels.join("")}</section>` : ""}
                 ${this.localDataTables()}
@@ -2565,6 +2684,12 @@ class AmperePointQ22Card extends HTMLElement {
     this.querySelector(".device-select")?.addEventListener("change", (event) =>
       this.selectDevice(event.target.value)
     );
+    this.querySelector(".pv-mode-select")?.addEventListener("change", (event) => {
+      this._hass?.callService("select", "select_option", {
+        entity_id: this.config.entities.pvMode,
+        option: event.target.value,
+      });
+    });
     this.querySelectorAll("[data-navigate]").forEach((link) => {
       link.addEventListener("click", (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
@@ -3005,6 +3130,88 @@ class AmperePointQ22Card extends HTMLElement {
         .planner-card {
           margin-top: 16px;
           padding: 20px;
+        }
+        .pv-card {
+          margin-top: 16px;
+          padding: 20px;
+          background: rgba(23,26,29,.88);
+          border: 1px solid var(--ap-border);
+          border-radius: 16px;
+        }
+        .pv-state {
+          color: var(--ap-orange);
+          font-style: normal;
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+        .pv-state.charging_from_pv, .pv-state.charging_pv_grid {
+          color: var(--ap-green);
+        }
+        .pv-state.no_data {
+          color: var(--ap-red);
+        }
+        .pv-flows {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+          gap: 12px;
+          margin: 14px 0;
+        }
+        .pv-flow {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 14px;
+          border-radius: 14px;
+          background: rgba(255,255,255,.035);
+          border: 1px solid rgba(255,255,255,.055);
+        }
+        .pv-flow-icon {
+          width: 38px;
+          height: 38px;
+          display: grid;
+          place-items: center;
+          flex: 0 0 auto;
+          border-radius: 12px;
+          background: var(--ap-orange-soft);
+        }
+        .pv-flow small, .pv-mode > span, .pv-share span {
+          display: block;
+          color: var(--ap-muted);
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .pv-flow b {
+          font-size: 20px;
+        }
+        .pv-flow b span {
+          font-size: 12px;
+          color: var(--ap-muted);
+        }
+        .pv-mode {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .pv-mode-select {
+          font: inherit;
+          color: var(--ap-text);
+          background: var(--ap-panel-2);
+          border: 1px solid var(--ap-border);
+          border-radius: 10px;
+          padding: 8px 10px;
+          cursor: pointer;
+        }
+        .pv-share {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-top: 12px;
+        }
+        .pv-share b {
+          font-size: 20px;
         }
         .planner-head, .planner-actions, .planner-savebar {
           display: flex;

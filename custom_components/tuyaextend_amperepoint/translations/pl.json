@@ -66,7 +66,20 @@
           "source_power_l3": "Encja mocy L3",
           "source_phase_a": "Encja raw fazy A",
           "source_phase_b": "Encja raw fazy B",
-          "source_phase_c": "Encja raw fazy C"
+          "source_phase_c": "Encja raw fazy C",
+          "pv_mode": "Tryb nadwyżki PV",
+          "pv_reserve_w": "Rezerwa dla domu (W)",
+          "pv_max_import_w": "Maksymalny import z sieci (W)",
+          "pv_battery_min_soc": "Użyj magazynu powyżej naładowania (%)",
+          "grid_import_positive": "Licznik sieci dodatni przy imporcie",
+          "battery_charge_positive": "Licznik magazynu dodatni przy ładowaniu",
+          "source_pv_power": "Encja produkcji PV",
+          "source_grid_power": "Encja mocy sieci (ze znakiem)",
+          "source_grid_import": "Encja importu z sieci",
+          "source_grid_export": "Encja eksportu do sieci",
+          "source_house_power": "Encja zużycia domu",
+          "source_battery_power": "Encja mocy magazynu",
+          "source_battery_soc": "Encja naładowania magazynu"
         }
       },
       "prime_profile": {
@@ -191,7 +204,20 @@
           "source_power_l3": "Encja mocy L3",
           "source_phase_a": "Encja raw fazy A",
           "source_phase_b": "Encja raw fazy B",
-          "source_phase_c": "Encja raw fazy C"
+          "source_phase_c": "Encja raw fazy C",
+          "pv_mode": "Tryb nadwyżki PV",
+          "pv_reserve_w": "Rezerwa dla domu (W)",
+          "pv_max_import_w": "Maksymalny import z sieci (W)",
+          "pv_battery_min_soc": "Użyj magazynu powyżej naładowania (%)",
+          "grid_import_positive": "Licznik sieci dodatni przy imporcie",
+          "battery_charge_positive": "Licznik magazynu dodatni przy ładowaniu",
+          "source_pv_power": "Encja produkcji PV",
+          "source_grid_power": "Encja mocy sieci (ze znakiem)",
+          "source_grid_import": "Encja importu z sieci",
+          "source_grid_export": "Encja eksportu do sieci",
+          "source_house_power": "Encja zużycia domu",
+          "source_battery_power": "Encja mocy magazynu",
+          "source_battery_soc": "Encja naładowania magazynu"
         }
       },
       "prime_profile": {
@@ -318,6 +344,18 @@
       },
       "planner": {
         "name": "Planer ładowania"
+      },
+      "pv_surplus": {
+        "name": "Nadwyżka PV"
+      },
+      "session_pv_energy": {
+        "name": "Energia słoneczna sesji"
+      },
+      "session_pv_share": {
+        "name": "Udział słoneczny sesji"
+      },
+      "daily_pv_energy": {
+        "name": "Dzienna energia słoneczna"
       }
     },
     "binary_sensor": {
@@ -342,6 +380,9 @@
       },
       "charging_mode": {
         "name": "Tryb ładowania"
+      },
+      "pv_mode": {
+        "name": "Tryb PV"
       }
     },
     "switch": {

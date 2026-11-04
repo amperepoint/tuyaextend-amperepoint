@@ -66,7 +66,20 @@
           "source_power_l3": "Power L3 entity",
           "source_phase_a": "Raw phase A entity",
           "source_phase_b": "Raw phase B entity",
-          "source_phase_c": "Raw phase C entity"
+          "source_phase_c": "Raw phase C entity",
+          "pv_mode": "PV surplus mode",
+          "pv_reserve_w": "House reserve (W)",
+          "pv_max_import_w": "Maximum grid import (W)",
+          "pv_battery_min_soc": "Use battery above state of charge (%)",
+          "grid_import_positive": "Grid sensor is positive while importing",
+          "battery_charge_positive": "Battery sensor is positive while charging",
+          "source_pv_power": "PV production entity",
+          "source_grid_power": "Grid power entity (signed)",
+          "source_grid_import": "Grid import entity",
+          "source_grid_export": "Grid export entity",
+          "source_house_power": "House consumption entity",
+          "source_battery_power": "Battery power entity",
+          "source_battery_soc": "Battery state of charge entity"
         }
       },
       "prime_profile": {
@@ -191,7 +204,20 @@
           "source_power_l3": "Power L3 entity",
           "source_phase_a": "Raw phase A entity",
           "source_phase_b": "Raw phase B entity",
-          "source_phase_c": "Raw phase C entity"
+          "source_phase_c": "Raw phase C entity",
+          "pv_mode": "PV surplus mode",
+          "pv_reserve_w": "House reserve (W)",
+          "pv_max_import_w": "Maximum grid import (W)",
+          "pv_battery_min_soc": "Use battery above state of charge (%)",
+          "grid_import_positive": "Grid sensor is positive while importing",
+          "battery_charge_positive": "Battery sensor is positive while charging",
+          "source_pv_power": "PV production entity",
+          "source_grid_power": "Grid power entity (signed)",
+          "source_grid_import": "Grid import entity",
+          "source_grid_export": "Grid export entity",
+          "source_house_power": "House consumption entity",
+          "source_battery_power": "Battery power entity",
+          "source_battery_soc": "Battery state of charge entity"
         }
       },
       "prime_profile": {
@@ -318,6 +344,18 @@
       },
       "planner": {
         "name": "Charging planner"
+      },
+      "pv_surplus": {
+        "name": "PV surplus"
+      },
+      "session_pv_energy": {
+        "name": "Session solar energy"
+      },
+      "session_pv_share": {
+        "name": "Session solar share"
+      },
+      "daily_pv_energy": {
+        "name": "Daily solar energy"
       }
     },
     "binary_sensor": {
@@ -342,6 +380,9 @@
       },
       "charging_mode": {
         "name": "Charging mode"
+      },
+      "pv_mode": {
+        "name": "PV mode"
       }
     },
     "switch": {

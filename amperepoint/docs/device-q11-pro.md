@@ -42,7 +42,7 @@ config for this charger: it declares the same eight datapoints, so it also
 scores a 100% match, but it names and scales them differently and produces
 entities that do not correspond to this device. The shipped profile must be
 picked explicitly in the device-type step; it appears as
-`Ampere Point Q11 PRO (amperepoint_q11_pro_evcharger)`.
+`Ampere Point Q Series (local) (amperepoint_q11_pro_evcharger)`.
 
 Replaying tuya-local's matcher over the capture above scores the profile at
 `matches=True, quality=100%`.

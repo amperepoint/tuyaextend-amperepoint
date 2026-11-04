@@ -20,10 +20,23 @@ from .const import (
     CONF_SOURCE_CURRENT_L2,
     CONF_SOURCE_CURRENT_L3,
     CONF_SOURCE_CURRENT_LIMIT,
+    CONF_BATTERY_CHARGE_POSITIVE,
+    CONF_GRID_IMPORT_POSITIVE,
+    CONF_PV_BATTERY_MIN_SOC,
+    CONF_PV_MAX_IMPORT_W,
+    CONF_PV_MODE,
+    CONF_PV_RESERVE_W,
+    CONF_SOURCE_BATTERY_POWER,
+    CONF_SOURCE_BATTERY_SOC,
     CONF_SOURCE_DEVICE_ID,
     CONF_SOURCE_ERROR,
+    CONF_SOURCE_GRID_EXPORT,
+    CONF_SOURCE_GRID_IMPORT,
+    CONF_SOURCE_GRID_POWER,
+    CONF_SOURCE_HOUSE_POWER,
     CONF_SOURCE_LAST_SESSION_ENERGY,
     CONF_SOURCE_NAME,
+    CONF_SOURCE_PV_POWER,
     CONF_SOURCE_PHASE_A,
     CONF_SOURCE_PHASE_B,
     CONF_SOURCE_PHASE_C,
@@ -43,9 +56,14 @@ from .const import (
     CONF_SOURCE_WORK_MODE,
     CONF_TARIFF_ENTITY,
     CONF_TARIFF_VALUE,
+    DEFAULT_BATTERY_CHARGE_POSITIVE,
     DEFAULT_COMPLETE_IDLE_MINUTES,
     DEFAULT_COMPLETE_POWER_THRESHOLD_KW,
     DEFAULT_CURRENCY,
+    DEFAULT_GRID_IMPORT_POSITIVE,
+    DEFAULT_PV_BATTERY_MIN_SOC,
+    DEFAULT_PV_MAX_IMPORT_W,
+    DEFAULT_PV_RESERVE_W,
     DEFAULT_TARIFF_VALUE,
     DOMAIN,
     NAME,
@@ -58,6 +76,7 @@ from .models import DEFAULT_MODEL, MODELS
 from .profile_installer import PrimeProfileFlowMixin
 from .local_flow import NativeLocalFlowMixin, NativeLocalOptionsMixin
 from .local_source import LOCAL_SOURCE
+from .surplus import MODE_OFF, SURPLUS_MODES
 
 
 def _model_options() -> dict[str, str]:
@@ -107,6 +126,42 @@ def _settings_fields(current: Mapping[str, Any] | None = None) -> dict[Any, Any]
     }
 
 
+def _surplus_fields(current: Mapping[str, Any] | None = None) -> dict[Any, Any]:
+    """Photovoltaic surplus settings; the source entities follow below."""
+    current = current or {}
+    return {
+        vol.Required(
+            CONF_PV_MODE, default=current.get(CONF_PV_MODE, MODE_OFF)
+        ): vol.In(SURPLUS_MODES),
+        vol.Required(
+            CONF_PV_RESERVE_W,
+            default=current.get(CONF_PV_RESERVE_W, DEFAULT_PV_RESERVE_W),
+        ): cv.positive_int,
+        vol.Required(
+            CONF_PV_MAX_IMPORT_W,
+            default=current.get(CONF_PV_MAX_IMPORT_W, DEFAULT_PV_MAX_IMPORT_W),
+        ): cv.positive_int,
+        vol.Required(
+            CONF_PV_BATTERY_MIN_SOC,
+            default=current.get(
+                CONF_PV_BATTERY_MIN_SOC, DEFAULT_PV_BATTERY_MIN_SOC
+            ),
+        ): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+        vol.Required(
+            CONF_GRID_IMPORT_POSITIVE,
+            default=current.get(
+                CONF_GRID_IMPORT_POSITIVE, DEFAULT_GRID_IMPORT_POSITIVE
+            ),
+        ): cv.boolean,
+        vol.Required(
+            CONF_BATTERY_CHARGE_POSITIVE,
+            default=current.get(
+                CONF_BATTERY_CHARGE_POSITIVE, DEFAULT_BATTERY_CHARGE_POSITIVE
+            ),
+        ): cv.boolean,
+    }
+
+
 def _settings_schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
     return vol.Schema(_settings_fields(current))
 
@@ -123,6 +178,7 @@ def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
             default=current.get(CONF_SESSION_ENERGY_MODE, SESSION_ENERGY_MODE_AUTO),
         ): vol.In(SESSION_ENERGY_MODES),
         **_settings_fields(current),
+        **_surplus_fields(current),
     }
 
     optional_entities = (
@@ -152,6 +208,14 @@ def _schema(current: Mapping[str, Any] | None = None) -> vol.Schema:
         (CONF_SOURCE_PHASE_A, ["sensor"]),
         (CONF_SOURCE_PHASE_B, ["sensor"]),
         (CONF_SOURCE_PHASE_C, ["sensor"]),
+        # Photovoltaic surplus sources.
+        (CONF_SOURCE_PV_POWER, ["sensor"]),
+        (CONF_SOURCE_GRID_POWER, ["sensor"]),
+        (CONF_SOURCE_GRID_IMPORT, ["sensor"]),
+        (CONF_SOURCE_GRID_EXPORT, ["sensor"]),
+        (CONF_SOURCE_HOUSE_POWER, ["sensor"]),
+        (CONF_SOURCE_BATTERY_POWER, ["sensor"]),
+        (CONF_SOURCE_BATTERY_SOC, ["sensor"]),
     )
 
     for key, domains in optional_entities:

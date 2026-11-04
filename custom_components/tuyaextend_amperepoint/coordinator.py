@@ -56,8 +56,26 @@ from .const import (
     CONF_SOURCE_VOLTAGE_L2,
     CONF_SOURCE_VOLTAGE_L3,
     CONF_SOURCE_WORK_MODE,
+    CONF_BATTERY_CHARGE_POSITIVE,
+    CONF_GRID_IMPORT_POSITIVE,
+    CONF_PV_BATTERY_MIN_SOC,
+    CONF_PV_MAX_IMPORT_W,
+    CONF_PV_MODE,
+    CONF_PV_RESERVE_W,
+    CONF_SOURCE_BATTERY_POWER,
+    CONF_SOURCE_BATTERY_SOC,
+    CONF_SOURCE_GRID_EXPORT,
+    CONF_SOURCE_GRID_IMPORT,
+    CONF_SOURCE_GRID_POWER,
+    CONF_SOURCE_HOUSE_POWER,
+    CONF_SOURCE_PV_POWER,
     CONF_TARIFF_ENTITY,
     CONF_TARIFF_VALUE,
+    DEFAULT_BATTERY_CHARGE_POSITIVE,
+    DEFAULT_GRID_IMPORT_POSITIVE,
+    DEFAULT_PV_BATTERY_MIN_SOC,
+    DEFAULT_PV_MAX_IMPORT_W,
+    DEFAULT_PV_RESERVE_W,
     DEFAULT_COMPLETE_IDLE_MINUTES,
     DEFAULT_COMPLETE_POWER_THRESHOLD_KW,
     DEFAULT_CURRENCY,
@@ -84,6 +102,14 @@ from .prime_diagnostics import readable_rows
 from .energy import ChargingEnergy, EnergySample, PowerSample
 from .power_observer import PowerReportObserver
 from .energy_store import EnergyStore, EnergySaveError
+from .surplus import (
+    MODE_OFF,
+    STATE_CHARGING_PV,
+    STATE_CHARGING_MIXED,
+    SurplusEngine,
+    SurplusMeasurements,
+    SurplusSettings,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -178,6 +204,11 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # raw view keeps them when the charger stops sending them.
         self._seen_datapoints: dict[str, tuple[Any, dict[str, Any]]] = {}
         self._charging_energy = ChargingEnergy()
+        self.surplus_engine = SurplusEngine()
+        self.surplus_decision: Any = None
+        self._session_pv_energy_kwh = 0.0
+        self._daily_pv_energy_kwh = 0.0
+        self._daily_pv_day: str | None = None
 
     @callback
     def _handle_native_update(self, *_: Any) -> None:
@@ -205,6 +236,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._was_charging = bool(data.get("was_charging", False))
         self._was_connected = bool(data.get("was_connected", False))
         self._charging_energy = ChargingEnergy(data.get("charging_energy"))
+        self._session_pv_energy_kwh = _as_float(data.get("session_pv_energy_kwh")) or 0.0
+        self._daily_pv_energy_kwh = _as_float(data.get("daily_pv_energy_kwh")) or 0.0
+        self._daily_pv_day = data.get("daily_pv_day")
 
     async def _async_update_data(self) -> dict[str, Any]:
         async with self._refresh_lock:
@@ -378,6 +412,18 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             power=self._energy_power_sample(prime_telemetry, now.timestamp()),
         )
 
+        target_energy_kwh = _first_not_none(
+            self._numeric_entity(CONF_SOURCE_TARGET_ENERGY, "energy_kwh"),
+            self._native_numeric("energy_charge"),
+        )
+        # "Reach target" only overrides the surplus while the goal is pending.
+        target_active = bool(
+            target_energy_kwh and session_energy_kwh < float(target_energy_kwh)
+        )
+        surplus_data = self._surplus_data(
+            now, source_power_kw, connected, target_active
+        )
+
         self._last_update = now
         self._was_charging = is_charging
         self._was_connected = connected
@@ -468,10 +514,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "power_l3": phase_powers[2],
             "work_mode": self._state_value(CONF_SOURCE_WORK_MODE)
             or self._native_value("work_mode"),
-            "target_energy_kwh": _first_not_none(
-                self._numeric_entity(CONF_SOURCE_TARGET_ENERGY, "energy_kwh"),
-                self._native_numeric("energy_charge"),
-            ),
+            "target_energy_kwh": target_energy_kwh,
             "schedule_start_time": schedule_window[0] if schedule_window else None,
             "schedule_end_time": schedule_window[1] if schedule_window else None,
             "system_version": self._native_value("system_version"),
@@ -497,6 +540,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "source_online": (
                 self.native_source.available if self.native_source else True
             ),
+            **surplus_data,
         }
 
     def _energy_power_sample(self, prime_telemetry: dict | None, now: float) -> PowerSample | None:
@@ -619,6 +663,81 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if state and state.attributes.get("product_id"):
                 return str(state.attributes["product_id"])
         return None
+
+    def _surplus_data(
+        self,
+        now: datetime,
+        power_kw: float | None,
+        connected: bool,
+        target_active: bool,
+    ) -> dict[str, Any]:
+        """Evaluate the PV surplus engine and track how much sun was used."""
+        self.surplus_engine.settings = self.surplus_settings()
+        measurements = self.surplus_measurements(power_kw)
+        decision = self.surplus_engine.evaluate(
+            now, measurements, target_active=target_active
+        )
+        self.surplus_decision = decision
+
+        self._track_pv_energy(now, decision, measurements, power_kw, connected)
+        session_energy = self._session_energy_kwh
+        share = (
+            round(100 * self._session_pv_energy_kwh / session_energy, 1)
+            if session_energy > 0.01
+            else None
+        )
+        return {
+            "pv_power_w": measurements.pv_w,
+            "grid_power_w": measurements.grid_w,
+            "house_power_w": measurements.house_w,
+            "battery_power_w": measurements.battery_w,
+            "battery_soc": measurements.battery_soc,
+            "surplus_mode": self.surplus_engine.settings.mode,
+            "surplus_state": decision.state,
+            "surplus_available_w": round(decision.available_w),
+            "surplus_current_a": decision.current_a,
+            "surplus_charging": decision.charging,
+            "surplus_reason": decision.reason,
+            "session_pv_energy_kwh": round(self._session_pv_energy_kwh, 3),
+            "session_pv_share_pct": share,
+            "daily_pv_energy_kwh": round(self._daily_pv_energy_kwh, 3),
+        }
+
+    def _track_pv_energy(
+        self,
+        now: datetime,
+        decision: Any,
+        measurements: Any,
+        power_kw: float | None,
+        connected: bool,
+    ) -> None:
+        day = now.date().isoformat()
+        if self._daily_pv_day != day:
+            self._daily_pv_day = day
+            self._daily_pv_energy_kwh = 0.0
+        if connected and not self._was_connected:
+            self._session_pv_energy_kwh = 0.0
+
+        if (
+            self._last_update is None
+            or not power_kw
+            or decision.state not in {STATE_CHARGING_PV, STATE_CHARGING_MIXED}
+        ):
+            return
+        elapsed = now - self._last_update
+        if not timedelta(0) <= elapsed <= timedelta(minutes=10):
+            return
+
+        # Only the share actually covered by surplus counts as solar, measured
+        # from the live reading rather than the smoothed control value: the
+        # averaging exists to steady the current, not to bill energy.
+        available_w = self.surplus_engine.available_surplus_w(measurements)
+        if available_w is None:
+            return
+        solar_kw = min(power_kw, max(0.0, available_w) / 1000)
+        added = solar_kw * (elapsed.total_seconds() / 3600)
+        self._session_pv_energy_kwh += added
+        self._daily_pv_energy_kwh += added
 
     def _state_value(self, key: str) -> Any:
         entity_id = self._config(key)
@@ -806,6 +925,90 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return None
         return values, metadata
 
+    def _entity_updated_at(self, *keys: str) -> datetime | None:
+        """Return the oldest update time of the configured measurement entities."""
+        oldest: datetime | None = None
+        for key in keys:
+            entity_id = self._config(key)
+            if not entity_id:
+                continue
+            state = self.hass.states.get(entity_id)
+            # last_reported (HA >= 2024.4) also moves when a sensor repeats its
+            # value, so a steady reading - a clipped inverter, zero export -
+            # is not mistaken for a stale one.
+            updated = (getattr(state, "last_reported", None)
+                       or getattr(state, "last_updated", None)) if state else None
+            if isinstance(updated, datetime) and (oldest is None or updated < oldest):
+                oldest = updated
+        return oldest
+
+    def surplus_measurements(self, charger_power_kw: float | None) -> Any:
+        """Normalize the configured energy entities into watts, import-positive."""
+        pv_w = self._numeric_entity(CONF_SOURCE_PV_POWER, "power_w")
+        house_w = self._numeric_entity(CONF_SOURCE_HOUSE_POWER, "power_w")
+
+        grid_w = self._numeric_entity(CONF_SOURCE_GRID_POWER, "power_w")
+        if grid_w is not None and not self._config(
+            CONF_GRID_IMPORT_POSITIVE, DEFAULT_GRID_IMPORT_POSITIVE
+        ):
+            grid_w = -grid_w
+        if grid_w is None:
+            # Separate import and export sensors are the more common shape.
+            imported = self._numeric_entity(CONF_SOURCE_GRID_IMPORT, "power_w")
+            exported = self._numeric_entity(CONF_SOURCE_GRID_EXPORT, "power_w")
+            if imported is not None or exported is not None:
+                grid_w = abs(imported or 0.0) - abs(exported or 0.0)
+
+        battery_w = self._numeric_entity(CONF_SOURCE_BATTERY_POWER, "power_w")
+        if battery_w is not None and not self._config(
+            CONF_BATTERY_CHARGE_POSITIVE, DEFAULT_BATTERY_CHARGE_POSITIVE
+        ):
+            battery_w = -battery_w
+
+        return SurplusMeasurements(
+            pv_w=pv_w,
+            grid_w=grid_w,
+            house_w=house_w,
+            battery_w=battery_w,
+            battery_soc=self._numeric_entity(CONF_SOURCE_BATTERY_SOC, "plain"),
+            charger_w=(charger_power_kw * 1000) if charger_power_kw is not None else None,
+            updated_at=self._entity_updated_at(
+                CONF_SOURCE_PV_POWER,
+                CONF_SOURCE_GRID_POWER,
+                CONF_SOURCE_GRID_IMPORT,
+                CONF_SOURCE_GRID_EXPORT,
+                CONF_SOURCE_HOUSE_POWER,
+            ),
+        )
+
+    @property
+    def supports_surplus(self) -> bool:
+        """Whether PV surplus can be configured for this entry.
+
+        AmperePoint Local (LAN) entries have no options step for the PV
+        sources, and their current range comes from the device rather than
+        the model, so the surplus stays off for them.
+        """
+        return not isinstance(getattr(self, "native_source", None), NativeLocalSource)
+
+    def surplus_settings(self) -> Any:
+        limits = self.model_limits
+        mode = str(self._config(CONF_PV_MODE, MODE_OFF) or MODE_OFF)
+        return SurplusSettings(
+            mode=mode if self.supports_surplus else MODE_OFF,
+            phases=limits.phases,
+            min_current_a=float(limits.min_current_a),
+            max_current_a=float(limits.max_current_a),
+            voltage_v=float(limits.nominal_voltage_v),
+            reserve_w=float(self._config(CONF_PV_RESERVE_W, DEFAULT_PV_RESERVE_W) or 0),
+            max_import_w=float(
+                self._config(CONF_PV_MAX_IMPORT_W, DEFAULT_PV_MAX_IMPORT_W) or 0
+            ),
+            battery_min_soc=float(
+                self._config(CONF_PV_BATTERY_MIN_SOC, DEFAULT_PV_BATTERY_MIN_SOC) or 100
+            ),
+        )
+
     def _mapped_raw_metadata(self) -> dict[str, Any]:
         entity_id = self._config(CONF_SOURCE_RAW_DP)
         state = self.hass.states.get(entity_id) if entity_id else None
@@ -872,6 +1075,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "was_charging": self._was_charging,
             "was_connected": self._was_connected,
             "charging_energy": self._charging_energy.dump(),
+            "session_pv_energy_kwh": self._session_pv_energy_kwh,
+            "daily_pv_energy_kwh": self._daily_pv_energy_kwh,
+            "daily_pv_day": self._daily_pv_day,
         }
 
     def _calculate_session_energy(
@@ -1404,6 +1610,11 @@ def _convert_unit(value: float, unit: str | None, kind: str) -> float:
     if kind == "power_kw":
         if unit in {UnitOfPower.WATT, "W"}:
             return value / 1000
+        return value
+
+    if kind == "power_w":
+        if unit in {UnitOfPower.KILO_WATT, "kW"}:
+            return value * 1000
         return value
 
     if kind == "energy_kwh":

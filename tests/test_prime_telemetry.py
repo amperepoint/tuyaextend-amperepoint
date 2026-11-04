@@ -84,6 +84,12 @@ def _make_coordinator() -> object:
     instance._was_charging = False
     instance._was_connected = False
     instance._complete_candidate_since = None
+    instance.surplus_engine = coordinator.SurplusEngine()
+    instance.surplus_decision = None
+    instance._session_pv_energy_kwh = 0.0
+    instance._daily_pv_energy_kwh = 0.0
+    instance._daily_pv_day = None
+    instance.data = {}
     return instance
 
 

@@ -96,6 +96,54 @@ Stare identyfikatory i odczyty pozostają; nowa encja tworzy osobną historię.
 [Setup, migration and measurement limitations (EN/PL)](amperepoint/docs/home-assistant-energy.md).
 This is the energy foundation for #36, not yet a session-history or tariff release.
 
+## Solar surplus charging
+
+From version `0.6.1` the integration can charge from photovoltaic surplus using
+the energy entities that already exist in Home Assistant, without depending on a
+particular inverter, meter or battery. It is available for chargers added
+through the official Tuya integration or by entity mapping; an **AmperePoint
+Local (LAN)** entry has no PV source settings yet and gets no PV entities.
+
+Point it at your sensors in the integration options: PV production, either a
+signed grid-power sensor or separate import and export sensors, and optionally
+house consumption plus battery power and state of charge. Sign conventions are
+configurable, and W/kW are normalized automatically.
+
+Two things are worth getting right:
+
+- **The grid meter should measure the whole house, charger included.** The
+  charger's own draw counts as available surplus, otherwise raising the current
+  would look like a deficit and the control would oscillate.
+- **Configure the PV production entity.** It bounds the surplus at what is
+  actually being produced, which keeps a meter that does not see the charger
+  from feeding the accounting back on itself.
+
+Modes:
+
+- **PV surplus only** - charge strictly from what would otherwise be exported.
+- **PV + grid** - use the surplus and top it up from the grid, within the
+  configured import allowance.
+- **Reach target** - PV has priority, but a pending energy target wins and the
+  grid covers the rest.
+
+Control is deliberately unhurried: readings are averaged so passing clouds do
+not stop a session, a start delay debounces brief sunny spells, a stop delay
+and a minimum run time carry a session through house-load spikes, and the
+current ramps in steps instead of jumping, in whole amperes rounded down.
+Missing or stale measurements stop the mode rather than guessing.
+
+Session and daily solar energy are a share of **Charging energy**, so they
+record no statistics and are not offered to HA Energy, where the same energy
+would count twice.
+
+A manual override always outranks the surplus. An enabled weekly plan acts as a
+permission window - surplus charging runs only inside its windows and its
+current limit caps the request - so the two never compete for the charger.
+
+The dashboard card gains a solar section showing production, available surplus,
+the decision in plain language and the share of the session actually covered by
+sun, plus a mode picker.
+
 ## Dashboard previews
 
 ### Wallbox PRIME — native LAN controls and planner

@@ -165,16 +165,20 @@ class AmbiguousTextTests(unittest.TestCase):
             "q_series",
         )
 
-    def test_the_shipped_label_is_safe(self) -> None:
+    def test_the_shipped_profile_name_is_safe(self) -> None:
+        # The same string reaches the device model, the device-type list and
+        # the suggested entry name, so it must name no model at all.
         self.assertEqual(
-            models.detect_model_key("Ampere Point Q Series - all models (local)"),
+            models.detect_model_key("Ampere Point Q Series (local)"),
             "q_series",
         )
 
-    def test_the_suggested_entry_name_is_safe(self) -> None:
-        self.assertEqual(
-            models.detect_model_key("Ampere Point EV Charger (local)"), "q_series"
-        )
+    def test_names_written_by_earlier_profile_versions_stay_safe(self) -> None:
+        # Devices and entries created before the rename keep these strings.
+        for name in ("Ampere Point Q Series - all models (local)",
+                     "Ampere Point EV Charger (local)"):
+            with self.subTest(name=name):
+                self.assertEqual(models.detect_model_key(name), "q_series")
 
     def test_a_single_model_still_identifies(self) -> None:
         self.assertEqual(models.detect_model_key("Q22 charger"), "q22")

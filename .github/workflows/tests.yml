@@ -39,7 +39,7 @@ jobs:
           package-manager-cache: false
 
       - name: Run frontend tests
-        run: node --test tests/test_frontend_device_selector.mjs
+        run: node --test tests/test_frontend_device_selector.mjs tests/test_frontend_pv_card.mjs
 
       - name: Check frontend syntax
         run: node --check custom_components/tuyaextend_amperepoint/frontend/amperepoint-q22-card.js
