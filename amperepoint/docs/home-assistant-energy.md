@@ -179,7 +179,24 @@ niezgodne jednostki są odrzucane. Ręczne mapowanie bez jednostki oznacza kWh/k
   not add energy. Small nonzero downward jitter keeps the high-water mark.
 - A counter dropping to zero starts a new baseline without resetting the sum.
   A larger drop to a nonzero reading also rebases, but does not add that ambiguous
-  reading; history is flagged incomplete. A rapid implausible increase is rejected.
+  reading; history is flagged incomplete. A rapid implausible increase is rejected,
+  and it stays rejected: the reading is held until the next one shows which side
+  it is on (a lower reading discards it, a higher one makes it the new baseline
+  and only the growth above it counts). Time passing never turns it into energy.
+- Q Series chargers report their lifetime counter as `0` right after a power-on
+  and send the stored value only with the next charge, sometimes at an older
+  level (a Q11 came back 23.3 kWh lower, without its last session). That return
+  is not consumption: a first step after a zero that is larger than five minutes
+  at the physical power bound, seen between two readings at most 60 seconds
+  apart, is held as above; after a restart or gap, a reading back at the level
+  from before the zero counts only what lies above that level. A counter that
+  really restarts each session (Q37/VE, PRIME) climbs from zero in small steps
+  and still counts. Limits: if HA is stopped exactly while the stored value
+  returns at an older level, that return can still be counted; a source that
+  restarts each session and reports its first value only after more than five
+  minutes of full-power charging loses that first step.
+  `Energia sesji` ignores a power-on zero the same way and starts the session
+  from the first real reading.
 - After restart/outage, a counter increase can recover an observed difference.
   If a session reset occurred unseen and the new reading exceeds the old one,
   a counter alone cannot detect it; multiple sessions during an outage cannot
@@ -205,7 +222,12 @@ niezgodne jednostki są odrzucane. Ręczne mapowanie bez jednostki oznacza kWh/k
 Pierwszy odczyt ustala punkt początkowy: licznik zaczyna od zera, bez importu
 energii sprzed instalacji. Przyrosty są sumowane, duplikaty pomijane, a reset
 źródła nie zeruje sumy. Po spadku do niezerowej wartości nie doliczamy jej
-automatycznie — dane mogą być niepełne. Po przerwie odtwarzamy tylko możliwą
+automatycznie — dane mogą być niepełne. Odrzucony skok nie jest doliczany także
+później, gdy minie dość czasu, żeby wyglądał na możliwy. Ładowarki serii Q po
+włączeniu zasilania podają licznik całkowity 0, a zapisaną wartość dopiero przy
+następnym ładowaniu, czasem niższą. Ten powrót licznika nie jest zużyciem;
+liczymy tylko przyrost ponad wartość, do której licznik wrócił. „Energia sesji”
+nie zaczyna sesji od takiego zera. Po przerwie odtwarzamy tylko możliwą
 do odczytania różnicę licznika. Niewidocznych resetów i sesji nie da się pewnie
 odtworzyć. Odzyskany przyrost HA zapisuje przy kolejnym odczycie, niekoniecznie
 w godzinie rzeczywistego zużycia. Moc jest całkowana wyłącznie pomiędzy

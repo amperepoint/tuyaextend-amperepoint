@@ -195,6 +195,7 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._unloading = False
         self._session_energy_kwh = 0.0
         self._total_energy_baseline_kwh: float | None = None
+        self._total_energy_baseline_pending = False
         self._last_total_energy_kwh: float | None = None
         self._last_update: datetime | None = None
         self._was_charging = False
@@ -231,6 +232,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._session_energy_kwh = _as_float(data.get("session_energy_kwh")) or 0.0
         self._total_energy_baseline_kwh = _as_float(
             data.get("total_energy_baseline_kwh")
+        )
+        self._total_energy_baseline_pending = bool(
+            data.get("total_energy_baseline_pending", False)
         )
         self._last_total_energy_kwh = _as_float(data.get("last_total_energy_kwh"))
         self._was_charging = bool(data.get("was_charging", False))
@@ -1071,6 +1075,9 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {
             "session_energy_kwh": self._session_energy_kwh,
             "total_energy_baseline_kwh": self._total_energy_baseline_kwh,
+            "total_energy_baseline_pending": getattr(
+                self, "_total_energy_baseline_pending", False
+            ),
             "last_total_energy_kwh": self._last_total_energy_kwh,
             "was_charging": self._was_charging,
             "was_connected": self._was_connected,
@@ -1133,12 +1140,24 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         source_total_energy: float,
         connected: bool,
     ) -> float:
+        new_session = connected and not self._was_connected
+        if source_total_energy <= 0:
+            # Q Series chargers report their lifetime counter as 0 right after
+            # a power-on, until the stored value comes back with the next
+            # charge. A zero is no session start: the first real reading is.
+            if new_session or self._total_energy_baseline_kwh is None:
+                self._total_energy_baseline_pending = True
+                if new_session:
+                    self._session_energy_kwh = 0.0
+            return self._session_energy_kwh
         if (
             self._total_energy_baseline_kwh is None
-            or (connected and not self._was_connected)
+            or new_session
+            or getattr(self, "_total_energy_baseline_pending", False)
             or source_total_energy < self._total_energy_baseline_kwh
         ):
             self._total_energy_baseline_kwh = source_total_energy
+            self._total_energy_baseline_pending = False
 
         self._last_total_energy_kwh = source_total_energy
         self._session_energy_kwh = max(
@@ -1153,11 +1172,21 @@ class AmperePointCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None:
         if source_total_energy is None:
             return
+        if source_total_energy <= 0:
+            # A power-on zero is no baseline (see _calculate_total_delta_session).
+            if self._total_energy_baseline_kwh is None or (
+                connected and not self._was_connected
+            ):
+                self._total_energy_baseline_pending = True
+            return
         self._last_total_energy_kwh = source_total_energy
-        if self._total_energy_baseline_kwh is None or (
-            connected and not self._was_connected
+        if (
+            self._total_energy_baseline_kwh is None
+            or (connected and not self._was_connected)
+            or getattr(self, "_total_energy_baseline_pending", False)
         ):
             self._total_energy_baseline_kwh = source_total_energy
+            self._total_energy_baseline_pending = False
 
     def _calculate_power_integrated_session(
         self,
