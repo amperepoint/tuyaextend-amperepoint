@@ -222,7 +222,7 @@
       },
       "local": {
         "title": "AmperePoint Local",
-        "description": "Direct LAN connection — no Tuya Local required. A recognized, verified PRIME variant gets a dashboard with controls and the HA planner. Other compatible variants provide readings only.",
+        "description": "Direct LAN connection — no Tuya Local required. A PRIME with compatible LAN control functions gets a dashboard with controls and the HA planner. Other compatible variants provide readings only.",
         "menu_options": {
           "local_import": "Choose a charger from Tuya in HA",
           "local_manual": "Enter device ID and local key"
@@ -253,7 +253,7 @@
       },
       "local_confirm_read_only": {
         "title": "LAN connected — readings only",
-        "description": "{name} responds at {host}. Readings are supported, but this DP layout or firmware does not yet have verified controls. Confirm to create the telemetry and diagnostics dashboard, without start/stop or the planner. Tuya Local is not required."
+        "description": "{name} responds at {host}. Readings are supported, but compatible LAN control functions were not detected. Confirm to create the telemetry and diagnostics dashboard, without start/stop or the planner. Tuya Local is not required."
       },
       "local_import_error": {
         "title": "Choose your charger",
@@ -360,7 +360,7 @@
       },
       "local_connection": {
         "title": "AmperePoint Local connection",
-        "description": "Change IP, protocol or local key. Blank key keeps the existing key; blank IP runs discovery. The connection is tested before saving. Controls are available for the validated PRIME firmware layout, capped at 16 A and DP152. Home Assistant runs charging modes and the weekly planner over LAN; HA must stay running. Keep immediate charging selected in the device app.",
+        "description": "Change IP, protocol or local key. Blank key keeps the existing key; blank IP runs discovery. The connection is tested before saving. Controls depend on compatible PRIME LAN functions, not the firmware version. Current is capped at 16 A and the charger's installation limit. Home Assistant runs charging modes and the weekly planner over LAN; HA must stay running. Keep immediate charging selected in the device app.",
         "data": {
           "name": "Charger name",
           "local_device_id": "Charger / device ID",
@@ -372,7 +372,7 @@
       },
       "local_connection_error": {
         "title": "AmperePoint Local connection",
-        "description": "Change IP, protocol or local key. Blank key keeps the existing key; blank IP runs discovery. The connection is tested before saving. Controls are available for the validated PRIME firmware layout, capped at 16 A and DP152. Home Assistant runs charging modes and the weekly planner over LAN; HA must stay running. Keep immediate charging selected in the device app.\n\n[Download error report]({diagnostic_url}) — a JSON report for support with the connection result and available diagnostic data, without keys, device ID or IP address. Downloading does not send the report to AmperePoint. The link expires after 15 minutes; retry setup to generate a new report.",
+        "description": "Change IP, protocol or local key. Blank key keeps the existing key; blank IP runs discovery. The connection is tested before saving. Controls depend on compatible PRIME LAN functions, not the firmware version. Current is capped at 16 A and the charger's installation limit. Home Assistant runs charging modes and the weekly planner over LAN; HA must stay running. Keep immediate charging selected in the device app.\n\n[Download error report]({diagnostic_url}) — a JSON report for support with the connection result and available diagnostic data, without keys, device ID or IP address. Downloading does not send the report to AmperePoint. The link expires after 15 minutes; retry setup to generate a new report.",
         "data": {
           "name": "Charger name",
           "local_device_id": "Charger / device ID",

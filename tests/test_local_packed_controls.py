@@ -24,7 +24,7 @@ class PackedControlsTests(unittest.TestCase):
     def test_profile_requires_verified_contract_not_pid_or_name(self):
         self.assertEqual(local.detected_control_profile(DPS, "prime_packed"), local.PACKED_CONTROL_PROFILE)
         self.assertFalse(local.control_supported({}, DPS, "prime_packed"))
-        for changes in ({"106": "{}"}, {"152": 32}, {"152": True}, {"150": 6.0}, {"101": True}):
+        for changes in ({"150": None}, {"152": 32}, {"152": True}, {"150": 6.0}, {"101": True}):
             self.assertIsNone(local.detected_control_profile({**DPS, **changes}, "prime_packed"))
         self.assertIsNone(local.detected_control_profile(DPS, "prime_split"))
 
