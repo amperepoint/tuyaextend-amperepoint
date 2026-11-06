@@ -52,13 +52,17 @@ Local (LAN)**. Import connection details from an already configured official
 Tuya integration, or enter the device ID, local key and protocol manually.
 An empty IP requests LAN discovery; Docker/VLAN networks may require a manual IP.
 
-Profiles are selected by the actual firmware and DP contract, not the charger
-name, rated power or PID alone. The tested split firmware `(V7.0.0)F2.0.0` and
-packed firmware `(V8.0.7)F1.3.6` expose start/stop and integer current control
-up to the smaller of 16 A and the device's installation limit. Other firmware
-remains read-only. For an existing read-only entry, reopen its local connection
-options and enable verified controls; the connection is checked again before
-applying the profile. New verified entries offer controls during onboarding.
+Controls are selected by the PRIME telemetry layout and available control DPs,
+not a firmware allowlist. Firmware updates and additional DPs do not disable an
+unchanged DP140/150 contract. Split uses the reported boolean DP140 and integer
+DP150/152; packed uses DP101/109 to confirm its write-only DP140. Current remains
+capped at the smaller of 16 A and the device's installation limit; the packed
+adapter retains its validated installation-limit range of 6–16 A.
+For an existing read-only entry, reopen its local connection options and enable
+LAN controls; the connection is checked again before applying the profile.
+Explicit read-only settings are preserved. New compatible entries offer controls
+during onboarding, without sending any commands. Existing V11 control entries
+remain compatible with the shared split adapter.
 
 The panel provides charge-now, energy-target and weekly-schedule modes through
 the **Home Assistant planner**, not by programming the charger's native timer.

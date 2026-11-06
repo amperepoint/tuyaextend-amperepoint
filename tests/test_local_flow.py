@@ -52,9 +52,9 @@ class NativeFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["data"]["local_control_profile"], "prime_split_v1")
         self.assertNotIn("local_pause_planner", result["data"])
 
-    async def test_unverified_firmware_stays_read_only_even_if_input_claims_controls(self):
+    async def test_missing_control_dp_stays_read_only_even_if_input_claims_controls(self):
         flow = Flow()
-        snapshot = dict(host=CREDENTIALS["local_host"], dps={**DPS, "106": '{}'}, family="prime_split")
+        snapshot = dict(host=CREDENTIALS["local_host"], dps={**DPS, "150": None}, family="prime_split")
         with patch.object(flow_module, "read_local", return_value=snapshot):
             form = await flow.async_step_local_manual({**CREDENTIALS, "local_control_profile": "prime_split_v1"})
         self.assertEqual(form["step_id"], "local_confirm_read_only")

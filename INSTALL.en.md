@@ -5,7 +5,7 @@
 | Series | Recommended path | Requirements |
 | --- | --- | --- |
 | Q Series | Tuya Cloud + AmperePoint | Official Tuya integration in HA, internet |
-| Wallbox PRIME | Built-in AmperePoint Local (LAN) | Device ID, local key, LAN and compatible firmware |
+| Wallbox PRIME | Built-in AmperePoint Local (LAN) | Device ID, local key, LAN and compatible control functions |
 
 For **Q Series we recommend Tuya Cloud**: our integration currently supports
 a broader DP/feature range through this path than through our local profiles.
@@ -62,23 +62,32 @@ through authorized Tuya account tools. Manual retrieval may require a Tuya
 Developer account, Cloud project and linked app account. Our wizard does not
 create that project or authenticate to Tuya Developer. Re-pairing can change the key.
 
-### PRIME scope in 0.5.38
+### PRIME LAN capabilities
 
-Profiles use the DP contract and firmware, not just name, power rating or PID.
+Controls use the actual DP contract, independently of the firmware version.
+Firmware updates and additional DPs do not block an unchanged control contract.
 
 | Feature | Scope |
 | --- | --- |
 | LAN readings | Power, session energy, temperature, status, firmware and available technical values |
-| Start/stop | Verified split `(V7.0.0)F2.0.0` and packed `(V8.0.7)F1.3.6` profiles |
+| Start/stop | Split with reported boolean DP140; packed with independent DP101/109 confirmation |
 | Current | Integer 1 A steps, maximum 16 A and never above installation limit DP152 |
 | Modes | Charge now, energy target and scheduled charging — executed by HA |
 | Planner | Multiple weekdays/windows, minute precision, per-window current, overrides and next action |
 | Commands | Independent readback; an ACK alone is insufficient |
 | Restart | Saved plan/settings and automatic LAN reconnection |
 
-Packed was verified with a 16 A installation limit; other limits or unknown
-firmware may remain read-only. Split is also capped at 16 A. This is not a
-claim of full-range controls for every PRIME 11/22 kW variant.
+Split requires integer DP150/152 and its split telemetry layout. Packed requires
+its own telemetry layout, integer DP101/150/152 and string DP109; its adapter
+retains the validated DP152 range of 6–16 A. Missing or incompatible control data
+leaves the entry read-only, regardless of firmware version. Split is also capped
+at 16 A. Additional functions are not automatically exposed as writable.
+
+After updating an existing read-only entry, open its local connection options
+and enable **LAN controls and HA planner**. The connection is checked before
+saving; no command is sent during setup. An explicitly disabled control setting
+is preserved. Existing V11 control profiles continue using the shared split
+adapter without recreating the entry.
 
 **The planner runs in HA, not in the charger's memory.** HA must remain running
 and connected for scheduled stops and energy cutoffs. Keep the device in native
@@ -179,7 +188,7 @@ HA Energy.
 
 - **PRIME missing in Cloud:** use LAN; do not expect full PRIME telemetry from cloud.
 - **LAN error:** check IP, key, protocol, routing and competing LAN clients.
-- **Read-only:** inspect firmware and DPS; do not force another device's profile.
+- **Read-only:** check the available control DPs and the LAN controls option; firmware version alone does not block controls. Do not force another device's profile.
 - **Missing phases:** coverage depends on source; missing measurements are not fabricated.
 - **Old card:** hard-refresh the browser.
 - **Unconfirmed command:** check connectivity, device status and competing automations.

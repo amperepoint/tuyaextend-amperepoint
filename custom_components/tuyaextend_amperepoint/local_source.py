@@ -20,6 +20,8 @@ LOCAL_FIELDS = ("local_device_id", "local_key", "local_host", "local_protocol")
 CONTROL_PROFILE = "prime_split_v1"
 PACKED_CONTROL_PROFILE = "prime_packed_v1"
 V11_CONTROL_PROFILE = "prime_split_v11"
+# Keep the stored V11 profile as an alias for existing entries. Both split
+# generations use the same DP140/150 contract, irrespective of firmware text.
 CONTROL_PROFILES = {CONTROL_PROFILE, PACKED_CONTROL_PROFILE, V11_CONTROL_PROFILE}
 PRIVATE_DPS = {"112", "113"}  # Card/authentication data, not telemetry.
 # Firmware V11.22 (app panel 2.0) uses the split layout under its own product ID.
@@ -75,35 +77,30 @@ def validate_snapshot(response: Any, product_id: str | None = None) -> tuple[dic
 
 
 def detected_control_profile(dps: dict, family: str) -> str | None:
-    """Recognize the tested firmware/DP contract, independently of user settings."""
+    """Recognize the PRIME control contract, independently of firmware versions."""
+    if (type(dps.get("150")) is not int
+            or type(dps.get("152")) is not int
+            or not 6 <= dps["152"] <= 80):
+        return None
+    telemetry = as_mapping(dps.get("102"))
     if (family == "prime_split"
-            and is_v11_firmware(dps)
-            and type(dps.get("140")) is bool
-            and type(dps.get("150")) is int
-            and type(dps.get("152")) is int
-            and 6 <= dps["152"] <= 80):
-        return V11_CONTROL_PROFILE
+            and type(dps.get("140")) is bool):
+        return CONTROL_PROFILE
     if (family == "prime_packed"
-            and as_mapping(dps.get("106")).get("fv") == "(V8.0.7)F1.3.6"
+            and isinstance(telemetry.get("L1"), list)
             and type(dps.get("101")) is int
             and isinstance(dps.get("109"), str)
-            and type(dps.get("150")) is int
-            and type(dps.get("152")) is int
-            and 6 <= dps["152"] <= 16):
-        # DP140 is write-only on this firmware. Do not require a reported value.
+            and dps["152"] <= 16):
+        # Packed PRIME may have write-only DP140; confirm it through DP101/109.
         return PACKED_CONTROL_PROFILE
-    verified = (family == "prime_split"
-            and as_mapping(dps.get("106")).get("fv") == "(V7.0.0)F2.0.0"
-            and type(dps.get("140")) is bool
-            and type(dps.get("150")) is int
-            and type(dps.get("152")) is int
-            and 6 <= dps["152"] <= 80)
-    return CONTROL_PROFILE if verified else None
+    return None
 
 
 def control_supported(config: dict, dps: dict, family: str) -> bool:
     """Require both the configured profile and a fresh compatible snapshot."""
     profile = config.get("local_control_profile")
+    if profile == V11_CONTROL_PROFILE:
+        profile = CONTROL_PROFILE
     return (profile in CONTROL_PROFILES
             and detected_control_profile(dps, family) == profile)
 
@@ -164,21 +161,23 @@ def write_local(config: dict, code: str, value: Any) -> dict:
         after = read_local({**config, "local_host": before["host"]})
         if not control_supported(config, after["dps"], after["family"]):
             raise LocalConnectionError("local_control_not_verified")
-        if dp == 140 and config.get("local_control_profile") == PACKED_CONTROL_PROFILE:
+        if dp == 140 and after["family"] == "prime_packed":
             if charging_enabled(after["dps"], after["family"]) is expected:
                 return after
             continue
-        if dp == 140 and config.get("local_control_profile") == V11_CONTROL_PROFILE:
-            # V11.22 reports DP140 itself; DP101 reads 370 while power flows.
-            if after["dps"].get("140") is expected and (
-                    not expected or after["dps"].get("101") not in (201, 204)):
+        if dp == 140:
+            # DP140 is charging permission. Active state codes may gain new
+            # values (370 is observed while charging); firmware is not a gate.
+            state = after["dps"].get("101")
+            status = str(after["dps"].get("109", "")).upper()
+            if (after["dps"].get("140") is expected and type(state) is int
+                    and ((expected and state not in (201, 204)
+                          and status not in ("PAUSE", "FAULT"))
+                         or (not expected and state in (201, 204)))):
                 return after
             continue
         if after["dps"].get(str(dp)) == expected:
-            if dp != 140 or after["dps"].get("101") in (
-                (200, 300) if expected else (201, 204)
-            ):
-                return after
+            return after
     raise LocalConnectionError("local_command_unconfirmed")
 
 

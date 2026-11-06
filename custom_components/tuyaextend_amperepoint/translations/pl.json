@@ -88,7 +88,7 @@
       },
       "local": {
         "title": "AmperePoint Local",
-        "description": "Bezpośrednie połączenie LAN — bez dodatku Tuya Local. Rozpoznany, zweryfikowany wariant PRIME otrzyma panel ze sterowaniem i planerem HA. Pozostałe zgodne warianty pozwalają na odczyt danych.",
+        "description": "Bezpośrednie połączenie LAN — bez dodatku Tuya Local. PRIME ze zgodnymi funkcjami sterowania LAN otrzyma panel ze sterowaniem i planerem HA. Pozostałe zgodne warianty pozwalają na odczyt danych.",
         "menu_options": {
           "local_import": "Wybierz ładowarkę z Tuya w HA",
           "local_manual": "Podaj Device ID i local key"
@@ -119,7 +119,7 @@
       },
       "local_confirm_read_only": {
         "title": "Połączenie LAN działa — odczyt danych",
-        "description": "{name} odpowiada pod {host}. Odczyt danych jest obsługiwany, ale ten układ DP lub firmware nie ma jeszcze zweryfikowanego sterowania. Po zatwierdzeniu uruchomimy panel pomiarów i diagnostyki, bez start/stop i planera. Nie wymaga to dodatku Tuya Local."
+        "description": "{name} odpowiada pod {host}. Odczyt danych jest obsługiwany, ale nie wykryto zgodnych funkcji sterowania LAN. Po zatwierdzeniu uruchomimy panel pomiarów i diagnostyki, bez start/stop i planera. Nie wymaga to dodatku Tuya Local."
       },
       "local_import_error": {
         "title": "Wybierz ładowarkę",
@@ -226,7 +226,7 @@
       },
       "local_connection": {
         "title": "Połączenie AmperePoint Local",
-        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie jest dostępne dla zweryfikowanego układu firmware PRIME, do 16 A i nie powyżej DP152. Tryby ładowania i plan tygodniowy wykonuje Home Assistant przez LAN — HA musi być uruchomiony. W aplikacji ładowarki pozostaw tryb natychmiastowy.",
+        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie zależy od zgodnych funkcji LAN w PRIME, a nie od numeru firmware. Limit prądu wynosi do 16 A i nie przekracza limitu ładowarki. Tryby ładowania i plan tygodniowy wykonuje Home Assistant przez LAN — HA musi być uruchomiony. W aplikacji ładowarki pozostaw tryb natychmiastowy.",
         "data": {
           "name": "Nazwa ładowarki",
           "local_device_id": "Ładowarka / Device ID",
@@ -238,7 +238,7 @@
       },
       "local_connection_error": {
         "title": "Połączenie AmperePoint Local",
-        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie jest dostępne dla zweryfikowanego układu firmware PRIME, do 16 A i nie powyżej DP152. Tryby ładowania i plan tygodniowy wykonuje Home Assistant przez LAN — HA musi być uruchomiony. W aplikacji ładowarki pozostaw tryb natychmiastowy.\n\n[Pobierz raport błędu]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
+        "description": "Zmień IP, protokół lub local key. Pusty local key zachowuje obecny; puste IP uruchamia wykrywanie. Przed zapisem sprawdzimy połączenie. Sterowanie zależy od zgodnych funkcji LAN w PRIME, a nie od numeru firmware. Limit prądu wynosi do 16 A i nie przekracza limitu ładowarki. Tryby ładowania i plan tygodniowy wykonuje Home Assistant przez LAN — HA musi być uruchomiony. W aplikacji ładowarki pozostaw tryb natychmiastowy.\n\n[Pobierz raport błędu]({diagnostic_url}) — raport JSON dla pomocy technicznej. Zawiera wynik próby połączenia i dostępne dane diagnostyczne, bez kluczy, identyfikatora urządzenia i adresu IP. Pobranie nie wysyła raportu do AmperePoint. Link działa przez 15 minut; ponowna próba utworzy nowy raport.",
         "data": {
           "name": "Nazwa ładowarki",
           "local_device_id": "Ładowarka / Device ID",

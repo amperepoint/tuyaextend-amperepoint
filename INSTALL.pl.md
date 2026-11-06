@@ -5,7 +5,7 @@
 | Seria | Zalecana ścieżka | Wymagania |
 | --- | --- | --- |
 | Q Series | Tuya Cloud + AmperePoint | Oficjalna integracja Tuya w HA, internet |
-| Wallbox PRIME | Wbudowany AmperePoint Local (LAN) | Device ID, local key, sieć LAN i zgodny firmware |
+| Wallbox PRIME | Wbudowany AmperePoint Local (LAN) | Device ID, local key, sieć LAN i zgodne funkcje sterowania |
 
 Dla **Q Series zalecamy Tuya Cloud**: w obecnej integracji zapewnia szerszy
 obsługiwany zakres DP i funkcji niż nasze profile lokalne. AmperePoint odczytuje
@@ -63,23 +63,33 @@ konta Tuya Developer, projektu Cloud i powiązania konta aplikacji. Nasz kreator
 nie tworzy takiego projektu ani nie loguje do Tuya Developer. Ponowne parowanie
 może zmienić local key.
 
-### Zakres PRIME w 0.5.38
+### Możliwości PRIME przez LAN
 
-Profile wybierane są według DP i firmware, nie samej nazwy, mocy czy PID.
+Sterowanie rozpoznajemy po rzeczywistym zestawie DP, niezależnie od numeru
+firmware. Aktualizacja firmware i dodatkowe DP nie blokują zgodnego sterowania.
 
 | Funkcja | Zakres |
 | --- | --- |
 | Odczyty LAN | Moc, energia sesji, temperatura, status, firmware i dostępne wartości techniczne |
-| Start/stop | Zweryfikowane profile split `(V7.0.0)F2.0.0` i packed `(V8.0.7)F1.3.6` |
+| Start/stop | Split z raportowanym DP140 typu bool; packed z niezależnym potwierdzeniem przez DP101/109 |
 | Prąd | Co 1 A, maksymalnie 16 A i nie powyżej limitu instalacji DP152 |
 | Tryby | Ładuj teraz, do zadanej energii, według harmonogramu — wykonywane przez HA |
 | Planer | Wiele dni/przedziałów, dokładność minutowa, prąd na przedział, override, następna akcja |
 | Komendy | Potwierdzane niezależnym odczytem; sam ACK nie oznacza sukcesu |
 | Restart | Zapis planu/ustawień i odtworzenie połączenia LAN |
 
-Packed zweryfikowano z limitem instalacji 16 A; inny limit lub nieznany firmware
-może pozostawić urządzenie tylko do odczytu. Split też jest ograniczony do 16 A.
-Nie deklarujemy pełnego zakresu sterowania każdą wersją PRIME 11/22 kW.
+Split wymaga swojego układu telemetrii i całkowitoliczbowych DP150/152. Packed
+wymaga własnego układu telemetrii, całkowitoliczbowych DP101/150/152 i tekstowego
+DP109; jego adapter zachowuje sprawdzony zakres DP152 od 6 do 16 A. Brak lub
+niezgodność danych sterujących pozostawia wpis tylko do odczytu, niezależnie od
+wersji firmware. Split też jest ograniczony do 16 A. Dodatkowe funkcje nie stają
+się automatycznie zapisywalne.
+
+Po aktualizacji istniejącego wpisu tylko do odczytu otwórz jego opcje połączenia
+lokalnego i włącz **Sterowanie LAN i planer HA**. Przed zapisem sprawdzamy
+połączenie; konfiguracja nie wysyła komend. Świadomie wyłączone sterowanie
+pozostaje wyłączone. Istniejące profile V11 korzystają ze wspólnego adaptera
+split bez ponownego dodawania urządzenia.
 
 **Planer działa w HA, nie w pamięci ładowarki.** HA musi działać i mieć połączenie
 również przy zatrzymaniu lub osiągnięciu celu kWh. Pozostaw urządzenie w natywnym
@@ -208,7 +218,7 @@ harmonogramu.
 
 - **Brak PRIME w Cloud:** użyj ścieżki LAN; nie oczekuj pełnej telemetrii PRIME z chmury.
 - **Błąd LAN:** sprawdź IP, klucz, protokół, sieć i inne aktywne klienty LAN.
-- **Tylko odczyt:** sprawdź firmware i DP; nie wymuszaj profilu innego urządzenia.
+- **Tylko odczyt:** sprawdź dostępne DP sterujące i opcję sterowania LAN; sam numer firmware nie blokuje sterowania. Nie wymuszaj profilu innego urządzenia.
 - **Brak faz:** zakres zależy od źródła; brakujących pomiarów nie zastępujemy fikcyjnymi.
 - **Stara karta:** odśwież przeglądarkę z pominięciem cache.
 - **Niepotwierdzona komenda:** sprawdź łączność, stan urządzenia i konkurencyjne automatyzacje.

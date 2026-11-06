@@ -33,10 +33,10 @@ class V11DetectionTests(unittest.TestCase):
             with self.assertRaisesRegex(local.LocalConnectionError, "local_unsupported"):
                 local.validate_snapshot({"dps": update}, product_id)
 
-    def test_control_profile_requires_v11_firmware_and_reported_state(self):
-        self.assertEqual(local.detected_control_profile(DPS, "prime_split"), local.V11_CONTROL_PROFILE)
+    def test_control_profile_requires_split_layout_and_reported_control_dps(self):
+        self.assertEqual(local.detected_control_profile(DPS, "prime_split"), local.CONTROL_PROFILE)
         self.assertTrue(local.control_supported(CONFIG, DPS, "prime_split"))
-        for changes in ({"106": "{}"}, {"140": None}, {"150": 6.0}, {"152": True}, {"152": 5}):
+        for changes in ({"152": None}, {"140": None}, {"150": 6.0}, {"152": True}, {"152": 5}):
             self.assertIsNone(local.detected_control_profile({**DPS, **changes}, "prime_split"))
         self.assertIsNone(local.detected_control_profile(DPS, "prime_packed"))
         old_split = {**DPS, "106": json.dumps({"fv": "(V7.0.0)F2.0.0"})}
@@ -124,7 +124,7 @@ class V11OnboardingTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(flow_module, "read_local", return_value=snapshot):
             form = await flow.async_step_local_manual({**CREDENTIALS, "local_product_id": V11_PID})
         self.assertEqual(form["step_id"], "local_confirm")
-        self.assertEqual(flow._local_pending["local_control_profile"], local.V11_CONTROL_PROFILE)
+        self.assertEqual(flow._local_pending["local_control_profile"], local.CONTROL_PROFILE)
 
 
 if __name__ == "__main__":

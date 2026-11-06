@@ -39,12 +39,12 @@ class LocalSourceTests(unittest.TestCase):
         self.assertEqual(dps["112"], "[redacted: card/auth data]")
         self.assertEqual(dps["999"], "unknown")
 
-    def test_v11_firmware_is_accepted_as_split_with_its_own_control_profile(self):
+    def test_v11_firmware_uses_the_shared_split_control_profile(self):
         fixture = json.loads((Path(__file__).resolve().parents[1] /
             "amperepoint/observations/prime-split-v11-22-20-charging-20261102.json").read_text(encoding="utf-8"))
         dps, family = local.validate_snapshot({"dps": fixture["dps"]})
         self.assertEqual(family, "prime_split")
-        self.assertEqual(local.detected_control_profile(dps, family), local.V11_CONTROL_PROFILE)
+        self.assertEqual(local.detected_control_profile(dps, family), local.CONTROL_PROFILE)
 
     def test_unknown_devices_and_authentication_errors_are_rejected(self):
         for value in ({"dps": {"1": True}}, {"Error": "secret response", "Err": "914"}, None):
@@ -124,13 +124,13 @@ class LocalSourceTests(unittest.TestCase):
             self.assertIn("read-only", str(err.exception))
         self.assertFalse(instance.native_source.writable("switch"))
 
-    def test_control_profile_is_opt_in_and_firmware_specific(self):
+    def test_control_profile_is_opt_in_and_requires_the_dp_contract(self):
         dps = {**FIXTURE["dps"], "140": True}
         self.assertFalse(local.control_supported(CONFIG, dps, "prime_split"))
         config = {**CONFIG, "local_control_profile": local.CONTROL_PROFILE}
         self.assertTrue(local.control_supported(config, dps, "prime_split"))
         self.assertFalse(local.control_supported(config, dps, "prime_packed"))
-        self.assertFalse(local.control_supported(config, {**dps,"106":'{}'}, "prime_split"))
+        self.assertFalse(local.control_supported(config, {**dps,"140":None}, "prime_split"))
         self.assertFalse(local.control_supported(config, {**dps,"152":True}, "prime_split"))
 
     def test_writes_require_real_readback_and_preserve_safety_limit(self):
