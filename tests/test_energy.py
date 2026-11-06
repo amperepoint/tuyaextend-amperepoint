@@ -98,6 +98,62 @@ class MeterTests(unittest.TestCase):
         self.assertIsNone(self.counter(10, 3815))
         self.assertAlmostEqual(self.counter(0.1, 3900), 10.1)
 
+    def poll(self, value, start, end, step=15):
+        """Hold one reading over 15 s polls, as Home Assistant does."""
+        t = start
+        while t < end:
+            self.counter(value, t)
+            t += step
+        return t
+
+    def test_power_on_zero_then_same_level_is_not_consumption(self):
+        t = self.poll(100, 100, 3700)
+        t = self.poll(0, t, t + 600)  # lifetime counter reads 0 after a power-on
+        t = self.poll(100, t, t + 6 * 3600)  # stored value back, held for hours
+        self.assertEqual(self.meter.total, 0)
+        self.counter(100.1, t)
+        self.assertAlmostEqual(self.meter.total, 0.1)
+
+    def test_power_on_zero_then_older_level_is_not_consumption(self):
+        t = self.poll(131.5, 100, 3700)
+        t = self.poll(0, t, t + 6 * 3600)  # zero held until the next charge
+        self.assertIsNone(self.counter(108.2, t))
+        t = self.poll(108.2, t + 15, t + 90)
+        self.counter(108.3, t)
+        self.assertAlmostEqual(self.meter.total, 0.1)
+
+    def test_rejected_jump_is_never_added_later(self):
+        t = self.poll(1, 100, 200)
+        t = self.poll(1000, t, t + 48 * 3600)  # 999 kWh looks possible at 25 kW after 40 h
+        self.assertEqual(self.meter.total, 0)
+        self.counter(1.1, t)
+        self.assertAlmostEqual(self.meter.total, 0.1)
+
+    def test_counter_restarting_from_zero_each_session_still_counts(self):
+        t = self.poll(10, 100, 200)
+        t = self.poll(0, t, t + 60)
+        for tick in range(1, 121):  # 0.1 kWh every 90 s, past the old level
+            self.counter(round(0.1 * tick, 2), t)
+            t += 90
+        self.assertAlmostEqual(self.meter.total, 12.0)
+
+    def test_held_jump_survives_restart(self):
+        t = self.poll(131.5, 100, 400)
+        t = self.poll(0, t, t + 3600)
+        self.assertIsNone(self.counter(108.2, t))
+        self.meter = energy.ChargingEnergy(json.loads(json.dumps(self.meter.dump())))
+        self.counter(108.2, t + 600)
+        self.assertEqual(self.meter.total, 0)
+        self.counter(108.3, t + 700)
+        self.assertAlmostEqual(self.meter.total, 0.1)
+
+    def test_power_on_zero_across_restart_counts_only_growth(self):
+        t = self.poll(49.1, 100, 400)
+        t = self.poll(0, t, t + 600)
+        self.meter = energy.ChargingEnergy(json.loads(json.dumps(self.meter.dump())))
+        self.counter(49.3, t + 3600)
+        self.assertAlmostEqual(self.meter.total, 0.2)
+
     def test_out_of_order_timestamp_is_ignored(self):
         self.counter(0, 100)
         self.counter(2, 3700)
@@ -278,6 +334,28 @@ class CoordinatorPipelineTests(unittest.TestCase):
         self.assertEqual(self.update(obj, 7400)["charging_energy_kwh"], 3)
         states["sensor.source"] = state(2, unit_of_measurement="kWh")
         self.assertEqual(self.update(obj, 11000)["charging_energy_kwh"], 5)
+
+    def test_power_on_zero_is_no_session_start(self):
+        states = {"sensor.source": state(131.5, unit_of_measurement="kWh"),
+                  "binary_sensor.car": state("on")}
+        config = {const.CONF_SOURCE_TOTAL_ENERGY: "sensor.source",
+                  const.CONF_SOURCE_CONNECTED: "binary_sensor.car"}
+        obj = self.make(config, states)
+        self.update(obj, 100)
+        states["binary_sensor.car"] = state("off")
+        states["sensor.source"] = state(0, unit_of_measurement="kWh")  # power-on
+        self.update(obj, 115)
+        states["binary_sensor.car"] = state("on")  # plugged in while it reads 0
+        self.update(obj, 130)
+        # The stored, older value comes back with the first charge.
+        states["sensor.source"] = state(108.2, unit_of_measurement="kWh")
+        data = self.update(obj, 145)
+        self.assertEqual(data["session_energy_kwh"], 0)
+        self.assertIsNone(data["charging_energy_kwh"])  # held, never counted
+        states["sensor.source"] = state(108.3, unit_of_measurement="kWh")
+        data = self.update(obj, 160)
+        self.assertAlmostEqual(data["session_energy_kwh"], 0.1)
+        self.assertAlmostEqual(data["charging_energy_kwh"], 0.1)
 
     def test_prime_split_and_packed_payloads_use_e_not_cp_or_session_state(self):
         for payload in ({"L": [2300, 0, 0], "e": 100, "p": 0},

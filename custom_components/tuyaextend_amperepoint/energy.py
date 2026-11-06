@@ -44,6 +44,13 @@ class ChargingEnergy:
     POWER_TOLERANCE = 0.10
     MIN_CORRECTION_KWH = 0.1
     COMPARISON_WINDOW = 3600.0
+    # Readings closer together than this count as one uninterrupted watch.
+    CONTINUITY_GAP = 60.0
+    # While charging, a Q Series counter is reported about every 90 s, so a
+    # step seen between two close readings carries at most a few minutes of
+    # energy. A bigger first step after the counter read zero is the stored
+    # counter coming back after a power-on, not consumption.
+    RESUME_STEP_WINDOW = 300.0
 
     def __init__(self, saved: Any = None) -> None:
         self.total = 0.0
@@ -69,6 +76,13 @@ class ChargingEnergy:
         self._reference_energy = 0.0
         self._reference_counted = 0.0
         self._reference_start = 0.0
+        # A rejected jump, held until the counter shows which side it is on.
+        # Its own size is never counted.
+        self._pending: float | None = None
+        self._pending_at: float | None = None
+        # The level the counter had before it last read zero.
+        self._zero_from: float | None = None
+        self._previous_reading_at: float | None = None
         self._restore(saved)
 
     def _restore(self, saved: Any) -> None:
@@ -101,6 +115,11 @@ class ChargingEnergy:
         self.power_incomplete = True  # never bridge a restart with held power
         self.corrections = int(non_negative(saved.get("corrections")) or 0)
         self.excluded_energy = non_negative(saved.get("excluded_energy")) or 0.0
+        self._pending = non_negative(saved.get("pending"))
+        self._pending_at = non_negative(saved.get("pending_at"))
+        if self._pending is None or self._pending_at is None:
+            self._pending = self._pending_at = None
+        self._zero_from = non_negative(saved.get("zero_from"))
         # A restored counter can recover its delta. Power cannot tell what
         # happened while HA was stopped, so never restore the power sample.
         self._interrupted = True
@@ -115,10 +134,13 @@ class ChargingEnergy:
                 "started_at": self.started_at,
                 "incomplete": self.incomplete, "power_total": self.power_total,
                 "power_incomplete": self.power_incomplete,
-                "corrections": self.corrections, "excluded_energy": self.excluded_energy}
+                "corrections": self.corrections, "excluded_energy": self.excluded_energy,
+                "pending": self._pending, "pending_at": self._pending_at,
+                "zero_from": self._zero_from}
 
     def missing(self) -> None:
         self._interrupted = True
+        self._previous_reading_at = None
         self._power_previous = None
         self._reference_valid = False
         self._reference_previous = None
@@ -173,9 +195,15 @@ class ChargingEnergy:
             self._interrupted = True
             self._power_previous = None
             self._reference_valid = False
+            self._previous_reading_at = None
             self.validation = "missing_counter"
             self.quality = "unavailable"
             return None
+        # Two numeric readings close together mean nothing went unseen in
+        # between, so a jump between them can be judged by its own size.
+        continuous = (self._previous_reading_at is not None
+                      and now - self._previous_reading_at <= self.CONTINUITY_GAP)
+        self._previous_reading_at = now
         if sample.method == "power_estimate" and value > max_power_kw:
             self.missing()
             self.incomplete = True
@@ -190,6 +218,8 @@ class ChargingEnergy:
             self._power_previous = value if sample.method == "power_estimate" else None
             self._interrupted = False
             self.quality = "estimated" if sample.method == "power_estimate" else "baseline"
+            self._pending = self._pending_at = None
+            self._zero_from = None
             self._reset_reference(power_valid, now)
             return self.total
 
@@ -207,13 +237,39 @@ class ChargingEnergy:
             self._interrupted = False
             return self.total
 
-        delta = value - self.baseline
         tolerance = sample.resolution * 1.01
+        if self._pending is not None:
+            if value < self._pending - tolerance:
+                # Lower than the rejected reading: that reading was stale or a
+                # glitch. Carry on from the accepted baseline.
+                self._pending = self._pending_at = None
+            elif value <= self._pending + tolerance:
+                self.quality = "pending_jump"
+                self._interrupted = False
+                return self.total
+            else:
+                # The counter grows on from the rejected level, so that level
+                # is where the counter really is, typically a stored meter that
+                # came back after a power-on zero. The jump itself is never
+                # consumption; only what was added on top of it counts.
+                self.baseline, self.timestamp = self._pending, self._pending_at
+                self._pending = self._pending_at = None
+                self._zero_from = None
+                self.incomplete = True
+                self._reference_valid = False  # no comparable power interval
+                elapsed = now - self.timestamp
+
+        delta = value - self.baseline
         if delta < 0:
             if value != 0 and abs(delta) <= tolerance:
                 # Keep the high-water mark: 10 -> 9.99 -> 10 must not add .01.
                 self.quality = "counter_jitter"
                 return self.total
+            if value == 0 and self.baseline > tolerance:
+                # Q Series chargers report their lifetime counter as 0 right
+                # after a power-on and the stored value only with the next
+                # charge. Remember the level it came from.
+                self._zero_from = max(self.baseline, self._zero_from or 0.0)
             # Reset/correction: a lower reading is NOT energy consumption.
             # Rebase without adding its value (might be a late/corrected sample).
             self.baseline, self.timestamp = value, now
@@ -222,6 +278,31 @@ class ChargingEnergy:
             self._interrupted = False
             self._reset_reference(power_valid, now)
             return self.total
+        if delta > 0 and self._zero_from is not None:
+            step_limit = (max_power_kw * self.RESUME_STEP_WINDOW / 3600
+                          + 2 * sample.resolution)
+            if continuous and delta > step_limit:
+                # Watched the whole time, the counter cannot have charged this
+                # much since the previous reading: the stored counter came back
+                # after a power-on zero, sometimes at an older level. Hold the
+                # reading and never count the jump.
+                self._pending, self._pending_at = value, now
+                self.incomplete = True
+                self.quality = "counter_resumed"
+                return None
+            if value >= self._zero_from - tolerance:
+                # Back at, or above, the level it had before the zero: only the
+                # part above that level is new energy.
+                self.baseline = self._zero_from
+                self._zero_from = None
+                self.incomplete = True
+                self._reference_valid = False
+                delta = value - self.baseline
+                if delta <= 0:
+                    self.baseline, self.timestamp = value, now
+                    self.quality = "counter_resumed"
+                    self._interrupted = False
+                    return self.total
         if delta > 0 and self._reference_valid:
             # Compare cumulative readings over the SAME covered interval, not
             # individual rounded/delayed DP increments. Allow 10%, two counter
@@ -239,13 +320,18 @@ class ChargingEnergy:
                 # Consume the faulty source increment now: it must never be
                 # retried or "caught up" by later polls or after a restart.
                 self.baseline, self.timestamp = value, now
+                self._zero_from = None
                 self.incomplete = True  # corrected consumption is an estimate
                 self.quality = "power_corrected"
                 self._interrupted = False
                 self._reset_reference(power_valid, now)
                 return self.total
         if delta > max_power_kw * elapsed / 3600 + 2 * sample.resolution:
-            # A stale pre-reset reading or unit change must not become kWh.
+            # A stale pre-reset reading or unit change must not become kWh,
+            # neither now nor later, once enough time has passed for the jump
+            # to look possible. Hold it until the counter shows which side it
+            # is on.
+            self._pending, self._pending_at = value, now
             self.incomplete = True
             self.quality = "implausible_sample"
             return None
@@ -255,6 +341,7 @@ class ChargingEnergy:
         # may report the same value repeatedly before their next increment.
         if delta > 0:
             self.baseline, self.timestamp = value, now
+            self._zero_from = None  # counting again from the new level
             # Only re-anchor when the counter advances, so a legitimate late
             # report retains all the power accumulated while it was unchanged.
             if not self._reference_valid or now - self._reference_start >= self.COMPARISON_WINDOW:
